@@ -1,0 +1,56 @@
+# CRM Project Guidelines & Rules
+
+## Monorepo Architecture
+- Backend: Django (+ Django Ninja API) located in `backend/`
+- Frontend: React SPA (+ TypeScript, Vite, Tailwind CSS, shadcn/ui) located in `frontend/`
+
+---
+
+## Backend Guidelines (Python / Django / Django Ninja)
+
+1. **Typing & Code Style**:
+   - Python 3.12+ features.
+   - Use strict type annotations for all function signatures (request parameters, function arguments, and return types).
+   - Use `pydantic` schemas for requests/responses (via Django Ninja). Define clear validation rules.
+
+2. **Multi-Tenancy Isolation**:
+   - All client-facing models MUST belong to an `Organization`.
+   - Always filter querysets using `request.auth.organization` or the current user's organization in the API endpoints to prevent cross-tenant data leaks.
+   - Never write direct un-scoped `.all()` queries on database models containing business or contact data.
+
+3. **Error Handling**:
+   - Always return consistent JSON error formats.
+   - Custom exceptions should be caught globally with Django Ninja exceptions handlers.
+   - Standard format:
+     ```json
+     {
+       "detail": "Descriptive error message",
+       "errors": {
+         "field_name": ["Specific validation detail"]
+       }
+     }
+     ```
+
+4. **Models & Schema**:
+   - Primary keys should be standard custom Auto UUID fields, not auto-incrementing integers.
+   - Standard datetime fields should track `created_at` (auto_now_add) and `updated_at` (auto_now).
+
+---
+
+## Frontend Guidelines (React / TypeScript / Vite / Tailwind)
+
+1. **Strict TypeScript**:
+   - `"strict": true` must be enabled.
+   - `any` is strictly prohibited. If typing is complex, define proper custom interfaces or generic types.
+   - All API endpoints should have dedicated Request and Response interface definitions in `types/api.ts` or scoped types files.
+
+2. **Component Architecture**:
+   - Components must be highly modular, functional, and clean.
+   - Use Lucide Icons (`lucide-react`) for consistent professional iconography.
+   - Business/Data-fetching logic should be extracted into custom React Query (TanStack Query) hooks to keep React views clean of state/fetch details.
+   - Styles must utilize Tailwind CSS. Prefer standard shadcn patterns.
+
+3. **State Management**:
+   - Use URL Query parameters rules for temporary filtering states (like search queries, pipeline stages, or pagination tables).
+   - Use TanStack Query for server state caching/validation.
+   - Use standard React context or lightweight state tools (e.g., Zustand or React state) only for ephemeral UI/client state (like open sidebar states, dark/light theme, current drawer state).
