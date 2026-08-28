@@ -47,6 +47,12 @@ export default function ContactsDirectory() {
     assigned_to_id: ''
   })
   const [formError, setFormError] = useState('')
+  
+  // Duplicate detection states
+  const [duplicateCandidates, setDuplicateCandidates] = useState<any[]>([])
+  const [duplicateMessage, setDuplicateMessage] = useState('')
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false)
+  const [isMerging, setIsMerging] = useState(false)
 
   // 1. Fetch contacts
   const limit = pagination.pageSize
@@ -90,19 +96,21 @@ export default function ContactsDirectory() {
 
   // 4. Create Contact mutation
   const createContactMutation = useMutation({
-    mutationFn: async (payload: typeof formData) => {
+    mutationFn: async (payload: typeof formData & { bypass_duplicate_check?: boolean }) => {
       const formattedPayload = {
         ...payload,
         company_id: payload.company_id || null,
         assigned_to_id: payload.assigned_to_id || null
       }
-      return apiClient.post('/contacts/', formattedPayload)
+      const bypass = payload.bypass_duplicate_check ? 'true' : 'false'
+      return apiClient.post(`/contacts/?bypass_duplicate_check=${bypass}`, formattedPayload)
     },
     onSuccess: () => {
       // Invalidate contacts queries to refresh list
       queryClient.invalidateQueries({ queryKey: ['contacts'] })
       setIsModalOpen(false)
       setFormError('')
+      setShowDuplicateDialog(false)
       // Reset form
       setFormData({
         first_name: '',
@@ -116,7 +124,20 @@ export default function ContactsDirectory() {
       })
     },
     onError: (err: any) => {
-      const errMsg = err?.message || 'Failed to create contact'
+      const detail = err?.response?.data?.detail || ''
+      if (err?.response?.status === 409 && detail.startsWith('DUPLICATE_DETECTED|')) {
+        try {
+          const jsonStr = detail.substring('DUPLICATE_DETECTED|'.length)
+          const candidates = JSON.parse(jsonStr)
+          setDuplicateCandidates(candidates)
+          setDuplicateMessage('A potential duplicate contact was identified. Consolidate into existing, bypass to create duplicate, or cancel.')
+          setShowDuplicateDialog(true)
+          return
+        } catch (e) {
+          console.error("Failed to parse duplicates:", e)
+        }
+      }
+      const errMsg = err?.response?.data?.detail || err?.message || 'Failed to create contact'
       setFormError(errMsg)
     }
   })
@@ -603,6 +624,113 @@ export default function ContactsDirectory() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DUPLICATE WARNING MODAL */}
+      {showDuplicateDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/60 p-4 overflow-y-auto">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col my-8">
+            <div className="px-6 py-4.5 border-b border-zinc-900 flex justify-between items-center bg-amber-950/20">
+              <div className="flex items-center gap-2 text-amber-500">
+                <AlertCircle className="h-5 w-5" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Duplicate Contact Detected</h3>
+              </div>
+              <button
+                onClick={() => setShowDuplicateDialog(false)}
+                className="text-zinc-450 hover:text-zinc-200 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs font-semibold text-zinc-350">
+              <p className="text-zinc-300 text-xs font-medium leading-relaxed">{duplicateMessage}</p>
+              
+              <div className="space-y-2">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Existing Leads/Contacts in Workspace:</span>
+                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                  {duplicateCandidates.map((cand) => (
+                    <div key={cand.id} className="p-3 bg-zinc-900/50 border border-zinc-900 rounded-lg flex justify-between items-center gap-3">
+                      <div>
+                        <div className="font-bold text-zinc-205">{cand.first_name} {cand.last_name}</div>
+                        <div className="text-[10px] text-zinc-500">{cand.email} • {cand.phone || 'No Phone'}</div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="px-1.5 py-0.5 rounded text-[8px] bg-zinc-850 border border-zinc-800 text-indigo-400 font-bold uppercase">
+                          {cand.status}
+                        </span>
+                        
+                        <button
+                          type="button"
+                          disabled={isMerging}
+                          onClick={async () => {
+                            try {
+                              setIsMerging(true)
+                              const createResponse = await apiClient.post('/contacts/?bypass_duplicate_check=true', {
+                                ...formData,
+                                company_id: formData.company_id || null,
+                                assigned_to_id: formData.assigned_to_id || null
+                              })
+                              const newContactId = createResponse.data.id
+                              
+                              await apiClient.post(`/contacts/${cand.id}/merge`, null, {
+                                params: { candidate_id: newContactId }
+                              })
+                              
+                              queryClient.invalidateQueries({ queryKey: ['contacts'] })
+                              setShowDuplicateDialog(false)
+                              setIsModalOpen(false)
+                              setFormData({
+                                first_name: '',
+                                last_name: '',
+                                email: '',
+                                phone: '',
+                                job_title: '',
+                                status: 'LEAD',
+                                company_id: '',
+                                assigned_to_id: ''
+                              })
+                            } catch (e: any) {
+                              alert(e?.response?.data?.detail || e.message || 'Failed to merge contacts')
+                            } finally {
+                              setIsMerging(false)
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold transition-all text-[10px] uppercase cursor-pointer"
+                        >
+                          {isMerging ? 'Merging...' : 'Merge Into'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-900 pt-4 flex flex-col gap-2">
+                <div className="text-[10px] text-zinc-500 uppercase font-black">Or force a new duplicate record:</div>
+                <div className="flex gap-2.5 justify-end text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setShowDuplicateDialog(false)}
+                    className="px-4 py-2 border border-zinc-900 rounded text-zinc-400 hover:text-white transition-all cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      createContactMutation.mutate({ ...formData, bypass_duplicate_check: true })
+                    }}
+                    className="px-4 py-2 bg-amber-600/10 border border-amber-500/25 text-amber-400 hover:bg-amber-600/20 hover:text-amber-300 rounded transition-all cursor-pointer"
+                  >
+                    Create Separate Duplicate
+                  </button>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}

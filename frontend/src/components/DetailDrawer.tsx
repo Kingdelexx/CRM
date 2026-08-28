@@ -272,6 +272,43 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
     }
   })
 
+  // Fetch associated deals
+  const { data: associatedDeals = [] } = useQuery({
+    queryKey: ['associated-deals', id],
+    queryFn: async () => {
+      if (type !== 'contact' || !id) return []
+      const response = await apiClient.get<Deal[]>('/deals/', { params: { contact_id: id } })
+      return response.data
+    },
+    enabled: isOpen && type === 'contact' && !!id
+  })
+
+  // Fetch associated projects
+  const { data: associatedProjects = [] } = useQuery({
+    queryKey: ['associated-projects', id],
+    queryFn: async () => {
+      if (type !== 'contact' || !id) return []
+      const response = await apiClient.get<any[]>('/projects/', { params: { contact_id: id } })
+      return response.data
+    },
+    enabled: isOpen && type === 'contact' && !!id
+  })
+
+  // Mutation: Extend Lead Lifecycle
+  const extendLifecycleMutation = useMutation({
+    mutationFn: async (days: number) => {
+      return apiClient.post(`/contacts/${id}/extend`, null, { params: { days } })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [type, id] })
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+      if (onUpdate) onUpdate()
+    },
+    onError: (err: any) => {
+      alert(`Extension failed: ${err?.response?.data?.detail || err.message}`)
+    }
+  })
+
   // Mutation: Delete Task
   const deleteTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
@@ -691,7 +728,139 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                           Save Changes
                         </button>
                       </div>
-                    </form>
+                  )}
+
+                  {/* Lead Lifecycle Extension - for Leads */}
+                  {type === 'contact' && (itemData as Contact).status === 'LEAD' && (
+                    <div className="bg-amber-955/20 border border-amber-900/35 rounded-xl p-4.5 space-y-3 mt-4">
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="font-bold text-amber-500 uppercase tracking-widest">
+                          Lead Lifecycle Automations
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-bold border uppercase tracking-wider ${
+                          (itemData as Contact).lifecycle_status === 'ACTIVE'
+                            ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                            : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+                        }`}>
+                          {(itemData as Contact).lifecycle_status}
+                        </span>
+                      </div>
+                      
+                      <div className="p-3 bg-zinc-900/35 border border-zinc-900/80 rounded-lg space-y-2 text-xs font-semibold">
+                        <div className="flex justify-between text-zinc-300">
+                          <span>Lifecycle Started At:</span>
+                          <span className="text-zinc-405">
+                            {(itemData as Contact).lifecycle_started_at
+                              ? new Date((itemData as Contact).lifecycle_started_at!).toLocaleString()
+                              : 'Not Started'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-zinc-300">
+                          <span>Extra Days Granted:</span>
+                          <span className="text-amber-400">
+                            {(itemData as Contact).lifecycle_extension_days || 0} Days
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase">Grant Extension:</span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={extendLifecycleMutation.isPending}
+                            onClick={() => extendLifecycleMutation.mutate(7)}
+                            className="px-3 py-1.5 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 text-amber-450 hover:text-amber-300 rounded font-bold text-[10px] uppercase transition-all tracking-wider cursor-pointer"
+                          >
+                            +7 Days
+                          </button>
+                          <button
+                            type="button"
+                            disabled={extendLifecycleMutation.isPending}
+                            onClick={() => extendLifecycleMutation.mutate(14)}
+                            className="px-3 py-1.5 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 text-amber-450 hover:text-amber-300 rounded font-bold text-[10px] uppercase transition-all tracking-wider cursor-pointer"
+                          >
+                            +14 Days
+                          </button>
+                          <button
+                            type="button"
+                            disabled={extendLifecycleMutation.isPending}
+                            onClick={() => extendLifecycleMutation.mutate(30)}
+                            className="px-3 py-1.5 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-500/20 text-amber-450 hover:text-amber-300 rounded font-bold text-[10px] uppercase transition-all tracking-wider cursor-pointer"
+                          >
+                            +30 Days
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Associated Deals & Projects List */}
+                  {type === 'contact' && (
+                    <div className="space-y-4 pt-2">
+                      <div className="border-t border-zinc-900 pt-4 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
+                            Connected Deals ({associatedDeals.length})
+                          </span>
+                        </div>
+                        {associatedDeals.length === 0 ? (
+                          <div className="py-6 px-4 bg-zinc-900/10 border border-zinc-900/60 rounded-xl text-center text-zinc-650 text-xs italic">
+                            No deals associated with this contact yet.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-2.5">
+                            {associatedDeals.map((dl) => (
+                              <div key={dl.id} className="p-3 bg-zinc-900/20 border border-zinc-900 rounded-xl flex items-center justify-between gap-3 hover:border-zinc-800 transition-colors">
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-zinc-200 block truncate">{dl.title}</span>
+                                  <span className="text-[10px] text-zinc-500 font-medium block mt-0.5">
+                                    Stage: {dl.stage?.name || 'Unknown'} • Expect Close: {dl.expected_close_date ? new Date(dl.expected_close_date).toLocaleDateString() : 'N/A'}
+                                  </span>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <span className="text-xs font-bold text-indigo-400 block">${Number(dl.value).toLocaleString()}</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[8px] bg-zinc-900 border border-zinc-850 text-zinc-450 font-bold uppercase tracking-wider mt-1 inline-block">
+                                    {dl.status}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider block">
+                            Connected Projects ({associatedProjects.length})
+                          </span>
+                        </div>
+                        {associatedProjects.length === 0 ? (
+                          <div className="py-6 px-4 bg-zinc-900/10 border border-zinc-900/60 rounded-xl text-center text-zinc-650 text-xs italic">
+                            No projects associated with this contact yet.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 gap-2.5">
+                            {associatedProjects.map((proj) => (
+                              <div key={proj.id} className="p-3 bg-zinc-900/20 border border-zinc-900 rounded-xl flex items-center justify-between gap-3 hover:border-zinc-800 transition-colors">
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-zinc-205 block truncate">{proj.name}</span>
+                                  <span className="text-[10px] text-zinc-500 font-medium block mt-0.5">
+                                    Range: {proj.start_date ? new Date(proj.start_date).toLocaleDateString() : 'N/A'} to {proj.end_date ? new Date(proj.end_date).toLocaleDateString() : 'N/A'}
+                                  </span>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <span className="px-2 py-0.5 rounded text-[8px] font-bold border uppercase tracking-wider bg-zinc-900 border-zinc-850 text-zinc-400">
+                                    {proj.status}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

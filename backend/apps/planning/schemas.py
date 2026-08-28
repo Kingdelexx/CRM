@@ -24,24 +24,33 @@ class ActivityCreateSchema(Schema):
     contact_id: Optional[UUID] = None
     company_id: Optional[UUID] = None
 
+from apps.accounts.schemas import UserSchema, TeamSchema
+from typing import List
+
 class TaskSchema(ModelSchema):
     assignee: Optional[UserSchema] = None
+    task_team: Optional[TeamSchema] = None
     deal: Optional[DealSchema] = None
     contact: Optional[ContactSchema] = None
     company: Optional[CompanySchema] = None
     
     class Meta:
         model = Task
-        fields = ['id', 'title', 'description', 'due_date', 'priority', 'status', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'description', 'start_date', 'due_date', 'priority', 'status', 'attachments', 'checklist', 'comments', 'created_at', 'updated_at']
 
 class TaskCreateSchema(Schema):
     title: str
     description: Optional[str] = None
+    start_date: Optional[datetime] = None
     due_date: Optional[datetime] = None
     priority: Optional[str] = 'MEDIUM'
     status: Optional[str] = 'TODO'
     assignee_id: Optional[UUID] = None
+    task_team_id: Optional[UUID] = None
     deal_id: Optional[UUID] = None
     contact_id: Optional[UUID] = None
     company_id: Optional[UUID] = None
+    attachments: Optional[List[str]] = None
+    checklist: Optional[List[dict]] = None
+    comments: Optional[List[dict]] = None
 

@@ -95,9 +95,22 @@ class Task(TimeStampedModel):
     )
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
+    start_date = models.DateTimeField(null=True, blank=True)
     due_date = models.DateTimeField(null=True, blank=True)
     priority = models.CharField(max_length=50, choices=PRIORITY_CHOICES, default=MEDIUM)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default=TODO)
+    
+    # Custom project / team / check list details
+    attachments = models.JSONField(default=list, blank=True)
+    checklist = models.JSONField(default=list, blank=True)
+    comments = models.JSONField(default=list, blank=True)
+    task_team = models.ForeignKey(
+        'accounts.Team', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='tasks'
+    )
 
     # Nullable associations
     deal = models.ForeignKey(
@@ -119,6 +132,13 @@ class Task(TimeStampedModel):
         on_delete=models.CASCADE, 
         null=True, 
         blank=True, 
+        related_name='tasks'
+    )
+    project = models.ForeignKey(
+        'crm.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='tasks'
     )
 

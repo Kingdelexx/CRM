@@ -1,7 +1,10 @@
 from ninja_extra import NinjaExtraAPI
 from ninja_jwt.controller import NinjaJWTDefaultController
 from apps.accounts.api import router as accounts_router
-from apps.crm.api import companies_router, stages_router, contacts_router, deals_router
+from apps.crm.api import (
+    companies_router, stages_router, contacts_router, deals_router, projects_router,
+    settings_router, customer_lists_router, custom_modules_router
+)
 from apps.planning.api import activities_router, tasks_router
 from apps.crm.webhooks import router as webhooks_router
 
@@ -21,7 +24,11 @@ api.add_router("/companies/", companies_router)
 api.add_router("/stages/", stages_router)
 api.add_router("/contacts/", contacts_router)
 api.add_router("/deals/", deals_router)
+api.add_router("/projects/", projects_router)
 api.add_router("/activities/", activities_router)
 api.add_router("/tasks/", tasks_router)
 api.add_router("/v1/webhooks/", webhooks_router)
+api.add_router("/crm-settings/", settings_router)
+api.add_router("/customer-lists/", customer_lists_router)
+api.add_router("/custom-modules/", custom_modules_router)
 

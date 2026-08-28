@@ -118,22 +118,35 @@ def list_tasks(
     deal_id: Optional[UUID] = None,
     contact_id: Optional[UUID] = None,
     company_id: Optional[UUID] = None,
-    status: Optional[str] = None
+    assignee_id: Optional[UUID] = None,
+    team_id: Optional[UUID] = None,
+    status: Optional[str] = None,
+    overdue: Optional[bool] = None
 ):
-    qs = Task.objects.filter(organization=request.user.organization).select_related('assignee', 'deal', 'contact', 'company')
+    from django.utils import timezone
+    qs = Task.objects.filter(organization=request.user.organization).select_related('assignee', 'task_team', 'deal', 'contact', 'company')
     if deal_id:
         qs = qs.filter(deal_id=deal_id)
     if contact_id:
         qs = qs.filter(contact_id=contact_id)
     if company_id:
         qs = qs.filter(company_id=company_id)
+    if assignee_id:
+        qs = qs.filter(assignee_id=assignee_id)
+    if team_id:
+        qs = qs.filter(task_team_id=team_id)
     if status:
         qs = qs.filter(status=status)
+    if overdue is not None:
+        if overdue:
+            qs = qs.filter(due_date__lt=timezone.now()).exclude(status='DONE')
+        else:
+            qs = qs.filter(Q(due_date__gte=timezone.now()) | Q(status='DONE'))
     return qs
 
 @tasks_router.get("/{id}", response=TaskSchema)
 def get_task(request, id: UUID):
-    task = Task.objects.filter(id=id, organization=request.user.organization).select_related('assignee', 'deal', 'contact', 'company').first()
+    task = Task.objects.filter(id=id, organization=request.user.organization).select_related('assignee', 'task_team', 'deal', 'contact', 'company').first()
     if not task:
         raise HttpError(404, "Task not found.")
     return task
@@ -142,6 +155,7 @@ def get_task(request, id: UUID):
 def create_task(request, data: TaskCreateSchema):
     payload = data.dict()
     assignee_id = payload.pop('assignee_id', None)
+    task_team_id = payload.pop('task_team_id', None)
     deal_id = payload.pop('deal_id', None)
     contact_id = payload.pop('contact_id', None)
     company_id = payload.pop('company_id', None)
@@ -151,6 +165,13 @@ def create_task(request, data: TaskCreateSchema):
         assignee = User.objects.filter(id=assignee_id, organization=request.user.organization).first()
         if not assignee:
             raise HttpError(400, "Invalid Assignee ID.")
+
+    task_team = None
+    if task_team_id:
+        from apps.accounts.models import Team
+        task_team = Team.objects.filter(id=task_team_id, organization=request.user.organization).first()
+        if not task_team:
+            raise HttpError(400, "Invalid Team ID.")
 
     deal = None
     if deal_id:
@@ -170,14 +191,32 @@ def create_task(request, data: TaskCreateSchema):
         if not company:
             raise HttpError(400, "Invalid Company ID.")
 
+    # Filter out None values for default fields
+    for field in ['attachments', 'checklist', 'comments']:
+        if field in payload and payload[field] is None:
+            payload[field] = []
+
     task = Task.objects.create(
         organization=request.user.organization,
         assignee=assignee,
+        task_team=task_team,
         deal=deal,
         contact=contact,
         company=company,
         **payload
     )
+
+    # Log task creation activity
+    Activity.objects.create(
+        organization=request.user.organization,
+        performed_by=request.user,
+        type='NOTE',
+        content=f"Created Task '{task.title}'",
+        deal=deal,
+        contact=contact,
+        company=company
+    )
+
     return 201, task
 
 @tasks_router.put("/{id}", response=TaskSchema)
@@ -188,6 +227,7 @@ def update_task(request, id: UUID, data: TaskCreateSchema):
 
     payload = data.dict()
     assignee_id = payload.pop('assignee_id', None)
+    task_team_id = payload.pop('task_team_id', None)
     deal_id = payload.pop('deal_id', None)
     contact_id = payload.pop('contact_id', None)
     company_id = payload.pop('company_id', None)
@@ -199,6 +239,15 @@ def update_task(request, id: UUID, data: TaskCreateSchema):
         task.assignee = assignee
     else:
         task.assignee = None
+
+    if task_team_id:
+        from apps.accounts.models import Team
+        task_team = Team.objects.filter(id=task_team_id, organization=request.user.organization).first()
+        if not task_team:
+            raise HttpError(400, "Invalid Team ID.")
+        task.task_team = task_team
+    else:
+        task.task_team = None
 
     if deal_id:
         deal = Deal.objects.filter(id=deal_id, organization=request.user.organization).first()
@@ -224,9 +273,29 @@ def update_task(request, id: UUID, data: TaskCreateSchema):
     else:
         task.company = None
 
+    # Handle status change logging
+    old_status = task.status
+    new_status = payload.get('status', old_status)
+
+    for field in ['attachments', 'checklist', 'comments']:
+        if field in payload and payload[field] is None:
+            payload[field] = []
+
     for attr, val in payload.items():
         setattr(task, attr, val)
     task.save()
+
+    if old_status != new_status:
+        Activity.objects.create(
+            organization=request.user.organization,
+            performed_by=request.user,
+            type='NOTE',
+            content=f"Updated Task '{task.title}' status from {old_status} to {new_status}",
+            deal=task.deal,
+            contact=task.contact,
+            company=task.company
+        )
+
     return task
 
 @tasks_router.delete("/{id}", response={204: None})

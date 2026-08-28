@@ -1,10 +1,12 @@
+from datetime import timedelta
 from django.test import TestCase
+from django.utils import timezone
 from ninja.testing import TestClient
 from ninja_jwt.tokens import AccessToken
 
 from apps.accounts.models import Organization, User
-from apps.crm.models import Company, Stage, Contact, Deal
-from apps.planning.models import Activity
+from apps.crm.models import Company, Stage, Contact, Deal, LeadLifecycleRule
+from apps.planning.models import Activity, Task
 from config.api import api
 
 class CRMAPITests(TestCase):
@@ -197,3 +199,123 @@ class CRMAPITests(TestCase):
             headers=self.headers_rep_a2
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_contact_duplicate_check_and_bypass(self):
+        # Email has wile@acme.com already
+        response = self.client.post(
+            "/contacts/",
+            json={
+                "first_name": "Wile Duplicate",
+                "last_name": "Coyote",
+                "email": "wile@acme.com",
+                "phone": "555-0199",
+                "job_title": "Lead Engineer",
+                "custom_fields": {"hair_color": "brown"}
+            },
+            headers=self.headers_admin_a
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("DUPLICATE_DETECTED", response.json()["detail"])
+
+        response = self.client.post(
+            "/contacts/?bypass_duplicate_check=true",
+            json={
+                "first_name": "Wile Duplicate",
+                "last_name": "Coyote",
+                "email": "wile@acme.com",
+                "phone": "555-0199",
+                "job_title": "Lead Engineer",
+                "custom_fields": {"hair_color": "brown"}
+            },
+            headers=self.headers_admin_a
+        )
+        self.assertEqual(response.status_code, 201)
+        duplicate_id = response.json()["id"]
+        self.assertTrue(Contact.objects.filter(id=duplicate_id).exists())
+
+    def test_contact_merge(self):
+        source = Contact.objects.create(
+            organization=self.org_a,
+            first_name="Hank Duplicate",
+            last_name="Scorpio",
+            email="hank@globex.com",
+            status=Contact.LEAD,
+            assigned_to=self.rep_a1,
+            company=self.company_a,
+            custom_fields={"high_priority": "yes", "department": "R&D"}
+        )
+        deal = Deal.objects.create(
+            organization=self.org_a,
+            title="Globex Subjugation Plan",
+            value=250000.00,
+            stage=self.stage_a,
+            contact=source,
+            company=self.company_a
+        )
+        activity = Activity.objects.create(
+            organization=self.org_a,
+            contact=source,
+            type="CALL",
+            content="Discussed weather control device.",
+            activity_date=timezone.now()
+        )
+        task = Task.objects.create(
+            organization=self.org_a,
+            contact=source,
+            title="Buy plutonium"
+        )
+        
+        response = self.client.post(
+            f"/contacts/{self.contact_a2.id}/merge?candidate_id={source.id}",
+            headers=self.headers_admin_a
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        self.contact_a2.refresh_from_db()
+        self.assertEqual(self.contact_a2.custom_fields.get("high_priority"), "yes")
+        self.assertEqual(self.contact_a2.custom_fields.get("department"), "R&D")
+        
+        deal.refresh_from_db()
+        self.assertEqual(deal.contact, self.contact_a2)
+        
+        activity.refresh_from_db()
+        self.assertEqual(activity.contact, self.contact_a2)
+        
+        task.refresh_from_db()
+        self.assertEqual(task.contact, self.contact_a2)
+        
+        self.assertFalse(Contact.objects.filter(id=source.id).exists())
+
+    def test_extend_lead_lifecycle(self):
+        self.assertEqual(self.contact_a1.lifecycle_extension_days, 0)
+        
+        response = self.client.post(
+            f"/contacts/{self.contact_a1.id}/extend?days=7",
+            headers=self.headers_admin_a
+        )
+        self.assertEqual(response.status_code, 200)
+        
+        self.contact_a1.refresh_from_db()
+        self.assertEqual(self.contact_a1.lifecycle_extension_days, 7)
+        self.assertEqual(self.contact_a1.lifecycle_status, "ACTIVE")
+
+    def test_process_lead_lifecycle_command(self):
+        from django.core.management import call_command
+        self.org_a.lead_lifecycle_timer_enabled = True
+        self.org_a.save()
+        
+        self.contact_a1.is_active_lead = True
+        self.contact_a1.lifecycle_started_at = timezone.now() - timedelta(days=5)
+        self.contact_a1.save()
+        
+        rule = LeadLifecycleRule.objects.create(
+            organization=self.org_a,
+            day=3,
+            action_type=LeadLifecycleRule.CREATE_TASK,
+            config={"task_title": "Day 3 Callback"}
+        )
+        
+        call_command("process_lead_lifecycle")
+        
+        self.assertTrue(Task.objects.filter(contact=self.contact_a1, title="Day 3 Callback").exists())
+        self.assertTrue(Activity.objects.filter(contact=self.contact_a1, content__icontains="Day 3 Callback").exists())

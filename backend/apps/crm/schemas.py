@@ -2,8 +2,9 @@ from typing import Optional
 from uuid import UUID
 from datetime import date
 from ninja import ModelSchema, Schema
-from apps.accounts.schemas import UserSchema
-from .models import Company, Stage, Contact, Deal
+# Import Project model
+from .models import Company, Stage, Contact, Deal, Project
+from apps.accounts.schemas import UserSchema, OrganizationSchema
 
 class CompanySchema(ModelSchema):
     class Meta:
@@ -35,7 +36,11 @@ class ContactSchema(ModelSchema):
     
     class Meta:
         model = Contact
-        fields = ['id', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'status', 'custom_fields', 'created_at', 'updated_at']
+        fields = [
+            'id', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'status',
+            'custom_fields', 'lifecycle_started_at', 'lifecycle_extension_days',
+            'lifecycle_status', 'is_active_lead', 'created_at', 'updated_at'
+        ]
 
 class ContactCreateSchema(Schema):
     first_name: str
@@ -67,3 +72,68 @@ class DealCreateSchema(Schema):
     expected_close_date: Optional[date] = None
     probability: Optional[int] = 0
     status: Optional[str] = 'OPEN'
+
+class ProjectSchema(ModelSchema):
+    manager: Optional[UserSchema] = None
+    deal: Optional[DealSchema] = None
+
+    class Meta:
+        model = Project
+        fields = ['id', 'name', 'status', 'start_date', 'end_date', 'created_at', 'updated_at']
+
+class ProjectCreateSchema(Schema):
+    name: str
+    status: Optional[str] = 'PLANNING'
+    manager_id: Optional[UUID] = None
+    deal_id: Optional[UUID] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+# Lead Lifecycle and organization settings schemas
+class OrganizationLifecycleSettingsSchema(Schema):
+    lead_lifecycle_timer_enabled: bool
+    default_lead_lifecycle_days: int
+
+class LeadLifecycleRuleSchema(Schema):
+    id: UUID
+    day: int
+    action_type: str
+    config: dict
+
+class LeadLifecycleRuleCreateSchema(Schema):
+    day: int
+    action_type: str
+    config: dict
+
+class CustomerListSchema(Schema):
+    id: UUID
+    name: str
+    list_type: str
+    rules: dict
+    contacts_count: Optional[int] = None
+
+class CustomerListCreateSchema(Schema):
+    name: str
+    list_type: str
+    rules: Optional[dict] = None
+
+class CustomModuleSchema(Schema):
+    id: UUID
+    name: str
+    singular_name: str
+    icon: str
+    fields: list
+
+class CustomModuleCreateSchema(Schema):
+    name: str
+    singular_name: str
+    icon: Optional[str] = 'Grid'
+    fields: list
+
+class CustomModuleRecordSchema(Schema):
+    id: UUID
+    custom_module_id: UUID
+    data: dict
+    created_at: date
+    updated_at: date
+

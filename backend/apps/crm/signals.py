@@ -97,6 +97,9 @@ def deal_post_save(sender, instance, created, **kwargs):
 
 @receiver(pre_save, sender=Contact)
 def contact_pre_save(sender, instance, **kwargs):
+    if instance.status == Contact.LEAD and not instance.lifecycle_started_at:
+        instance.lifecycle_started_at = timezone.now()
+
     if instance.pk:
         try:
             old_instance = Contact.objects.get(pk=instance.pk)
