@@ -14,6 +14,7 @@ class Company(TimeStampedModel):
     about = models.TextField(null=True, blank=True)
     annual_revenue = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
+    custom_fields = models.JSONField(default=dict, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -91,6 +92,7 @@ class Contact(TimeStampedModel):
     source = models.CharField(max_length=255, null=True, blank=True)
     tags = models.JSONField(default=list, blank=True)
     notes = models.TextField(null=True, blank=True)
+    country = models.CharField(max_length=100, null=True, blank=True)
 
     # Lead lifecycle tracking fields
     lifecycle_started_at = models.DateTimeField(null=True, blank=True)
@@ -98,7 +100,7 @@ class Contact(TimeStampedModel):
     lifecycle_status = models.CharField(max_length=50, default='ACTIVE')
     is_active_lead = models.BooleanField(default=True)
     
-    custom_fields = models.JSONField(default=dict, blank=True)
+    custom_fields = models.JSONField(default=dict, blank=True, null=True)
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
@@ -145,6 +147,7 @@ class Deal(TimeStampedModel):
     expected_close_date = models.DateField(null=True, blank=True)
     probability = models.IntegerField(default=0, null=True, blank=True)  # 0 to 100 percentage
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default=OPEN, db_index=True)
+    custom_fields = models.JSONField(default=dict, blank=True, null=True)
 
     def __str__(self):
         return self.title
@@ -168,6 +171,7 @@ class Project(TimeStampedModel):
         related_name='projects'
     )
     name = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default=PLANNING)
     manager = models.ForeignKey(
         User,
@@ -183,8 +187,16 @@ class Project(TimeStampedModel):
         blank=True,
         related_name='projects'
     )
+    members = models.ManyToManyField(
+        User,
+        related_name='joined_projects',
+        blank=True
+    )
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
+    attachments = models.JSONField(default=list, blank=True)
+    progress = models.IntegerField(default=0)
+    custom_fields = models.JSONField(default=dict, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -279,4 +291,237 @@ class CustomModuleRecord(TimeStampedModel):
 
     def __str__(self):
         return f"Record for {self.custom_module.name} - {self.id}"
+
+
+class Pipeline(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='pipelines'
+    )
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"{self.name} ({self.organization.name})"
+
+
+class CustomFieldDefinition(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='custom_field_definitions'
+    )
+    model_name = models.CharField(max_length=50) # 'CONTACT', 'DEAL', 'COMPANY', 'PROJECT'
+    name = models.CharField(max_length=100)
+    label = models.CharField(max_length=100)
+    type = models.CharField(max_length=50) # 'TEXT', 'NUMBER', 'CURRENCY', 'DATE', 'DROPDOWN', 'CHECKBOX'
+    config = models.JSONField(default=dict, blank=True)
+    required = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.model_name}:{self.name} ({self.organization.name})"
+
+
+class Report(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='reports'
+    )
+    name = models.CharField(max_length=255)
+    base_module = models.CharField(max_length=100) # 'EMPLOYEES', 'TASKS', 'LEADS', 'CUSTOMERS', 'DEALS', 'PROJECTS', 'ACTIVITIES', 'CUSTOM_MODULES'
+    filters = models.JSONField(default=dict, blank=True)
+    display_type = models.CharField(max_length=50, default='TABLE') # 'TABLE', 'CHART', 'NUMBER', 'PERCENTAGE'
+    scheduled_cron = models.CharField(max_length=255, null=True, blank=True)
+    recipients = models.JSONField(default=list, blank=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.organization.name})"
+
+
+class EmailAccount(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='email_accounts'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='email_accounts'
+    )
+    email_address = models.EmailField()
+    provider = models.CharField(max_length=50) # 'GMAIL', 'OUTLOOK', 'BUSINESS'
+    is_connected = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.email_address} ({self.provider})"
+
+
+class WhatsAppAccount(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='whatsapp_accounts'
+    )
+    phone_number = models.CharField(max_length=50)
+    display_name = models.CharField(max_length=255)
+    is_connected = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.display_name} ({self.phone_number})"
+
+
+class WhatsAppConversation(TimeStampedModel):
+    whatsapp_account = models.ForeignKey(
+        WhatsAppAccount,
+        on_delete=models.CASCADE,
+        related_name='conversations'
+    )
+    contact = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='whatsapp_conversations'
+    )
+    assigned_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    status = models.CharField(max_length=50, default='OPEN') # 'OPEN', 'COMPLETED'
+
+    def __str__(self):
+        return f"Chat-{self.id} with {self.contact.first_name if self.contact else 'Unknown'}"
+
+
+class WhatsAppMessage(TimeStampedModel):
+    conversation = models.ForeignKey(
+        WhatsAppConversation,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    sender_type = models.CharField(max_length=20) # 'CUSTOMER', 'AGENT'
+    sender_name = models.CharField(max_length=255)
+    text = models.TextField()
+
+    def __str__(self):
+        return f"Msg from {self.sender_name} at {self.created_at}"
+
+
+class AutomationRule(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='automations'
+    )
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    event_trigger = models.CharField(max_length=100) # 'LEAD_CREATED', 'DEAL_WON', 'LEAD_DAY_30'
+    conditions = models.JSONField(default=dict, blank=True)
+    actions = models.JSONField(default=list)
+
+    def __str__(self):
+        return f"{self.name} - Trigger:{self.event_trigger}"
+
+
+class Notification(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    notification_type = models.CharField(max_length=50) # 'NEW_TASK', 'TASK_ASSIGNED', 'TASK_OVERDUE', etc.
+    is_read = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.title} for {self.user.email}"
+
+
+class NotificationPreference(TimeStampedModel):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notification_preference'
+    )
+    email_new_task = models.BooleanField(default=True)
+    in_app_new_task = models.BooleanField(default=True)
+    email_task_assigned = models.BooleanField(default=True)
+    in_app_task_assigned = models.BooleanField(default=True)
+    email_task_overdue = models.BooleanField(default=True)
+    in_app_task_overdue = models.BooleanField(default=True)
+    email_new_lead = models.BooleanField(default=True)
+    in_app_new_lead = models.BooleanField(default=True)
+    email_new_customer = models.BooleanField(default=True)
+    in_app_new_customer = models.BooleanField(default=True)
+    email_new_message = models.BooleanField(default=True)
+    in_app_new_message = models.BooleanField(default=True)
+    email_new_email = models.BooleanField(default=True)
+    in_app_new_email = models.BooleanField(default=True)
+    email_mention = models.BooleanField(default=True)
+    in_app_mention = models.BooleanField(default=True)
+    email_approval_request = models.BooleanField(default=True)
+    in_app_approval_request = models.BooleanField(default=True)
+    email_automation = models.BooleanField(default=True)
+    in_app_automation = models.BooleanField(default=True)
+    email_upcoming_deadline = models.BooleanField(default=True)
+    in_app_upcoming_deadline = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Prefs for {self.user.email}"
+
+
+class ApprovalWorkflow(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='approval_workflows'
+    )
+    name = models.CharField(max_length=255)
+    steps = models.JSONField(default=list) # e.g. [{"type": "ROLE", "value": "MANAGER"}, {"type": "ROLE", "value": "FINANCE"}]
+
+    def __str__(self):
+        return f"{self.name} ({self.organization.name})"
+
+
+class ApprovalRequest(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='approval_requests'
+    )
+    workflow = models.ForeignKey(
+        ApprovalWorkflow,
+        on_delete=models.CASCADE,
+        related_name='requests'
+    )
+    title = models.CharField(max_length=255)
+    description = models.TextField(null=True, blank=True)
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='requested_approvals'
+    )
+    status = models.CharField(max_length=50, default='PENDING') # 'PENDING', 'APPROVED', 'REJECTED'
+    current_step_index = models.IntegerField(default=0)
+    history = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return f"{self.title} - Status: {self.status}"
 

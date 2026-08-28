@@ -16,7 +16,6 @@ import {
   MessageSquare,
   Paperclip,
   X,
-  AlertPixel,
   ChevronLeft,
   ChevronRight,
   Loader2

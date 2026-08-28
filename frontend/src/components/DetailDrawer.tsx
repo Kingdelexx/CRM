@@ -728,6 +728,7 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                           Save Changes
                         </button>
                       </div>
+                    </form>
                   )}
 
                   {/* Lead Lifecycle Extension - for Leads */}

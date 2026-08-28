@@ -1,15 +1,18 @@
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
-from datetime import date
+from datetime import date, datetime
 from ninja import ModelSchema, Schema
-# Import Project model
-from .models import Company, Stage, Contact, Deal, Project
+from .models import (
+    Company, Stage, Contact, Deal, Project, Pipeline, CustomFieldDefinition,
+    Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest
+)
 from apps.accounts.schemas import UserSchema, OrganizationSchema
 
 class CompanySchema(ModelSchema):
     class Meta:
         model = Company
-        fields = ['id', 'name', 'domain', 'industry', 'about', 'annual_revenue', 'phone', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'domain', 'industry', 'about', 'annual_revenue', 'phone', 'custom_fields', 'created_at', 'updated_at']
 
 class CompanyCreateSchema(Schema):
     name: str
@@ -18,6 +21,7 @@ class CompanyCreateSchema(Schema):
     about: Optional[str] = None
     annual_revenue: Optional[float] = None
     phone: Optional[str] = None
+    custom_fields: Optional[dict] = None
 
 class StageSchema(ModelSchema):
     class Meta:
@@ -39,7 +43,7 @@ class ContactSchema(ModelSchema):
         fields = [
             'id', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'status',
             'custom_fields', 'lifecycle_started_at', 'lifecycle_extension_days',
-            'lifecycle_status', 'is_active_lead', 'created_at', 'updated_at'
+            'lifecycle_status', 'is_active_lead', 'country', 'created_at', 'updated_at'
         ]
 
 class ContactCreateSchema(Schema):
@@ -52,6 +56,7 @@ class ContactCreateSchema(Schema):
     company_id: Optional[UUID] = None
     assigned_to_id: Optional[UUID] = None
     custom_fields: Optional[dict] = None
+    country: Optional[str] = None
 
 class DealSchema(ModelSchema):
     stage: StageSchema
@@ -60,7 +65,7 @@ class DealSchema(ModelSchema):
     
     class Meta:
         model = Deal
-        fields = ['id', 'title', 'value', 'currency', 'expected_close_date', 'probability', 'status', 'created_at', 'updated_at']
+        fields = ['id', 'title', 'value', 'currency', 'expected_close_date', 'probability', 'status', 'custom_fields', 'created_at', 'updated_at']
 
 class DealCreateSchema(Schema):
     title: str
@@ -72,22 +77,147 @@ class DealCreateSchema(Schema):
     expected_close_date: Optional[date] = None
     probability: Optional[int] = 0
     status: Optional[str] = 'OPEN'
+    custom_fields: Optional[dict] = None
 
 class ProjectSchema(ModelSchema):
     manager: Optional[UserSchema] = None
     deal: Optional[DealSchema] = None
+    members: Optional[List[UserSchema]] = None
 
     class Meta:
         model = Project
-        fields = ['id', 'name', 'status', 'start_date', 'end_date', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'status', 'start_date', 'end_date', 'attachments', 'progress', 'custom_fields', 'created_at', 'updated_at']
 
 class ProjectCreateSchema(Schema):
     name: str
+    description: Optional[str] = None
     status: Optional[str] = 'PLANNING'
     manager_id: Optional[UUID] = None
     deal_id: Optional[UUID] = None
+    members_ids: Optional[List[UUID]] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
+    attachments: Optional[list] = None
+    progress: Optional[int] = 0
+    custom_fields: Optional[dict] = None
+
+class PipelineSchema(ModelSchema):
+    class Meta:
+        model = Pipeline
+        fields = ['id', 'name', 'code', 'created_at', 'updated_at']
+
+class PipelineCreateSchema(Schema):
+    name: str
+    code: str
+
+class CustomFieldDefinitionSchema(ModelSchema):
+    class Meta:
+        model = CustomFieldDefinition
+        fields = ['id', 'model_name', 'name', 'label', 'type', 'config', 'required', 'created_at', 'updated_at']
+
+class CustomFieldDefinitionCreateSchema(Schema):
+    model_name: str
+    name: str
+    label: str
+    type: str
+    config: Optional[dict] = None
+    required: Optional[bool] = False
+
+class ReportSchema(ModelSchema):
+    created_by: Optional[UserSchema] = None
+    class Meta:
+        model = Report
+        fields = ['id', 'name', 'base_module', 'filters', 'display_type', 'scheduled_cron', 'recipients', 'created_at', 'updated_at']
+
+class ReportCreateSchema(Schema):
+    name: str
+    base_module: str
+    filters: Optional[dict] = None
+    display_type: Optional[str] = 'TABLE'
+    scheduled_cron: Optional[str] = None
+    recipients: Optional[list] = None
+
+class EmailAccountSchema(ModelSchema):
+    class Meta:
+        model = EmailAccount
+        fields = ['id', 'email_address', 'provider', 'is_connected', 'created_at', 'updated_at']
+
+class EmailAccountCreateSchema(Schema):
+    email_address: str
+    provider: str
+
+class WhatsAppAccountSchema(ModelSchema):
+    class Meta:
+        model = WhatsAppAccount
+        fields = ['id', 'phone_number', 'display_name', 'is_connected', 'created_at']
+
+class WhatsAppAccountCreateSchema(Schema):
+    phone_number: str
+    display_name: str
+
+class WhatsAppConversationSchema(ModelSchema):
+    whatsapp_account: WhatsAppAccountSchema
+    contact: Optional[ContactSchema] = None
+    assigned_to: Optional[UserSchema] = None
+
+    class Meta:
+        model = WhatsAppConversation
+        fields = ['id', 'contact', 'assigned_to', 'status', 'created_at', 'updated_at']
+
+class WhatsAppMessageSchema(ModelSchema):
+    class Meta:
+        model = WhatsAppMessage
+        fields = ['id', 'sender_type', 'sender_name', 'text', 'created_at']
+
+class AutomationRuleSchema(ModelSchema):
+    class Meta:
+        model = AutomationRule
+        fields = ['id', 'name', 'is_active', 'event_trigger', 'conditions', 'actions', 'created_at', 'updated_at']
+
+class AutomationRuleCreateSchema(Schema):
+    name: str
+    is_active: Optional[bool] = True
+    event_trigger: str
+    conditions: Optional[dict] = None
+    actions: list
+
+class NotificationSchema(ModelSchema):
+    class Meta:
+        model = Notification
+        fields = ['id', 'title', 'message', 'notification_type', 'is_read', 'created_at']
+
+class NotificationPreferenceSchema(ModelSchema):
+    class Meta:
+        model = NotificationPreference
+        fields = [
+            'email_new_task', 'in_app_new_task', 'email_task_assigned', 'in_app_task_assigned',
+            'email_task_overdue', 'in_app_task_overdue', 'email_new_lead', 'in_app_new_lead',
+            'email_new_customer', 'in_app_new_customer', 'email_new_message', 'in_app_new_message',
+            'email_new_email', 'in_app_new_email', 'email_mention', 'in_app_mention',
+            'email_approval_request', 'in_app_approval_request', 'email_automation', 'in_app_automation',
+            'email_upcoming_deadline', 'in_app_upcoming_deadline'
+        ]
+
+class ApprovalWorkflowSchema(ModelSchema):
+    class Meta:
+        model = ApprovalWorkflow
+        fields = ['id', 'name', 'steps', 'created_at', 'updated_at']
+
+class ApprovalWorkflowCreateSchema(Schema):
+    name: str
+    steps: list
+
+class ApprovalRequestSchema(ModelSchema):
+    workflow: ApprovalWorkflowSchema
+    requested_by: UserSchema
+    class Meta:
+        model = ApprovalRequest
+        fields = ['id', 'title', 'description', 'status', 'current_step_index', 'history', 'created_at', 'updated_at']
+
+class ApprovalRequestCreateSchema(Schema):
+    workflow_id: UUID
+    title: str
+    description: Optional[str] = None
 
 # Lead Lifecycle and organization settings schemas
 class OrganizationLifecycleSettingsSchema(Schema):
@@ -134,6 +264,5 @@ class CustomModuleRecordSchema(Schema):
     id: UUID
     custom_module_id: UUID
     data: dict
-    created_at: date
-    updated_at: date
-
+    created_at: datetime
+    updated_at: datetime

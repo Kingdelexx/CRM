@@ -12,7 +12,11 @@ from ninja_jwt.authentication import JWTAuth
 
 from apps.accounts.models import User, Organization
 from apps.planning.models import Task, Activity
-from .models import Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord
+from .models import (
+    Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
+    Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest
+)
 from .schemas import (
     CompanySchema, CompanyCreateSchema,
     StageSchema, StageCreateSchema,
@@ -23,7 +27,17 @@ from .schemas import (
     LeadLifecycleRuleSchema, LeadLifecycleRuleCreateSchema,
     CustomerListSchema, CustomerListCreateSchema,
     CustomModuleSchema, CustomModuleCreateSchema,
-    CustomModuleRecordSchema
+    CustomModuleRecordSchema,
+    PipelineSchema, PipelineCreateSchema,
+    CustomFieldDefinitionSchema, CustomFieldDefinitionCreateSchema,
+    ReportSchema, ReportCreateSchema,
+    EmailAccountSchema, EmailAccountCreateSchema,
+    WhatsAppAccountSchema, WhatsAppAccountCreateSchema,
+    WhatsAppConversationSchema, WhatsAppMessageSchema,
+    AutomationRuleSchema, AutomationRuleCreateSchema,
+    NotificationSchema, NotificationPreferenceSchema,
+    ApprovalWorkflowSchema, ApprovalWorkflowCreateSchema,
+    ApprovalRequestSchema, ApprovalRequestCreateSchema
 )
 
 # Route instances initialized with JWT Auth
@@ -35,6 +49,14 @@ projects_router = Router(auth=JWTAuth())
 settings_router = Router(auth=JWTAuth())
 customer_lists_router = Router(auth=JWTAuth())
 custom_modules_router = Router(auth=JWTAuth())
+pipelines_router = Router(auth=JWTAuth())
+reports_router = Router(auth=JWTAuth())
+emails_router = Router(auth=JWTAuth())
+whatsapp_router = Router(auth=JWTAuth())
+automations_router = Router(auth=JWTAuth())
+notifications_router = Router(auth=JWTAuth())
+approvals_router = Router(auth=JWTAuth())
+calendar_router = Router(auth=JWTAuth())
 
 # Helper: check user belongs to organization
 def check_tenant(request_user, obj):
@@ -486,7 +508,7 @@ def delete_deal(request, id: UUID):
 @projects_router.get("", response=List[ProjectSchema])
 @paginate(LimitOffsetPagination)
 def list_projects(request, search: Optional[str] = None, contact_id: Optional[UUID] = None, deal_id: Optional[UUID] = None):
-    qs = Project.objects.filter(organization=request.user.organization).select_related('manager', 'deal')
+    qs = Project.objects.filter(organization=request.user.organization).select_related('manager', 'deal').prefetch_related('members')
     if search:
         qs = qs.filter(name__icontains=search)
     if contact_id:
@@ -497,7 +519,7 @@ def list_projects(request, search: Optional[str] = None, contact_id: Optional[UU
 
 @projects_router.get("/{id}", response=ProjectSchema)
 def get_project(request, id: UUID):
-    project = Project.objects.filter(id=id, organization=request.user.organization).select_related('manager', 'deal').first()
+    project = Project.objects.filter(id=id, organization=request.user.organization).select_related('manager', 'deal').prefetch_related('members').first()
     if not project:
         raise HttpError(404, "Project not found.")
     return project
@@ -507,6 +529,7 @@ def create_project(request, data: ProjectCreateSchema):
     payload = data.dict()
     manager_id = payload.pop('manager_id', None)
     deal_id = payload.pop('deal_id', None)
+    members_ids = payload.pop('members_ids', None) or []
     
     manager = None
     if manager_id:
@@ -526,6 +549,9 @@ def create_project(request, data: ProjectCreateSchema):
         deal=deal,
         **payload
     )
+    if members_ids:
+        members = User.objects.filter(id__in=members_ids, organization=request.user.organization)
+        project.members.set(members)
     return 201, project
 
 @projects_router.put("/{id}", response=ProjectSchema)
@@ -537,6 +563,7 @@ def update_project(request, id: UUID, data: ProjectCreateSchema):
     payload = data.dict()
     manager_id = payload.pop('manager_id', None)
     deal_id = payload.pop('deal_id', None)
+    members_ids = payload.pop('members_ids', None)
     
     if manager_id:
         manager = User.objects.filter(id=manager_id, organization=request.user.organization).first()
@@ -549,6 +576,10 @@ def update_project(request, id: UUID, data: ProjectCreateSchema):
         project.deal = deal
     else:
         project.deal = None
+        
+    if members_ids is not None:
+        members = User.objects.filter(id__in=members_ids, organization=request.user.organization)
+        project.members.set(members)
         
     for k, v in payload.items():
         setattr(project, k, v)
@@ -874,3 +905,569 @@ def delete_custom_record(request, id: UUID, record_id: UUID):
         raise HttpError(404, "Record not found.")
     rec.delete()
     return 204, None
+
+
+# ----------------- PIPELINES API -----------------
+@pipelines_router.get("", response=List[PipelineSchema])
+def list_pipelines(request):
+    return Pipeline.objects.filter(organization=request.user.organization)
+
+@pipelines_router.get("/{id}", response=PipelineSchema)
+def get_pipeline(request, id: UUID):
+    p = Pipeline.objects.filter(id=id, organization=request.user.organization).first()
+    if not p:
+        raise HttpError(404, "Pipeline not found.")
+    return p
+
+@pipelines_router.post("", response={201: PipelineSchema})
+def create_pipeline(request, data: PipelineCreateSchema):
+    p = Pipeline.objects.create(
+        organization=request.user.organization,
+        **data.dict()
+    )
+    return 201, p
+
+@pipelines_router.put("/{id}", response=PipelineSchema)
+def update_pipeline(request, id: UUID, data: PipelineCreateSchema):
+    p = Pipeline.objects.filter(id=id, organization=request.user.organization).first()
+    if not p:
+        raise HttpError(404, "Pipeline not found.")
+    for k, v in data.dict().items():
+        setattr(p, k, v)
+    p.save()
+    return p
+
+@pipelines_router.delete("/{id}", response={204: None})
+def delete_pipeline(request, id: UUID):
+    p = Pipeline.objects.filter(id=id, organization=request.user.organization).first()
+    if not p:
+        raise HttpError(404, "Pipeline not found.")
+    p.delete()
+    return 204, None
+
+
+# ----------------- CUSTOM FIELD DEFINITIONS API -----------------
+@settings_router.get("/custom-fields", response=List[CustomFieldDefinitionSchema])
+def list_custom_fields(request, model_name: Optional[str] = None):
+    qs = CustomFieldDefinition.objects.filter(organization=request.user.organization)
+    if model_name:
+        qs = qs.filter(model_name=model_name.upper())
+    return qs
+
+@settings_router.post("/custom-fields", response={201: CustomFieldDefinitionSchema})
+def create_custom_field(request, data: CustomFieldDefinitionCreateSchema):
+    payload = data.dict()
+    payload['model_name'] = payload['model_name'].upper()
+    cf = CustomFieldDefinition.objects.create(
+        organization=request.user.organization,
+        **payload
+    )
+    return 201, cf
+
+@settings_router.delete("/custom-fields/{id}", response={204: None})
+def delete_custom_field(request, id: UUID):
+    cf = CustomFieldDefinition.objects.filter(id=id, organization=request.user.organization).first()
+    if not cf:
+        raise HttpError(404, "Custom field definition not found.")
+    cf.delete()
+    return 204, None
+
+
+# ----------------- REPORTS API -----------------
+@reports_router.get("", response=List[ReportSchema])
+def list_reports(request):
+    return Report.objects.filter(organization=request.user.organization)
+
+@reports_router.post("", response={201: ReportSchema})
+def create_report(request, data: ReportCreateSchema):
+    r = Report.objects.create(
+        organization=request.user.organization,
+        created_by=request.user,
+        **data.dict()
+    )
+    return 201, r
+
+@reports_router.delete("/{id}", response={204: None})
+def delete_report(request, id: UUID):
+    r = Report.objects.filter(id=id, organization=request.user.organization).first()
+    if not r:
+        raise HttpError(404, "Report not found.")
+    r.delete()
+    return 204, None
+
+@reports_router.get("/{id}/data")
+def evaluate_report_data(request, id: UUID):
+    r = Report.objects.filter(id=id, organization=request.user.organization).first()
+    if not r:
+        raise HttpError(404, "Report not found.")
+        
+    org = request.user.organization
+    module = r.base_module.upper()
+    filters = r.filters or {}
+    
+    rows = []
+    summary = {}
+    
+    if module == 'EMPLOYEES':
+        qs = User.objects.filter(organization=org)
+        for u in qs:
+            rows.append({
+                "id": str(u.id),
+                "name": f"{u.first_name} {u.last_name}",
+                "email": u.email,
+                "role": u.role,
+                "created_at": u.date_joined.isoformat() if u.date_joined else ""
+            })
+        summary = {"total_employees": qs.count()}
+    elif module == 'TASKS':
+        qs = Task.objects.filter(organization=org)
+        if filters.get('status'):
+            qs = qs.filter(status=filters['status'])
+        for t in qs:
+            rows.append({
+                "id": str(t.id),
+                "title": t.title,
+                "status": t.status,
+                "priority": t.priority,
+                "due_date": t.due_date.isoformat() if t.due_date else ""
+            })
+        summary = {
+            "total_tasks": qs.count(),
+            "todo": qs.filter(status='TODO').count(),
+            "in_progress": qs.filter(status='IN_PROGRESS').count(),
+            "done": qs.filter(status='DONE').count(),
+        }
+    elif module in ['LEADS', 'CUSTOMERS']:
+        qs = Contact.objects.filter(organization=org)
+        if module == 'LEADS':
+            qs = qs.filter(status='LEAD')
+        else:
+            qs = qs.filter(status='CUSTOMER')
+        for c in qs:
+            rows.append({
+                "id": str(c.id),
+                "name": f"{c.first_name} {c.last_name}",
+                "email": c.email,
+                "phone": c.phone,
+                "created_at": c.created_at.isoformat()
+            })
+        summary = {"total_count": qs.count()}
+    elif module == 'DEALS':
+        qs = Deal.objects.filter(organization=org)
+        if filters.get('status'):
+            qs = qs.filter(status=filters['status'])
+        total_value = 0
+        for d in qs:
+            total_value += float(d.value)
+            rows.append({
+                "id": str(d.id),
+                "title": d.title,
+                "value": float(d.value),
+                "status": d.status,
+                "probability": d.probability
+            })
+        summary = {
+            "total_deals": qs.count(),
+            "total_value": total_value,
+            "won": qs.filter(status='WON').count(),
+            "open": qs.filter(status='OPEN').count(),
+            "lost": qs.filter(status='LOST').count(),
+        }
+    elif module == 'PROJECTS':
+        qs = Project.objects.filter(organization=org)
+        if filters.get('status'):
+            qs = qs.filter(status=filters['status'])
+        for p in qs:
+            rows.append({
+                "id": str(p.id),
+                "name": p.name,
+                "status": p.status,
+                "progress": p.progress
+            })
+        summary = {
+            "total_projects": qs.count(),
+            "planning": qs.filter(status='PLANNING').count(),
+            "in_progress": qs.filter(status='IN_PROGRESS').count(),
+            "ready": qs.filter(status='READY').count(),
+            "delivered": qs.filter(status='DELIVERED').count(),
+        }
+    elif module == 'ACTIVITIES':
+        qs = Activity.objects.filter(organization=org)
+        for act in qs:
+            rows.append({
+                "id": str(act.id),
+                "type": act.type,
+                "content": act.content,
+                "date": act.activity_date.isoformat()
+            })
+        summary = {"total_activities": qs.count()}
+    else:
+        summary = {"status": "Empty or unrecognized module"}
+        
+    return {"rows": rows, "summary": summary, "display_type": r.display_type}
+
+
+# ----------------- EMAILS INTEGRATION API -----------------
+@emails_router.get("/accounts", response=List[EmailAccountSchema])
+def list_email_accounts(request):
+    return EmailAccount.objects.filter(organization=request.user.organization, user=request.user)
+
+@emails_router.post("/accounts", response={201: EmailAccountSchema})
+def connect_email_account(request, data: EmailAccountCreateSchema):
+    acc, created = EmailAccount.objects.update_or_create(
+        organization=request.user.organization,
+        user=request.user,
+        email_address=data.email_address,
+        defaults={"provider": data.provider, "is_connected": True}
+    )
+    return 201, acc
+
+@emails_router.delete("/accounts/{id}", response={204: None})
+def disconnect_email_account(request, id: UUID):
+    acc = EmailAccount.objects.filter(id=id, organization=request.user.organization, user=request.user).first()
+    if not acc:
+        raise HttpError(404, "Email account not found.")
+    acc.delete()
+    return 204, None
+
+@emails_router.post("/simulate-receive")
+def simulate_receive_email(request, sender: str, recipient: str, subject: str, body: str):
+    org = request.user.organization
+    contact = Contact.objects.filter(organization=org, email=sender).first()
+    if contact:
+        Activity.objects.create(
+            organization=org,
+            performed_by=request.user,
+            type=Activity.EMAIL,
+            content=f"Received Email\nSubject: {subject}\n\n{body}",
+            activity_date=timezone.now(),
+            contact=contact,
+            company=contact.company
+        )
+        return {"status": "success", "linked_contact": f"{contact.first_name} {contact.last_name}"}
+    return {"status": "success", "linked_contact": None, "message": "Logged, but no contact found with email"}
+
+
+# ----------------- WHATSAPP API -----------------
+@whatsapp_router.get("/accounts", response=List[WhatsAppAccountSchema])
+def list_whatsapp_accounts(request):
+    return WhatsAppAccount.objects.filter(organization=request.user.organization)
+
+@whatsapp_router.post("/accounts", response={201: WhatsAppAccountSchema})
+def connect_whatsapp_account(request, data: WhatsAppAccountCreateSchema):
+    acc = WhatsAppAccount.objects.create(
+        organization=request.user.organization,
+        phone_number=data.phone_number,
+        display_name=data.display_name,
+        is_connected=True
+    )
+    return 201, acc
+
+@whatsapp_router.get("/conversations", response=List[WhatsAppConversationSchema])
+def list_whatsapp_conversations(request):
+    return WhatsAppConversation.objects.filter(whatsapp_account__organization=request.user.organization).select_related('contact', 'assigned_to', 'whatsapp_account')
+
+@whatsapp_router.get("/conversations/{id}/messages", response=List[WhatsAppMessageSchema])
+def get_whatsapp_messages(request, id: UUID):
+    conv = WhatsAppConversation.objects.filter(id=id, whatsapp_account__organization=request.user.organization).first()
+    if not conv:
+        raise HttpError(404, "Conversation not found.")
+    return WhatsAppMessage.objects.filter(conversation=conv).order_by('created_at')
+
+@whatsapp_router.post("/conversations/{id}/messages", response={201: WhatsAppMessageSchema})
+def send_whatsapp_message(request, id: UUID, text: str):
+    conv = WhatsAppConversation.objects.filter(id=id, whatsapp_account__organization=request.user.organization).first()
+    if not conv:
+        raise HttpError(404, "Conversation not found.")
+        
+    msg = WhatsAppMessage.objects.create(
+        conversation=conv,
+        sender_type='AGENT',
+        sender_name=f"{request.user.first_name} {request.user.last_name}",
+        text=text
+    )
+    return 201, msg
+
+@whatsapp_router.put("/conversations/{id}/assign")
+def assign_whatsapp_conversation(request, id: UUID, user_id: Optional[UUID] = None):
+    conv = WhatsAppConversation.objects.filter(id=id, whatsapp_account__organization=request.user.organization).first()
+    if not conv:
+        raise HttpError(404, "Conversation not found.")
+        
+    if user_id:
+        u = User.objects.filter(id=user_id, organization=request.user.organization).first()
+        conv.assigned_to = u
+    else:
+        conv.assigned_to = None
+    conv.save()
+    return {"status": "assigned"}
+
+@whatsapp_router.post("/conversations/{id}/create-task")
+def create_task_from_whatsapp(request, id: UUID, title: str, description: Optional[str] = None):
+    conv = WhatsAppConversation.objects.filter(id=id, whatsapp_account__organization=request.user.organization).first()
+    if not conv:
+        raise HttpError(404, "Conversation not found.")
+        
+    t = Task.objects.create(
+        organization=request.user.organization,
+        assignee=request.user,
+        title=title,
+        description=description or f"WhatsApp follow up chat id: {conv.id}",
+        contact=conv.contact,
+        company=conv.contact.company if conv.contact else None,
+        due_date=timezone.now() + timedelta(days=2)
+    )
+    return {"status": "success", "task_id": str(t.id)}
+
+@whatsapp_router.post("/simulate-incoming-whatsapps")
+def simulate_whatsapp(request, account_id: UUID, sender_phone: str, sender_name: str, message_text: str):
+    account = WhatsAppAccount.objects.filter(id=account_id, organization=request.user.organization).first()
+    if not account:
+        raise HttpError(404, "WhatsApp account not found.")
+        
+    contact = Contact.objects.filter(organization=request.user.organization, phone=sender_phone).first()
+    if not contact:
+        contact = Contact.objects.create(
+            organization=request.user.organization,
+            first_name=sender_name,
+            last_name="WhatsApp User",
+            phone=sender_phone,
+            email=f"{sender_phone}@whatsapp.simulated"
+        )
+        
+    conv, _ = WhatsAppConversation.objects.get_or_create(
+        whatsapp_account=account,
+        contact=contact,
+        defaults={"assigned_to": request.user}
+    )
+    
+    msg = WhatsAppMessage.objects.create(
+        conversation=conv,
+        sender_type='CUSTOMER',
+        sender_name=sender_name,
+        text=message_text
+    )
+    
+    return {"status": "success", "conversation_id": str(conv.id), "message_id": str(msg.id)}
+
+
+# ----------------- AUTOMATIONS API -----------------
+@automations_router.get("", response=List[AutomationRuleSchema])
+def list_automations(request):
+    return AutomationRule.objects.filter(organization=request.user.organization)
+
+@automations_router.post("", response={201: AutomationRuleSchema})
+def create_automation(request, data: AutomationRuleCreateSchema):
+    rule = AutomationRule.objects.create(
+        organization=request.user.organization,
+        **data.dict()
+    )
+    return 201, rule
+
+@automations_router.put("/{id}", response=AutomationRuleSchema)
+def update_automation(request, id: UUID, data: AutomationRuleCreateSchema):
+    rule = AutomationRule.objects.filter(id=id, organization=request.user.organization).first()
+    if not rule:
+        raise HttpError(404, "Rule not found.")
+    for k, v in data.dict().items():
+        setattr(rule, k, v)
+    rule.save()
+    return rule
+
+@automations_router.delete("/{id}", response={204: None})
+def delete_automation(request, id: UUID):
+    rule = AutomationRule.objects.filter(id=id, organization=request.user.organization).first()
+    if not rule:
+        raise HttpError(404, "Rule not found.")
+    rule.delete()
+    return 204, None
+
+
+# ----------------- NOTIFICATIONS API -----------------
+@notifications_router.get("", response=List[NotificationSchema])
+def list_notifications(request):
+    return Notification.objects.filter(organization=request.user.organization, user=request.user).order_by('-created_at')
+
+@notifications_router.post("/{id}/read")
+def mark_notification_read(request, id: UUID):
+    n = Notification.objects.filter(id=id, organization=request.user.organization, user=request.user).first()
+    if not n:
+        raise HttpError(404, "Notification not found.")
+    n.is_read = True
+    n.save()
+    return {"status": "success"}
+
+@notifications_router.post("/read-all")
+def mark_all_notifications_read(request):
+    Notification.objects.filter(organization=request.user.organization, user=request.user, is_read=False).update(is_read=True)
+    return {"status": "success"}
+
+@settings_router.get("/notifications-preference", response=NotificationPreferenceSchema)
+def get_notification_preference(request):
+    pref, _ = NotificationPreference.objects.get_or_create(user=request.user)
+    return pref
+
+@settings_router.put("/notifications-preference", response=NotificationPreferenceSchema)
+def update_notification_preference(request, data: NotificationPreferenceSchema):
+    pref, _ = NotificationPreference.objects.get_or_create(user=request.user)
+    for k, v in data.dict().items():
+        setattr(pref, k, v)
+    pref.save()
+    return pref
+
+
+# ----------------- APPROVALS API -----------------
+@approvals_router.get("/workflows", response=List[ApprovalWorkflowSchema])
+def list_approval_workflows(request):
+    return ApprovalWorkflow.objects.filter(organization=request.user.organization)
+
+@approvals_router.post("/workflows", response={201: ApprovalWorkflowSchema})
+def create_approval_workflow(request, data: ApprovalWorkflowCreateSchema):
+    wf = ApprovalWorkflow.objects.create(
+        organization=request.user.organization,
+        **data.dict()
+    )
+    return 201, wf
+
+@approvals_router.delete("/workflows/{id}", response={204: None})
+def delete_approval_workflow(request, id: UUID):
+    wf = ApprovalWorkflow.objects.filter(id=id, organization=request.user.organization).first()
+    if not wf:
+        raise HttpError(404, "Workflow not found.")
+    wf.delete()
+    return 204, None
+
+@approvals_router.get("/requests", response=List[ApprovalRequestSchema])
+def list_approval_requests(request):
+    return ApprovalRequest.objects.filter(organization=request.user.organization)
+
+@approvals_router.post("/requests", response={201: ApprovalRequestSchema})
+def create_approval_request(request, data: ApprovalRequestCreateSchema):
+    wf = ApprovalWorkflow.objects.filter(id=data.workflow_id, organization=request.user.organization).first()
+    if not wf:
+        raise HttpError(400, "Invalid approval workflow.")
+        
+    req = ApprovalRequest.objects.create(
+        organization=request.user.organization,
+        workflow=wf,
+        title=data.title,
+        description=data.description,
+        requested_by=request.user,
+        status='PENDING',
+        current_step_index=0,
+        history=[]
+    )
+    return 201, req
+
+@approvals_router.post("/requests/{id}/action")
+def update_approval_status(request, id: UUID, decision: str, comments: Optional[str] = None):
+    req = ApprovalRequest.objects.filter(id=id, organization=request.user.organization).first()
+    if not req:
+        raise HttpError(404, "Approval request not found.")
+        
+    if decision not in ['APPROVED', 'REJECTED']:
+        raise HttpError(400, "Invalid decision type.")
+        
+    steps = req.workflow.steps
+    total_steps = len(steps)
+    
+    current_history = req.history or []
+    current_history.append({
+        "step": req.current_step_index,
+        "user_id": str(request.user.id),
+        "user_name": f"{request.user.first_name} {request.user.last_name}",
+        "decision": decision,
+        "comments": comments,
+        "timestamp": timezone.now().isoformat()
+    })
+    req.history = current_history
+    
+    if decision == 'REJECTED':
+        req.status = 'REJECTED'
+    else: # APPROVED
+        if req.current_step_index + 1 >= total_steps:
+            req.status = 'APPROVED'
+        else:
+            req.current_step_index += 1
+            
+    req.save()
+    return {"status": req.status, "current_step_index": req.current_step_index}
+
+
+# ----------------- CALENDAR API -----------------
+@calendar_router.get("/events")
+def list_calendar_events(request, start_date: str, end_date: str):
+    try:
+        sd = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+        ed = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+    except Exception:
+        sd = timezone.now() - timedelta(days=30)
+        ed = timezone.now() + timedelta(days=30)
+        
+    events = []
+    org = request.user.organization
+    
+    # 1. Deals: expected_close_date
+    deals = Deal.objects.filter(organization=org, expected_close_date__range=[sd.date(), ed.date()])
+    for d in deals:
+        events.append({
+            "id": f"deal-{d.id}",
+            "type": "DEAL",
+            "title": f"Deal: {d.title} (Est. Close)",
+            "start": d.expected_close_date.isoformat(),
+            "end": d.expected_close_date.isoformat(),
+            "color": "#6366f1",
+            "details": f"Value: {d.value} {d.currency}"
+        })
+        
+    # 2. Projects: start_date, end_date
+    projects = Project.objects.filter(organization=org, start_date__isnull=False)
+    for p in projects:
+        if p.start_date and sd.date() <= p.start_date <= ed.date():
+            events.append({
+                "id": f"project-start-{p.id}",
+                "type": "PROJECT_START",
+                "title": f"Project: {p.name} (Start)",
+                "start": p.start_date.isoformat(),
+                "end": p.start_date.isoformat(),
+                "color": "#10b981",
+                "details": f"Status: {p.status}"
+            })
+        if p.end_date and sd.date() <= p.end_date <= ed.date():
+            events.append({
+                "id": f"project-end-{p.id}",
+                "type": "PROJECT_END",
+                "title": f"Project: {p.name} (End)",
+                "start": p.end_date.isoformat(),
+                "end": p.end_date.isoformat(),
+                "color": "#ef4444",
+                "details": f"Progress: {p.progress}%"
+            })
+            
+    # 3. Tasks: due_date
+    tasks = Task.objects.filter(organization=org, due_date__range=[sd, ed])
+    for t in tasks:
+        events.append({
+            "id": f"task-{t.id}",
+            "type": "TASK",
+            "title": f"Task: {t.title}",
+            "start": t.due_date.isoformat(),
+            "end": t.due_date.isoformat(),
+            "color": "#f59e0b",
+            "details": f"Priority: {t.priority} | Status: {t.status}"
+        })
+        
+    # 4. Activities: activity_date
+    activities = Activity.objects.filter(organization=org, activity_date__range=[sd, ed])
+    for act in activities:
+        events.append({
+            "id": f"activity-{act.id}",
+            "type": "ACTIVITY",
+            "title": f"Activity: {act.type}",
+            "start": act.activity_date.isoformat(),
+            "end": act.activity_date.isoformat(),
+            "color": "#a855f7",
+            "details": act.content[:100]
+        })
+        
+    return events

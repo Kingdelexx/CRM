@@ -404,7 +404,7 @@ export default function SettingsWorkspace() {
         </button>
 
         <button
-          onClick={() => { setActiveTab('lifecycle'); populateLifecycleForm(); }}
+          onClick={() => { setActiveTab('lifecycle'); }}
           className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg text-left transition-all ${
             activeTab === 'lifecycle'
               ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-600/20'

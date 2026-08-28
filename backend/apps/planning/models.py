@@ -53,6 +53,13 @@ class Activity(TimeStampedModel):
         blank=True, 
         related_name='activities'
     )
+    project = models.ForeignKey(
+        'crm.Project', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True, 
+        related_name='activities'
+    )
 
     class Meta:
         ordering = ['-activity_date']

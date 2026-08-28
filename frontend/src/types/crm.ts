@@ -136,16 +136,110 @@ export interface Project extends BaseEntity {
   end_date?: string;
   manager?: User;
   deal?: Deal;
+  progress: number;
+  attachments?: string[];
+  members?: User[];
 }
 
-export interface Activity extends BaseEntity {
-  type: 'CALL' | 'EMAIL' | 'MEETING' | 'NOTE';
-  content: string;
-  activity_date: string;
-  performed_by?: User;
-  deal?: Deal;
+export interface Pipeline extends BaseEntity {
+  name: string;
+  description?: string;
+  is_default: boolean;
+}
+
+export interface CustomFieldDefinition extends BaseEntity {
+  name: string;
+  label: string;
+  field_type: 'TEXT' | 'NUMBER' | 'DATE' | 'CHECKBOX';
+  model_name: 'CONTACT' | 'COMPANY' | 'DEAL';
+  required: boolean;
+  options?: string[];
+}
+
+export interface Report extends BaseEntity {
+  name: string;
+  description?: string;
+  base_module: 'LEADS' | 'CUSTOMERS' | 'DEALS' | 'PROJECTS' | 'TASKS' | 'ACTIVITIES' | 'EMPLOYEES';
+  display_type: 'TABLE' | 'BAR_CHART' | 'LINE_CHART' | 'PIE_CHART' | 'SUMMARY_CARDS';
+  filters?: Record<string, any>;
+  created_by?: User;
+}
+
+export interface EmailAccount extends BaseEntity {
+  email_address: string;
+  provider: string; // 'GMAIL' | 'MICROSOFT' | 'SMTP'
+  is_connected: boolean;
+}
+
+export interface WhatsAppAccount extends BaseEntity {
+  phone_number: string;
+  display_name: string;
+  is_connected: boolean;
+}
+
+export interface WhatsAppConversation extends BaseEntity {
+  whatsapp_account: WhatsAppAccount;
   contact?: Contact;
-  company?: Company;
+  assigned_to?: User;
+  unread_count: number;
+}
+
+export interface WhatsAppMessage extends BaseEntity {
+  conversation: WhatsAppConversation;
+  sender_type: 'CUSTOMER' | 'AGENT';
+  sender_name: string;
+  text: string;
+}
+
+export interface AutomationRule extends BaseEntity {
+  name: string;
+  event_trigger: 'NEW_LEAD' | 'DEAL_STAGE_CHANGE' | 'DEAL_VALUE_LARGE' | 'WHATSAPP_RECEIVED';
+  conditions: Record<string, any>;
+  actions: Array<{
+    type: 'CREATE_TASK' | 'CREATE_NOTIFICATION';
+    config: Record<string, any>;
+  }>;
+  is_active: boolean;
+}
+
+export interface Notification extends BaseEntity {
+  user: User;
+  title: string;
+  message: string;
+  notification_type: 'SYSTEM' | 'ASSIGNMENT' | 'ALERT';
+  is_read: boolean;
+}
+
+export interface NotificationPreference extends BaseEntity {
+  email_deal_closed: boolean;
+  email_contact_assigned: boolean;
+  email_task_assigned: boolean;
+  system_alert: boolean;
+}
+
+export interface ApprovalWorkflow extends BaseEntity {
+  name: string;
+  steps: Array<{
+    name: string;
+    approver_roles: string[];
+  }>;
+}
+
+export interface ApprovalRequest extends BaseEntity {
+  workflow: ApprovalWorkflow;
+  title: string;
+  description?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  requested_by: User;
+  current_step_index: number;
+  history: Array<{
+    step: number;
+    user_id: string;
+    user_name: string;
+    decision: 'APPROVED' | 'REJECTED';
+    comments?: string;
+    timestamp: string;
+  }>;
 }
 
 export interface ChecklistItem {
@@ -177,3 +271,13 @@ export interface Task extends BaseEntity {
   checklist?: ChecklistItem[];
   comments?: TaskComment[];
 }
+
+export interface Activity extends BaseEntity {
+  performed_by?: User;
+  type: 'NOTE' | 'CALL' | 'EMAIL' | 'MEETING';
+  content: string;
+  activity_date: string;
+  contact?: Contact;
+  company?: Company;
+}
+
