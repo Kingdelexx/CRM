@@ -13,6 +13,7 @@ import ApprovalsWorkspace from './ApprovalsWorkspace'
 import SettingsWorkspace from './SettingsWorkspace'
 import CalendarWorkspace from './CalendarWorkspace'
 import EmailSyncWorkspace from './EmailSyncWorkspace'
+import DetailDrawer from '@/components/DetailDrawer'
 import {
   LogOut,
   Users,
@@ -53,6 +54,7 @@ type DashboardView =
 export default function Dashboard() {
   const navigate = useNavigate()
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
   
   // App States
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -63,6 +65,12 @@ export default function Dashboard() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
+  const [searchResults, setSearchResults] = useState<any | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+
+  // Drawer States
+  const [drawerType, setDrawerType] = useState<'contact' | 'deal' | null>(null)
+  const [drawerId, setDrawerId] = useState<string | null>(null)
 
   useEffect(() => {
     // Attempt to load current user from API
@@ -91,10 +99,38 @@ export default function Dashboard() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsProfileDropdownOpen(false)
       }
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setSearchText('')
+        setSearchResults(null)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Trigger Search
+  useEffect(() => {
+    if (searchText.trim().length < 2) {
+      setSearchResults(null)
+      return
+    }
+
+    const delayDebounce = setTimeout(async () => {
+      setIsSearching(true)
+      try {
+        const response = await apiClient.get<any>('/search/', {
+          params: { q: searchText }
+        })
+        setSearchResults(response.data)
+      } catch (err) {
+        console.error('Search failed', err)
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(delayDebounce)
+  }, [searchText])
 
   const handleLogout = () => {
     localStorage.removeItem('access_token')
@@ -105,7 +141,7 @@ export default function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
+      <div className="min-h-screen bg-zinc-900 flex items-center justify-center">
         <Loader2 className="h-8 w-8 text-indigo-500 animate-spin" />
       </div>
     )
@@ -145,7 +181,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex overflow-hidden h-screen">
+    <div className="min-h-screen bg-zinc-900 text-zinc-100 flex overflow-hidden h-screen">
       {/* Sidebar - Dynamically adjusting width */}
       <aside
         className={`${
@@ -413,7 +449,7 @@ export default function Dashboard() {
           {/* Combined Options */}
           <div className="flex items-center gap-4">
             {/* Global Search Bar */}
-            <div className="relative hidden md:block">
+            <div className="relative hidden md:block" ref={searchRef}>
               <Search className="absolute left-2.5 top-2 h-4 w-4 text-zinc-550" />
               <input
                 type="text"
@@ -422,6 +458,174 @@ export default function Dashboard() {
                 onChange={(e) => setSearchText(e.target.value)}
                 className="bg-zinc-950 pl-8 pr-3 py-1.5 rounded-lg border border-zinc-900 focus:border-indigo-650 focus:outline-none text-xs text-zinc-305 placeholder-zinc-650 w-52 focus:w-64 transition-all"
               />
+
+              {/* Dropdown Results Overlay */}
+              {searchText.trim().length >= 2 && (
+                <div className="absolute right-0 top-11 z-[60] bg-zinc-950/95 border border-zinc-900 rounded-xl p-4 shadow-2xl w-[450px] max-h-[480px] overflow-y-auto backdrop-blur-md space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-900 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                    <span>Search Results for "{searchText}"</span>
+                    {isSearching && <Loader2 className="h-3 w-3 text-indigo-400 animate-spin" />}
+                  </div>
+
+                  {!isSearching && searchResults && Object.values(searchResults).every((arr: any) => arr.length === 0) && (
+                    <div className="text-center py-6 text-zinc-500 text-xs font-semibold">
+                      No results matched your query.
+                    </div>
+                  )}
+
+                  {!isSearching && searchResults && (
+                    <div className="space-y-4">
+                      {/* Contacts */}
+                      {searchResults.contacts?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Contacts</span>
+                          {searchResults.contacts.map((c: any) => (
+                            <div
+                              key={c.id}
+                              onClick={() => {
+                                setDrawerType('contact')
+                                setDrawerId(c.id)
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-zinc-200 block">{c.title}</span>
+                                <span className="text-[10px] text-zinc-500 block truncate">{c.subtitle}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Deals */}
+                      {searchResults.deals?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Deals</span>
+                          {searchResults.deals.map((d: any) => (
+                            <div
+                              key={d.id}
+                              onClick={() => {
+                                setDrawerType('deal')
+                                setDrawerId(d.id)
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-905 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-zinc-200 block">{d.title}</span>
+                                <span className="text-[10px] text-zinc-500 block truncate">{d.subtitle}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Projects */}
+                      {searchResults.projects?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-indigo-455 tracking-wider block">Projects</span>
+                          {searchResults.projects.map((p: any) => (
+                            <div
+                              key={p.id}
+                              onClick={() => {
+                                setCurrentView('projects')
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-zinc-200 block">{p.title}</span>
+                                <span className="text-[10px] text-zinc-500 block truncate">{p.subtitle}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Tasks */}
+                      {searchResults.tasks?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Tasks</span>
+                          {searchResults.tasks.map((t: any) => (
+                            <div
+                              key={t.id}
+                              onClick={() => {
+                                if (t.contact_id) {
+                                  setDrawerType('contact')
+                                  setDrawerId(t.contact_id)
+                                } else if (t.deal_id) {
+                                  setDrawerType('deal')
+                                  setDrawerId(t.deal_id)
+                                }
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-zinc-200 block">{t.title}</span>
+                                <span className="text-[10px] text-zinc-550 block truncate">{t.subtitle}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Documents */}
+                      {searchResults.documents?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Documents</span>
+                          {searchResults.documents.map((doc: any) => (
+                            <a
+                              key={doc.id}
+                              href={doc.file_url || doc.subtitle}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={() => {
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-zinc-205 block">{doc.title}</span>
+                                <span className="text-[10px] text-zinc-555 block truncate">{doc.subtitle}</span>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Synced Emails */}
+                      {searchResults.emails?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Synced Emails</span>
+                          {searchResults.emails.map((e: any) => (
+                            <div
+                              key={e.id}
+                              onClick={() => {
+                                setCurrentView('emails')
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-zinc-200 block">{e.title}</span>
+                                <span className="text-[10px] text-zinc-500 block truncate">{e.subtitle}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <button className="relative p-1.5 rounded-lg border border-zinc-900 bg-zinc-950 hover:bg-zinc-905 text-zinc-450 hover:text-white transition-all cursor-pointer">
@@ -446,6 +650,17 @@ export default function Dashboard() {
           {currentView === 'emails' && <EmailSyncWorkspace />}
         </div>
       </main>
+
+      {/* Global Detail Drawer */}
+      <DetailDrawer
+        isOpen={drawerType !== null && drawerId !== null}
+        type={drawerType || 'contact'}
+        id={drawerId}
+        onClose={() => {
+          setDrawerType(null)
+          setDrawerId(null)
+        }}
+      />
     </div>
   )
 }

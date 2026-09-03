@@ -1164,7 +1164,7 @@ export default function SettingsWorkspace() {
                         <span className="font-extrabold text-white text-sm tracking-wide">{mod.name} (singular: {mod.singular_name})</span>
                         <button
                           onClick={() => deleteModuleMutation.mutate(mod.id)}
-                          className="px-2 py-1 bg-red-900/20 text-red-400 hover:bg-red-900/40 rounded border border-red-950 font-bold transition-all cursor-pointer text-[10px] uppercase"
+                          className="px-2 py-1 bg-red-50 text-red-700 hover:bg-red-100 rounded border border-red-200 font-bold transition-all cursor-pointer text-[10px] uppercase"
                         >
                           Tear Down Schema
                         </button>

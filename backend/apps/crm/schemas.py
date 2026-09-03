@@ -5,9 +5,11 @@ from ninja import ModelSchema, Schema
 from .models import (
     Company, Stage, Contact, Deal, Project, Pipeline, CustomFieldDefinition,
     Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest,
+    Document, CustomModuleRecord
 )
 from apps.accounts.schemas import UserSchema, OrganizationSchema
+
 
 class CompanySchema(ModelSchema):
     class Meta:
@@ -266,3 +268,28 @@ class CustomModuleRecordSchema(Schema):
     data: dict
     created_at: datetime
     updated_at: datetime
+
+
+class DocumentSchema(ModelSchema):
+    uploaded_by: Optional[UserSchema] = None
+    class Meta:
+        model = Document
+        fields = [
+            'id', 'name', 'file_url', 'file_type', 'file_size',
+            'contact', 'company', 'task', 'project', 'deal',
+            'custom_record', 'created_at', 'updated_at'
+        ]
+
+
+class DocumentCreateSchema(Schema):
+    name: str
+    file_url: str
+    file_type: Optional[str] = None
+    file_size: Optional[int] = None
+    contact_id: Optional[UUID] = None
+    company_id: Optional[UUID] = None
+    task_id: Optional[UUID] = None
+    project_id: Optional[UUID] = None
+    deal_id: Optional[UUID] = None
+    custom_record_id: Optional[UUID] = None
+

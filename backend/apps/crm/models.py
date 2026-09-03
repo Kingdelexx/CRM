@@ -525,3 +525,67 @@ class ApprovalRequest(TimeStampedModel):
     def __str__(self):
         return f"{self.title} - Status: {self.status}"
 
+
+class Document(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='documents'
+    )
+    name = models.CharField(max_length=255)
+    file_url = models.TextField()
+    file_type = models.CharField(max_length=100, null=True, blank=True)
+    file_size = models.IntegerField(null=True, blank=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    contact = models.ForeignKey(
+        Contact,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='documents'
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='documents'
+    )
+    task = models.ForeignKey(
+        'planning.Task',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='documents'
+    )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='documents'
+    )
+    deal = models.ForeignKey(
+        Deal,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='documents'
+    )
+    custom_record = models.ForeignKey(
+        CustomModuleRecord,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='documents'
+    )
+
+    def __str__(self):
+        return f"{self.name} ({self.file_url})"
+
+

@@ -1,0 +1,1719 @@
+diff --git a/backend/apps/crm/api.py b/backend/apps/crm/api.py
+index df62fc5..42f6650 100644
+--- a/backend/apps/crm/api.py
++++ b/backend/apps/crm/api.py
+@@ -15,7 +15,7 @@ from apps.planning.models import Task, Activity
+ from .models import (
+     Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
+     Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
+-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest
++    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document
+ )
+ from .schemas import (
+     CompanySchema, CompanyCreateSchema,
+@@ -37,7 +37,8 @@ from .schemas import (
+     AutomationRuleSchema, AutomationRuleCreateSchema,
+     NotificationSchema, NotificationPreferenceSchema,
+     ApprovalWorkflowSchema, ApprovalWorkflowCreateSchema,
+-    ApprovalRequestSchema, ApprovalRequestCreateSchema
++    ApprovalRequestSchema, ApprovalRequestCreateSchema,
++    DocumentSchema, DocumentCreateSchema
+ )
+ 
+ # Route instances initialized with JWT Auth
+@@ -57,6 +58,9 @@ automations_router = Router(auth=JWTAuth())
+ notifications_router = Router(auth=JWTAuth())
+ approvals_router = Router(auth=JWTAuth())
+ calendar_router = Router(auth=JWTAuth())
++documents_router = Router(auth=JWTAuth())
++search_router = Router(auth=JWTAuth())
++
+ 
+ # Helper: check user belongs to organization
+ def check_tenant(request_user, obj):
+@@ -1396,7 +1400,7 @@ def update_approval_status(request, id: UUID, decision: str, comments: Optional[
+ 
+ # ----------------- CALENDAR API -----------------
+ @calendar_router.get("/events")
+-def list_calendar_events(request, start_date: str, end_date: str):
++def list_calendar_events(request, start_date: str, end_date: str, scope: str = 'COMPANY'):
+     try:
+         sd = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+         ed = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+@@ -1406,9 +1410,41 @@ def list_calendar_events(request, start_date: str, end_date: str):
+         
+     events = []
+     org = request.user.organization
+-    
+-    # 1. Deals: expected_close_date
++    user = request.user
++
++    # Enforce scope permissions
++    if scope in ['COMPANY', 'TEAM'] and user.role not in [User.ADMIN, User.MANAGER]:
++        raise HttpError(403, f"Access denied: role {user.role} does not have permissions for {scope} calendar view.")
++
++    # Initialize querysets
+     deals = Deal.objects.filter(organization=org, expected_close_date__range=[sd.date(), ed.date()])
++    projects = Project.objects.filter(organization=org).filter(
++        Q(start_date__isnull=False) & (
++            Q(start_date__range=[sd.date(), ed.date()]) | Q(end_date__range=[sd.date(), ed.date()])
++        )
++    )
++    tasks = Task.objects.filter(organization=org, due_date__range=[sd, ed])
++    activities = Activity.objects.filter(organization=org, activity_date__range=[sd, ed])
++
++    # Filter querysets based on scope
++    if scope == 'PERSONAL':
++        deals = deals.filter(contact__assigned_to=user)
++        projects = projects.filter(Q(manager=user) | Q(members=user)).distinct()
++        tasks = tasks.filter(assignee=user)
++        activities = activities.filter(performed_by=user)
++    elif scope == 'TEAM':
++        if user.team:
++            deals = deals.filter(Q(contact__assigned_to__team=user.team) | Q(contact__assigned_team=user.team)).distinct()
++            projects = projects.filter(Q(manager__team=user.team) | Q(members__team=user.team)).distinct()
++            tasks = tasks.filter(assignee__team=user.team)
++            activities = activities.filter(performed_by__team=user.team)
++        else:
++            deals = deals.filter(contact__assigned_to=user)
++            projects = projects.filter(Q(manager=user) | Q(members=user)).distinct()
++            tasks = tasks.filter(assignee=user)
++            activities = activities.filter(performed_by=user)
++
++    # 1. Deals: expected_close_date
+     for d in deals:
+         events.append({
+             "id": f"deal-{d.id}",
+@@ -1421,7 +1457,6 @@ def list_calendar_events(request, start_date: str, end_date: str):
+         })
+         
+     # 2. Projects: start_date, end_date
+-    projects = Project.objects.filter(organization=org, start_date__isnull=False)
+     for p in projects:
+         if p.start_date and sd.date() <= p.start_date <= ed.date():
+             events.append({
+@@ -1445,7 +1480,6 @@ def list_calendar_events(request, start_date: str, end_date: str):
+             })
+             
+     # 3. Tasks: due_date
+-    tasks = Task.objects.filter(organization=org, due_date__range=[sd, ed])
+     for t in tasks:
+         events.append({
+             "id": f"task-{t.id}",
+@@ -1458,7 +1492,6 @@ def list_calendar_events(request, start_date: str, end_date: str):
+         })
+         
+     # 4. Activities: activity_date
+-    activities = Activity.objects.filter(organization=org, activity_date__range=[sd, ed])
+     for act in activities:
+         events.append({
+             "id": f"activity-{act.id}",
+@@ -1471,3 +1504,180 @@ def list_calendar_events(request, start_date: str, end_date: str):
+         })
+         
+     return events
++
++
++
++# ----------------- DOCUMENTS API -----------------
++@documents_router.get("", response=List[DocumentSchema])
++def list_documents(
++    request,
++    contact_id: Optional[UUID] = None,
++    company_id: Optional[UUID] = None,
++    task_id: Optional[UUID] = None,
++    project_id: Optional[UUID] = None,
++    deal_id: Optional[UUID] = None,
++    custom_record_id: Optional[UUID] = None
++):
++    qs = Document.objects.filter(organization=request.user.organization)
++    if contact_id:
++        qs = qs.filter(contact_id=contact_id)
++    if company_id:
++        qs = qs.filter(company_id=company_id)
++    if task_id:
++        qs = qs.filter(task_id=task_id)
++    if project_id:
++        qs = qs.filter(project_id=project_id)
++    if deal_id:
++        qs = qs.filter(deal_id=deal_id)
++    if custom_record_id:
++        qs = qs.filter(custom_record_id=custom_record_id)
++    return qs
++
++
++@documents_router.post("", response={201: DocumentSchema})
++def create_document(request, data: DocumentCreateSchema):
++    doc = Document.objects.create(
++        organization=request.user.organization,
++        uploaded_by=request.user,
++        name=data.name,
++        file_url=data.file_url,
++        file_type=data.file_type,
++        file_size=data.file_size,
++        contact_id=data.contact_id,
++        company_id=data.company_id,
++        task_id=data.task_id,
++        project_id=data.project_id,
++        deal_id=data.deal_id,
++        custom_record_id=data.custom_record_id
++    )
++    return 201, doc
++
++
++@documents_router.delete("/{id}", response={204: None})
++def delete_document(request, id: UUID):
++    doc = Document.objects.filter(id=id, organization=request.user.organization).first()
++    if not doc:
++        raise HttpError(404, "Document not found")
++    doc.delete()
++    return 204, None
++
++
++# ----------------- GLOBAL SEARCH API -----------------
++@search_router.get("", response=dict)
++def global_search(request, q: str):
++    org = request.user.organization
++    if not q or len(q.strip()) < 1:
++        return {
++            "contacts": [], "tasks": [], "projects": [], "deals": [],
++            "emails": [], "whatsapp": [], "documents": [], "activities": []
++        }
++    
++    q_str = q.strip()
++    
++    # 1. Contacts
++    contacts = Contact.objects.filter(
++        organization=org
++    ).filter(
++        Q(first_name__icontains=q_str) |
++        Q(last_name__icontains=q_str) |
++        Q(email__icontains=q_str) |
++        Q(phone__icontains=q_str)
++    )[:10]
++    
++    # 2. Tasks
++    tasks = Task.objects.filter(
++        organization=org
++    ).filter(
++        Q(title__icontains=q_str) |
++        Q(description__icontains=q_str)
++    )[:10]
++
++    # 3. Projects
++    projects = Project.objects.filter(
++        organization=org
++    ).filter(
++        Q(name__icontains=q_str) |
++        Q(description__icontains=q_str)
++    )[:10]
++
++    # 4. Deals
++    deals = Deal.objects.filter(
++        organization=org
++    ).filter(
++        Q(title__icontains=q_str)
++    )[:10]
++
++    # 5. Emails (Activities of type EMAIL containing q)
++    emails = Activity.objects.filter(
++        organization=org,
++        type=Activity.EMAIL
++    ).filter(
++        Q(content__icontains=q_str)
++    )[:10]
++
++    # 6. WhatsApp Messages
++    whatsapp = WhatsAppMessage.objects.filter(
++        conversation__whatsapp_account__organization=org
++    ).filter(
++        Q(text__icontains=q_str) |
++        Q(sender_name__icontains=q_str)
++    ).select_related('conversation')[:10]
++
++    # 7. Documents
++    documents = Document.objects.filter(
++        organization=org
++    ).filter(
++        Q(name__icontains=q_str) |
++        Q(file_url__icontains=q_str)
++    )[:10]
++
++    # 8. Activities (all other types)
++    activities = Activity.objects.filter(
++        organization=org
++    ).exclude(
++        type=Activity.EMAIL
++    ).filter(
++        Q(content__icontains=q_str)
++    )[:10]
++
++    return {
++        "contacts": [
++            {"id": str(c.id), "title": f"{c.first_name} {c.last_name}", "subtitle": f"{c.email} | {c.job_title or 'No Title'}"}
++            for c in contacts
++        ],
++        "tasks": [
++            {
++                "id": str(t.id),
++                "title": t.title,
++                "subtitle": f"Status: {t.status} | Priority: {t.priority}",
++                "contact_id": str(t.contact_id) if t.contact_id else None,
++                "deal_id": str(t.deal_id) if t.deal_id else None
++            }
++            for t in tasks
++        ],
++        "projects": [
++            {"id": str(p.id), "title": p.name, "subtitle": f"Status: {p.status} | Progress: {p.progress}%"}
++            for p in projects
++        ],
++        "deals": [
++            {"id": str(d.id), "title": d.title, "subtitle": f"Value: {d.value} {d.currency} | Status: {d.status}"}
++            for d in deals
++        ],
++        "emails": [
++            {"id": str(e.id), "title": "Email Message", "subtitle": e.content[:100]}
++            for e in emails
++        ],
++        "whatsapp": [
++            {"id": str(w.id), "title": f"WhatsApp Msg from {w.sender_name}", "subtitle": w.text[:100]}
++            for w in whatsapp
++        ],
++        "documents": [
++            {"id": str(d.id), "title": d.name, "subtitle": d.file_url, "file_url": d.file_url}
++            for d in documents
++        ],
++        "activities": [
++            {"id": str(a.id), "title": f"{a.type} Activity", "subtitle": a.content[:100]}
++            for a in activities
++        ]
++    }
++
+diff --git a/backend/apps/crm/models.py b/backend/apps/crm/models.py
+index fb574c2..66bef47 100644
+--- a/backend/apps/crm/models.py
++++ b/backend/apps/crm/models.py
+@@ -525,3 +525,67 @@ class ApprovalRequest(TimeStampedModel):
+     def __str__(self):
+         return f"{self.title} - Status: {self.status}"
+ 
++
++class Document(TimeStampedModel):
++    organization = models.ForeignKey(
++        Organization,
++        on_delete=models.CASCADE,
++        related_name='documents'
++    )
++    name = models.CharField(max_length=255)
++    file_url = models.TextField()
++    file_type = models.CharField(max_length=100, null=True, blank=True)
++    file_size = models.IntegerField(null=True, blank=True)
++    uploaded_by = models.ForeignKey(
++        User,
++        on_delete=models.SET_NULL,
++        null=True,
++        blank=True
++    )
++    contact = models.ForeignKey(
++        Contact,
++        on_delete=models.CASCADE,
++        null=True,
++        blank=True,
++        related_name='documents'
++    )
++    company = models.ForeignKey(
++        Company,
++        on_delete=models.CASCADE,
++        null=True,
++        blank=True,
++        related_name='documents'
++    )
++    task = models.ForeignKey(
++        'planning.Task',
++        on_delete=models.CASCADE,
++        null=True,
++        blank=True,
++        related_name='documents'
++    )
++    project = models.ForeignKey(
++        Project,
++        on_delete=models.CASCADE,
++        null=True,
++        blank=True,
++        related_name='documents'
++    )
++    deal = models.ForeignKey(
++        Deal,
++        on_delete=models.CASCADE,
++        null=True,
++        blank=True,
++        related_name='documents'
++    )
++    custom_record = models.ForeignKey(
++        CustomModuleRecord,
++        on_delete=models.CASCADE,
++        null=True,
++        blank=True,
++        related_name='documents'
++    )
++
++    def __str__(self):
++        return f"{self.name} ({self.file_url})"
++
++
+diff --git a/backend/apps/crm/schemas.py b/backend/apps/crm/schemas.py
+index 9ca48d5..58f6c7d 100644
+--- a/backend/apps/crm/schemas.py
++++ b/backend/apps/crm/schemas.py
+@@ -5,10 +5,12 @@ from ninja import ModelSchema, Schema
+ from .models import (
+     Company, Stage, Contact, Deal, Project, Pipeline, CustomFieldDefinition,
+     Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
+-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest
++    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest,
++    Document, CustomModuleRecord
+ )
+ from apps.accounts.schemas import UserSchema, OrganizationSchema
+ 
++
+ class CompanySchema(ModelSchema):
+     class Meta:
+         model = Company
+@@ -266,3 +268,28 @@ class CustomModuleRecordSchema(Schema):
+     data: dict
+     created_at: datetime
+     updated_at: datetime
++
++
++class DocumentSchema(ModelSchema):
++    uploaded_by: Optional[UserSchema] = None
++    class Meta:
++        model = Document
++        fields = [
++            'id', 'name', 'file_url', 'file_type', 'file_size',
++            'contact', 'company', 'task', 'project', 'deal',
++            'custom_record', 'created_at', 'updated_at'
++        ]
++
++
++class DocumentCreateSchema(Schema):
++    name: str
++    file_url: str
++    file_type: Optional[str] = None
++    file_size: Optional[int] = None
++    contact_id: Optional[UUID] = None
++    company_id: Optional[UUID] = None
++    task_id: Optional[UUID] = None
++    project_id: Optional[UUID] = None
++    deal_id: Optional[UUID] = None
++    custom_record_id: Optional[UUID] = None
++
+diff --git a/backend/config/api.py b/backend/config/api.py
+index 403ea81..f319361 100644
+--- a/backend/config/api.py
++++ b/backend/config/api.py
+@@ -5,7 +5,8 @@ from apps.crm.api import (
+     companies_router, stages_router, contacts_router, deals_router, projects_router,
+     settings_router, customer_lists_router, custom_modules_router,
+     pipelines_router, reports_router, emails_router, whatsapp_router,
+-    automations_router, notifications_router, approvals_router, calendar_router
++    automations_router, notifications_router, approvals_router, calendar_router,
++    documents_router, search_router
+ )
+ from apps.planning.api import activities_router, tasks_router
+ from apps.crm.webhooks import router as webhooks_router
+@@ -41,5 +42,8 @@ api.add_router("/automations/", automations_router)
+ api.add_router("/notifications/", notifications_router)
+ api.add_router("/approvals/", approvals_router)
+ api.add_router("/calendar/", calendar_router)
++api.add_router("/documents/", documents_router)
++api.add_router("/search/", search_router)
++
+ 
+ 
+diff --git a/frontend/src/components/DetailDrawer.tsx b/frontend/src/components/DetailDrawer.tsx
+index ef26d94..aa1b858 100644
+--- a/frontend/src/components/DetailDrawer.tsx
++++ b/frontend/src/components/DetailDrawer.tsx
+@@ -28,7 +28,7 @@ interface DetailDrawerProps {
+ 
+ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: DetailDrawerProps) {
+   const queryClient = useQueryClient()
+-  const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'notes' | 'tasks'>('overview')
++  const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'notes' | 'tasks' | 'documents'>('overview')
+   const [isEditing, setIsEditing] = useState(false)
+ 
+   // Quick note/call logger states
+@@ -250,6 +250,71 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
+     }
+   })
+ 
++  // Fetch Documents
++  const { data: documentsData = [], refetch: refetchDocuments } = useQuery({
++    queryKey: ['documents', type, id],
++    queryFn: async () => {
++      if (!id) return []
++      const response = await apiClient.get<any[]>('/documents/', {
++        params: {
++          [type === 'contact' ? 'contact_id' : 'deal_id']: id
++        }
++      })
++      return response.data
++    },
++    enabled: isOpen && !!id
++  })
++
++  const [isUploading, setIsUploading] = useState(false)
++  const [uploadProgress, setUploadProgress] = useState(0)
++
++  const addDocumentMutation = useMutation({
++    mutationFn: async (payload: { name: string; file_url: string; file_type: string; file_size: number }) => {
++      const body = {
++        ...payload,
++        [type === 'contact' ? 'contact_id' : 'deal_id']: id
++      }
++      return apiClient.post('/documents/', body)
++    },
++    onSuccess: () => {
++      refetchDocuments()
++      queryClient.invalidateQueries({ queryKey: ['documents', type, id] })
++    }
++  })
++
++  const deleteDocumentMutation = useMutation({
++    mutationFn: async (docId: string) => {
++      return apiClient.delete(`/documents/${docId}`)
++    },
++    onSuccess: () => {
++      refetchDocuments()
++      queryClient.invalidateQueries({ queryKey: ['documents', type, id] })
++    }
++  })
++
++  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
++    const file = e.target.files?.[0]
++    if (!file) return
++
++    setIsUploading(true)
++    setUploadProgress(0)
++
++    // Simulate upload progress
++    for (let p = 0; p <= 100; p += 20) {
++      setUploadProgress(p)
++      await new Promise(resolve => setTimeout(resolve, 80))
++    }
++
++    addDocumentMutation.mutate({
++      name: file.name,
++      file_url: `/mock-cdn/uploads/${Date.now()}-${file.name}`,
++      file_type: file.name.split('.').pop()?.toUpperCase() || 'FILE',
++      file_size: file.size
++    })
++
++    setIsUploading(false)
++  }
++
+   // Mutation: Toggle Task Check status
+   const toggleTaskMutation = useMutation({
+     mutationFn: async ({ taskId, task }: { taskId: string; task: Task }) => {
+@@ -277,8 +342,8 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
+     queryKey: ['associated-deals', id],
+     queryFn: async () => {
+       if (type !== 'contact' || !id) return []
+-      const response = await apiClient.get<Deal[]>('/deals/', { params: { contact_id: id } })
+-      return response.data
++      const response = await apiClient.get<any>('/deals/', { params: { contact_id: id } })
++      return response.data.items || []
+     },
+     enabled: isOpen && type === 'contact' && !!id
+   })
+@@ -288,8 +353,8 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
+     queryKey: ['associated-projects', id],
+     queryFn: async () => {
+       if (type !== 'contact' || !id) return []
+-      const response = await apiClient.get<any[]>('/projects/', { params: { contact_id: id } })
+-      return response.data
++      const response = await apiClient.get<any>('/projects/', { params: { contact_id: id } })
++      return response.data.items || []
+     },
+     enabled: isOpen && type === 'contact' && !!id
+   })
+@@ -483,13 +548,13 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
+ 
+             {/* TAB SELECTOR HEADER */}
+             <div className="flex bg-zinc-950 border-b border-zinc-900 px-6 flex-shrink-0">
+-              {(['overview', 'activities', 'notes', 'tasks'] as const).map((tab) => (
++              {(['overview', 'activities', 'notes', 'tasks', 'documents'] as const).map((tab) => (
+                 <button
+                   key={tab}
+                   className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                     activeTab === tab
+                       ? 'border-indigo-500 text-indigo-400'
+-                      : 'border-transparent text-zinc-450 hover:text-zinc-200'
++                      : 'border-transparent text-zinc-455 hover:text-zinc-200'
+                   }`}
+                   onClick={() => setActiveTab(tab)}
+                 >
+@@ -1155,6 +1220,94 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
+                   </div>
+                 </div>
+               )}
++
++              {/* ------------ DOCUMENTS TAB ------------ */}
++              {activeTab === 'documents' && (
++                <div className="space-y-4">
++                  <div className="flex justify-between items-center pb-2 border-b border-zinc-900/60">
++                    <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5 font-bold uppercase tracking-wider">
++                      <FileText className="h-4 w-4 text-indigo-400" /> Documents & Attachments
++                    </span>
++                  </div>
++
++                  {/* Upload file component */}
++                  <div className="bg-zinc-900/20 border border-dashed border-zinc-800 rounded-xl p-6 text-center space-y-3">
++                    <div className="flex flex-col items-center">
++                      <Plus className="h-6 w-6 text-zinc-550 mb-1.5" />
++                      <span className="text-xs text-zinc-300 font-bold block">Upload new attachment</span>
++                      <span className="text-[10px] text-zinc-550 block mt-0.5">PDF, Excel, images (Max 10MB)</span>
++                    </div>
++
++                    <div className="relative inline-block">
++                      <input
++                        type="file"
++                        onChange={handleFileChange}
++                        disabled={isUploading}
++                        id="document-file-upload-input"
++                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
++                      />
++                      <button
++                        type="button"
++                        disabled={isUploading}
++                        className="px-4.5 py-2 bg-indigo-650 hover:bg-indigo-600 active:bg-indigo-700 disabled:bg-zinc-800 text-white text-[10.5px] font-bold tracking-wide uppercase rounded-xl transition-all cursor-pointer shadow-md flex items-center gap-2"
++                      >
++                        {isUploading ? (
++                          <>
++                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
++                            Uploading {uploadProgress}%
++                          </>
++                        ) : (
++                          'Choose File'
++                        )}
++                      </button>
++                    </div>
++                  </div>
++
++                  {/* Documents List */}
++                  <div className="space-y-2 mt-4">
++                    {documentsData.length === 0 ? (
++                      <div className="text-center p-8 border border-dashed border-zinc-900 rounded-xl text-zinc-650 text-xs font-semibold">
++                        No attachments uploaded for this {type}.
++                      </div>
++                    ) : (
++                      documentsData.map((doc: any) => (
++                        <div
++                          key={doc.id}
++                          className="flex items-center justify-between p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl hover:border-zinc-850 transition-all font-semibold"
++                        >
++                          <div className="flex items-center gap-3 min-w-0">
++                            <div className="p-2 bg-zinc-950/80 rounded-lg text-indigo-400 border border-zinc-900 flex-shrink-0">
++                              <span className="text-[9px] font-extrabold uppercase tracking-wide">
++                                {doc.file_type}
++                              </span>
++                            </div>
++                            <div className="min-w-0">
++                              <a
++                                href={doc.file_url}
++                                target="_blank"
++                                rel="noreferrer"
++                                className="text-xs text-zinc-205 hover:text-indigo-400 font-bold block truncate"
++                              >
++                                {doc.name}
++                              </a>
++                              <span className="text-[10px] text-zinc-500 block">
++                                {(doc.file_size / 1024).toFixed(1)} KB • Uploaded by {doc.uploaded_by?.email || 'System'}
++                              </span>
++                            </div>
++                          </div>
++
++                          <button
++                            onClick={() => deleteDocumentMutation.mutate(doc.id)}
++                            className="p-1.5 text-zinc-550 hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors cursor-pointer border border-transparent hover:border-rose-500/10 flex-shrink-0"
++                          >
++                            <Trash2 className="h-4 w-4" />
++                          </button>
++                        </div>
++                      ))
++                    )}
++                  </div>
++                </div>
++              )}
+             </div>
+           </>
+         )}
+diff --git a/frontend/src/components/SummaryDashboard.tsx b/frontend/src/components/SummaryDashboard.tsx
+index 8c418ca..7ce17e9 100644
+--- a/frontend/src/components/SummaryDashboard.tsx
++++ b/frontend/src/components/SummaryDashboard.tsx
+@@ -1,3 +1,4 @@
++import { useState } from 'react'
+ import { useQuery } from '@tanstack/react-query'
+ import { apiClient } from '@/api/client'
+ import type { Deal, Stage } from '@/types/crm'
+@@ -12,6 +13,11 @@ import {
+ } from 'lucide-react'
+ 
+ export default function SummaryDashboard() {
++  // Toggle states for visual widgets
++  const [stageChartMetric, setStageChartMetric] = useState<'value' | 'count'>('value')
++  const [trendChartMetric, setTrendChartMetric] = useState<'value' | 'count'>('value')
++  const [trendChartType, setTrendChartType] = useState<'line' | 'bar'>('line')
++
+   // 1. Fetch Deals
+   const { data: dealsData, isLoading: isLoadingDeals } = useQuery({
+     queryKey: ['deals'],
+@@ -34,7 +40,7 @@ export default function SummaryDashboard() {
+ 
+   if (isLoadingDeals || isLoadingStages) {
+     return (
+-      <div className="py-20 flex flex-col justify-center items-center gap-3 text-zinc-450">
++      <div className="py-20 flex flex-col justify-center items-center gap-3 text-zinc-455">
+         <Loader2 className="h-8 w-8 text-indigo-500 animate-spin" />
+         <span className="text-xs font-semibold">Aggregating analytics data...</span>
+       </div>
+@@ -93,7 +99,8 @@ export default function SummaryDashboard() {
+       return date.getFullYear() === currentYear && date.getMonth() === idx
+     })
+     const value = matchingDeals.reduce((sum, d) => sum + Number(d.value), 0)
+-    return { name, value }
++    const count = matchingDeals.length
++    return { name, value, count }
+   })
+ 
+   return (
+@@ -189,9 +196,34 @@ export default function SummaryDashboard() {
+ 
+         {/* Chart Card 1: Pipeline Breakdown */}
+         <div className="bg-zinc-950/50 border border-zinc-900 rounded-xl p-6 flex flex-col relative overflow-hidden">
+-          <h3 className="text-sm font-bold text-white mb-2">Stage Breakdown Value</h3>
++          <div className="flex justify-between items-center mb-2">
++            <h3 className="text-sm font-bold text-white">Stage Breakdown</h3>
++            {/* Toggle metric */}
++            <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg">
++              <button
++                onClick={() => setStageChartMetric('value')}
++                className={`px-2 py-1 rounded text-[8px] font-bold uppercase transition-all cursor-pointer ${
++                  stageChartMetric === 'value'
++                    ? 'bg-indigo-650 text-white shadow'
++                    : 'text-zinc-500 hover:text-zinc-300'
++                }`}
++              >
++                Value
++              </button>
++              <button
++                onClick={() => setStageChartMetric('count')}
++                className={`px-2 py-1 rounded text-[8px] font-bold uppercase transition-all cursor-pointer ${
++                  stageChartMetric === 'count'
++                    ? 'bg-indigo-650 text-white shadow'
++                    : 'text-zinc-500 hover:text-zinc-300'
++                }`}
++              >
++                Count
++              </button>
++            </div>
++          </div>
+           <p className="text-[10px] text-zinc-500 mb-6 uppercase tracking-wider">
+-            Total active deal monetary volumes grouped per pipeline stage
++            Total active deal {stageChartMetric === 'value' ? 'monetary volumes' : 'numerical counts'} grouped per pipeline stage
+           </p>
+ 
+           <div className="flex-1 min-h-[300px] flex flex-col justify-between">
+@@ -201,12 +233,13 @@ export default function SummaryDashboard() {
+                 No stages registered.
+               </div>
+             ) : (() => {
+-              const maxVal = Math.max(...stageData.map(d => d.value), 1000)
++              const maxVal = Math.max(...stageData.map(d => stageChartMetric === 'value' ? d.value : d.count), 1)
+               
+               return (
+                 <div className="space-y-4 flex flex-col justify-center py-2 h-full">
+                   {stageData.map((stage, idx) => {
+-                    const pct = Math.max((stage.value / maxVal) * 100, 2) // minimum 2% bar to show indicator
++                    const currentVal = stageChartMetric === 'value' ? stage.value : stage.count
++                    const pct = Math.max((currentVal / maxVal) * 100, 2) // minimum 2% bar to show indicator
+                     
+                     return (
+                       <div key={idx} className="space-y-1.5">
+@@ -218,8 +251,17 @@ export default function SummaryDashboard() {
+                             </span>
+                           </div>
+                           <span className="font-semibold text-zinc-100 flex items-center gap-1.5">
+-                            <span className="text-zinc-500 text-[10px] font-medium">({stage.count} deals)</span>
+-                            ${stage.value.toLocaleString()}
++                            {stageChartMetric === 'value' ? (
++                              <>
++                                <span className="text-zinc-500 text-[10px] font-medium">({stage.count} deals)</span>
++                                ${stage.value.toLocaleString()}
++                              </>
++                            ) : (
++                              <>
++                                <span className="text-zinc-500 text-[10px] font-medium">(${stage.value.toLocaleString()})</span>
++                                {stage.count} {stage.count === 1 ? 'deal' : 'deals'}
++                              </>
++                            )}
+                           </span>
+                         </div>
+                         
+@@ -242,9 +284,59 @@ export default function SummaryDashboard() {
+ 
+         {/* Chart Card 2: Monthly Deal Volume */}
+         <div className="bg-zinc-950/50 border border-zinc-900 rounded-xl p-6 flex flex-col relative overflow-hidden">
+-          <h3 className="text-sm font-bold text-white mb-2">Deal close volume trend</h3>
++          <div className="flex justify-between items-center mb-2">
++            <h3 className="text-sm font-bold text-white">Deal close trend</h3>
++            {/* Toggle tools */}
++            <div className="flex items-center gap-3">
++              <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg">
++                <button
++                  onClick={() => setTrendChartMetric('value')}
++                  className={`px-2 py-1 rounded text-[8px] font-bold uppercase transition-all cursor-pointer ${
++                    trendChartMetric === 'value'
++                      ? 'bg-indigo-650 text-white shadow'
++                      : 'text-zinc-500 hover:text-zinc-300'
++                  }`}
++                >
++                  Value
++                </button>
++                <button
++                  onClick={() => setTrendChartMetric('count')}
++                  className={`px-2 py-1 rounded text-[8px] font-bold uppercase transition-all cursor-pointer ${
++                    trendChartMetric === 'count'
++                      ? 'bg-indigo-650 text-white shadow'
++                      : 'text-zinc-500 hover:text-zinc-300'
++                  }`}
++                >
++                  Count
++                </button>
++              </div>
++
++              <div className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 p-0.5 rounded-lg">
++                <button
++                  onClick={() => setTrendChartType('line')}
++                  className={`px-2 py-1 rounded text-[8px] font-bold uppercase transition-all cursor-pointer ${
++                    trendChartType === 'line'
++                      ? 'bg-indigo-650 text-white shadow'
++                      : 'text-zinc-500 hover:text-zinc-350'
++                  }`}
++                >
++                  Line
++                </button>
++                <button
++                  onClick={() => setTrendChartType('bar')}
++                  className={`px-2 py-1 rounded text-[8px] font-bold uppercase transition-all cursor-pointer ${
++                    trendChartType === 'bar'
++                      ? 'bg-indigo-650 text-white shadow'
++                      : 'text-zinc-500 hover:text-zinc-355'
++                  }`}
++                >
++                  Bar
++                </button>
++              </div>
++            </div>
++          </div>
+           <p className="text-[10px] text-zinc-500 mb-6 uppercase tracking-wider">
+-            Expected close value forecast for calendar year {currentYear}
++            Expected close {trendChartMetric === 'value' ? 'value forecast' : 'numerical frequency'} for calendar year {currentYear}
+           </p>
+ 
+           <div className="flex-1 min-h-[300px] flex items-center justify-center relative">
+@@ -254,14 +346,15 @@ export default function SummaryDashboard() {
+               const paddingX = 40
+               const paddingY = 25
+               
+-              const values = monthlyData.map(d => d.value)
+-              const maxVal = Math.max(...values, 1000)
++              const values = monthlyData.map(d => trendChartMetric === 'value' ? d.value : d.count)
++              const maxVal = Math.max(...values, 1)
+ 
+               // Coordinates builder
+               const points = monthlyData.map((d, idx) => {
++                const currentVal = trendChartMetric === 'value' ? d.value : d.count
+                 const x = paddingX + (idx * (width - 2 * paddingX)) / (monthlyData.length - 1)
+-                const y = height - paddingY - (d.value / maxVal) * (height - 2 * paddingY)
+-                return { x, y, value: d.value, month: d.name }
++                const y = height - paddingY - (currentVal / maxVal) * (height - 2 * paddingY)
++                return { x, y, value: currentVal, month: d.name }
+               })
+ 
+               // Build Bezier SVG line path
+@@ -282,7 +375,7 @@ export default function SummaryDashboard() {
+                 : ''
+ 
+               return (
+-                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full text-zinc-800">
++                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full text-zinc-850">
+                   <defs>
+                     {/* Area fill gradient definition */}
+                     <linearGradient id="area-gradient" x1="0" y1="0" x2="0" y2="1">
+@@ -294,16 +387,24 @@ export default function SummaryDashboard() {
+                   {/* Horizontal gridlines */}
+                   {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                     const y = paddingY + ratio * (height - 2 * paddingY)
+-                    const labelVal = Math.round(maxVal * (1 - ratio))
++                    const labelVal = maxVal * (1 - ratio)
++                    
++                    let yLabel = ''
++                    if (trendChartMetric === 'value') {
++                      yLabel = labelVal >= 1000 ? `$${(labelVal / 1000).toFixed(0)}k` : `$${Math.round(labelVal)}`
++                    } else {
++                      yLabel = `${Math.round(labelVal)}`
++                    }
++
+                     return (
+                       <g key={idx}>
+                         <text
+                           x={paddingX - 10}
+                           y={y + 4}
+-                          className="text-[9px] fill-zinc-600 font-semibold text-right"
++                          className="text-[9px] fill-zinc-650 font-semibold text-right"
+                           textAnchor="end"
+                         >
+-                          ${labelVal > 1000 ? `${(labelVal / 1000).toFixed(0)}k` : labelVal}
++                          {yLabel}
+                         </text>
+                         {idx > 0 && idx < 4 && (
+                           <line
+@@ -329,79 +430,137 @@ export default function SummaryDashboard() {
+                     strokeWidth={1}
+                   />
+ 
+-                  {/* Bezier Area Graph rendering */}
+-                  {areaPath && (
+-                    <path
+-                      d={areaPath}
+-                      fill="url(#area-gradient)"
+-                    />
+-                  )}
+-
+-                  {/* Glow active line */}
+-                  {linePath && (
+-                    <path
+-                      d={linePath}
+-                      fill="none"
+-                      stroke="rgb(99, 102, 241)"
+-                      strokeWidth={2.5}
+-                      className="drop-shadow-[0_4px_6px_rgba(99,102,241,0.2)]"
+-                    />
+-                  )}
+-
+-                  {/* Data points & X axis label ticks */}
+-                  {points.map((p, idx) => (
+-                    <g key={idx} className="group/dot cursor-pointer">
+-                      {/* X label */}
+-                      <text
+-                        x={p.x}
+-                        y={height - paddingY + 14}
+-                        className="text-[9px] fill-zinc-550 font-bold"
+-                        textAnchor="middle"
+-                      >
+-                        {p.month}
+-                      </text>
+-
+-                      {/* Tooltip background (shows on hover) */}
+-                      {p.value > 0 && (
+-                        <g className="opacity-0 group-hover/dot:opacity-100 transition-opacity duration-200">
++                  {/* Render Chart Content */}
++                  {trendChartType === 'bar' ? (
++                    // Bar Chart
++                    points.map((p, idx) => {
++                      const barWidth = 16
++                      const barHeight = Math.max((height - paddingY) - p.y, 2)
++                      return (
++                        <g key={idx} className="group/dot cursor-pointer">
+                           <rect
+-                            x={Math.max(p.x - 35, 5)}
+-                            y={p.y - 30}
+-                            width="70"
+-                            height="20"
+-                            rx="4"
+-                            fill="rgb(9, 9, 11)"
+-                            stroke="rgb(39, 39, 42)"
+-                            strokeWidth="1"
++                            x={p.x - barWidth / 2}
++                            y={p.y}
++                            width={barWidth}
++                            height={barHeight}
++                            rx={3}
++                            className="fill-indigo-650 hover:fill-indigo-500 transition-all duration-200"
+                           />
++
++                          {/* X label */}
+                           <text
+-                            x={Math.max(p.x, 40)}
+-                            y={p.y - 17}
+-                            className="text-[8px] fill-zinc-200 font-bold"
++                            x={p.x}
++                            y={height - paddingY + 14}
++                            className="text-[9px] fill-zinc-550 font-bold"
+                             textAnchor="middle"
+                           >
+-                            ${p.value.toLocaleString()}
++                            {p.month}
+                           </text>
++
++                          {/* Tooltip background (shows on hover) */}
++                          {p.value >= 0 && (
++                            <g className="opacity-0 group-hover/dot:opacity-100 transition-opacity duration-200">
++                              <rect
++                                x={Math.max(p.x - 45, 5)}
++                                y={p.y - 30}
++                                width="90"
++                                height="20"
++                                rx="4"
++                                fill="rgb(9, 9, 11)"
++                                stroke="rgb(39, 39, 42)"
++                                strokeWidth="1"
++                              />
++                              <text
++                                x={Math.max(p.x, 50)}
++                                y={p.y - 17}
++                                className="text-[8px] fill-zinc-200 font-bold"
++                                textAnchor="middle"
++                              >
++                                {trendChartMetric === 'value' ? `$${p.value.toLocaleString()}` : `${p.value} deals`}
++                              </text>
++                            </g>
++                          )}
+                         </g>
++                      )
++                    })
++                  ) : (
++                    // Line Chart logic
++                    <>
++                      {/* Bezier Area Graph rendering */}
++                      {areaPath && (
++                        <path
++                          d={areaPath}
++                          fill="url(#area-gradient)"
++                        />
++                      )}
++
++                      {/* Glow active line */}
++                      {linePath && (
++                        <path
++                          d={linePath}
++                          fill="none"
++                          stroke="rgb(99, 102, 241)"
++                          strokeWidth={2.5}
++                          className="drop-shadow-[0_4px_6px_rgba(99,102,241,0.2)]"
++                        />
+                       )}
+ 
+-                      {/* Outer Glow Ring on Hover */}
+-                      <circle
+-                        cx={p.x}
+-                        cy={p.y}
+-                        r={6}
+-                        className="fill-indigo-500/0 group-hover/dot:fill-indigo-500/20 transition-all duration-200"
+-                      />
+-                      
+-                      {/* Anchor Dot */}
+-                      <circle
+-                        cx={p.x}
+-                        cy={p.y}
+-                        r={3}
+-                        className="fill-[#09090b] stroke-indigo-400 stroke-[2] group-hover/dot:r-4 transition-all duration-200"
+-                      />
+-                    </g>
+-                  ))}
++                      {/* Data points & X axis label ticks */}
++                      {points.map((p, idx) => (
++                        <g key={idx} className="group/dot cursor-pointer">
++                          {/* X label */}
++                          <text
++                            x={p.x}
++                            y={height - paddingY + 14}
++                            className="text-[9px] fill-zinc-555 font-bold"
++                            textAnchor="middle"
++                          >
++                            {p.month}
++                          </text>
++
++                          {/* Tooltip background (shows on hover) */}
++                          {p.value >= 0 && (
++                            <g className="opacity-0 group-hover/dot:opacity-100 transition-opacity duration-200">
++                              <rect
++                                x={Math.max(p.x - 45, 5)}
++                                y={p.y - 30}
++                                width="90"
++                                height="20"
++                                rx="4"
++                                fill="rgb(9, 9, 11)"
++                                stroke="rgb(39, 39, 42)"
++                                strokeWidth="1"
++                              />
++                              <text
++                                x={Math.max(p.x, 50)}
++                                y={p.y - 17}
++                                className="text-[8px] fill-zinc-200 font-bold"
++                                textAnchor="middle"
++                              >
++                                {trendChartMetric === 'value' ? `$${p.value.toLocaleString()}` : `${p.value} deals`}
++                              </text>
++                            </g>
++                          )}
++
++                          {/* Outer Glow Ring on Hover */}
++                          <circle
++                            cx={p.x}
++                            cy={p.y}
++                            r={6}
++                            className="fill-indigo-500/0 group-hover/dot:fill-indigo-500/20 transition-all duration-200"
++                          />
++                          
++                          {/* Anchor Dot */}
++                          <circle
++                            cx={p.x}
++                            cy={p.y}
++                            r={3}
++                            className="fill-[#09090b] stroke-indigo-400 stroke-[2] group-hover/dot:r-4 transition-all duration-200"
++                          />
++                        </g>
++                      ))}
++                    </>
++                  )}
+                 </svg>
+               )
+             })()}
+diff --git a/frontend/src/pages/CalendarWorkspace.tsx b/frontend/src/pages/CalendarWorkspace.tsx
+index 395e60f..9b46771 100644
+--- a/frontend/src/pages/CalendarWorkspace.tsx
++++ b/frontend/src/pages/CalendarWorkspace.tsx
+@@ -26,20 +26,29 @@ export default function CalendarWorkspace() {
+   const [events, setEvents] = useState<CalendarEvent[]>([])
+   const [isLoading, setIsLoading] = useState(true)
+   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
++  const [scope, setScope] = useState<'PERSONAL' | 'TEAM' | 'COMPANY'>('COMPANY')
++  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+ 
+   const fetchEvents = async () => {
+     setIsLoading(true)
++    setErrorMsg(null)
+     try {
+       // Fetch calendar window 30 days before/after current date
+       const start = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString()
+       const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0).toISOString()
+       
+       const response = await apiClient.get<CalendarEvent[]>('/calendar/events', {
+-        params: { start_date: start, end_date: end }
++        params: { start_date: start, end_date: end, scope }
+       })
+       setEvents(response.data)
+-    } catch (err) {
++    } catch (err: any) {
+       console.error(err)
++      if (err.response?.status === 403) {
++        setErrorMsg("Access denied: only ADMIN and MANAGER roles can access COMPANY or TEAM calendar views.")
++        setEvents([])
++      } else {
++        setErrorMsg("Failed to load calendar events.")
++      }
+     } finally {
+       setIsLoading(false)
+     }
+@@ -47,7 +56,7 @@ export default function CalendarWorkspace() {
+ 
+   useEffect(() => {
+     fetchEvents()
+-  }, [currentDate])
++  }, [currentDate, scope])
+ 
+   const nextMonth = () => {
+     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+@@ -103,7 +112,7 @@ export default function CalendarWorkspace() {
+   return (
+     <div className="space-y-6">
+       {/* Header */}
+-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-900/40 p-6 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
++      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-zinc-900/40 p-6 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
+         <div>
+           <h1 className="text-xl font-bold flex items-center gap-2.5 text-zinc-150">
+             <CalendarIcon className="text-indigo-400 h-5.5 w-5.5" />
+@@ -114,72 +123,109 @@ export default function CalendarWorkspace() {
+           </p>
+         </div>
+ 
+-        {/* Navigation toolbar */}
+-        <div className="flex items-center gap-3">
+-          <button
+-            onClick={prevMonth}
+-            className="p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-300 hover:text-white cursor-pointer"
+-          >
+-            <ChevronLeft className="h-4 w-4" />
+-          </button>
+-          
+-          <span className="text-xs font-bold text-zinc-150 uppercase tracking-widest min-w-[120px] text-center">
+-            {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+-          </span>
+-
+-          <button
+-            onClick={nextMonth}
+-            className="p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-300 hover:text-white cursor-pointer"
+-          >
+-            <ChevronRight className="h-4 w-4" />
+-          </button>
++        <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-between xl:justify-end">
++          {/* Scope Selector */}
++          <div className="flex items-center gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-900">
++            {(['PERSONAL', 'TEAM', 'COMPANY'] as const).map(s => (
++              <button
++                key={s}
++                onClick={() => setScope(s)}
++                className={`px-3.5 py-1.5 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider cursor-pointer ${
++                  scope === s
++                    ? 'bg-indigo-600 text-white shadow-sm'
++                    : 'text-zinc-450 hover:text-zinc-200'
++                }`}
++              >
++                {s}
++              </button>
++            ))}
++          </div>
++
++          {/* Navigation toolbar */}
++          <div className="flex items-center gap-3">
++            <button
++              onClick={prevMonth}
++              className="p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-300 hover:text-white cursor-pointer"
++            >
++              <ChevronLeft className="h-4 w-4" />
++            </button>
++            
++            <span className="text-xs font-bold text-zinc-150 uppercase tracking-widest min-w-[120px] text-center">
++              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
++            </span>
++
++            <button
++              onClick={nextMonth}
++              className="p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-300 hover:text-white cursor-pointer"
++            >
++              <ChevronRight className="h-4 w-4" />
++            </button>
++          </div>
+         </div>
+       </div>
+ 
+       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+         {/* Calendar Grid */}
+         <div className="lg:col-span-3 bg-zinc-900/40 border border-zinc-850/80 rounded-2xl p-4.5 min-h-[500px] flex flex-col justify-between">
+-          <div className="grid grid-cols-7 gap-1">
+-            {weekDays.map(wd => (
+-              <span key={wd} className="text-center text-[10px] text-zinc-650 font-bold tracking-widest py-2">
+-                {wd}
+-              </span>
+-            ))}
+-          </div>
+-
+-          <div className="grid grid-cols-7 gap-1 flex-1 mt-1">
+-            {days.map((item, idx) => {
+-              const dayEvents = getEventsForDay(item.date)
+-              return (
+-                <div
+-                  key={idx}
+-                  className={`min-h-[75px] p-1.5 rounded-lg border transition-all flex flex-col justify-between ${
+-                    item.isCurrentMonth
+-                      ? 'bg-zinc-950/15 border-zinc-900/60 hover:border-zinc-800'
+-                      : 'bg-zinc-[#09090b]/10 border-transparent opacity-30 pointer-events-none'
+-                  }`}
+-                >
+-                  <span className={`text-[10px] font-bold ${item.isCurrentMonth ? 'text-zinc-400' : 'text-zinc-700'}`}>
+-                    {item.day}
++          {errorMsg ? (
++            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
++              <AlertCircle className="h-10 w-10 mb-3 text-rose-500/80 drop-shadow-[0_0_8px_rgba(239,68,68,0.2)]" />
++              <p className="text-zinc-200 text-sm font-bold tracking-wide">{errorMsg}</p>
++              <p className="text-zinc-500 text-[10.5px] mt-1.5 max-w-sm leading-relaxed">
++                Your role does not permit access to broader team or company-wide schedules. Switch to the <strong>PERSONAL</strong> scope to view your own assigned events.
++              </p>
++              <button
++                onClick={() => setScope('PERSONAL')}
++                className="mt-4 px-4 py-2 bg-zinc-800 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-xl text-[10px] font-bold text-zinc-200 tracking-wider uppercase transition-all cursor-pointer"
++              >
++                Switch to Personal Scope
++              </button>
++            </div>
++          ) : (
++            <>
++              <div className="grid grid-cols-7 gap-1">
++                {weekDays.map(wd => (
++                  <span key={wd} className="text-center text-[10px] text-zinc-650 font-bold tracking-widest py-2">
++                    {wd}
+                   </span>
+-                  
+-                  <div className="space-y-1 mt-1 flex-1 overflow-y-auto">
+-                    {dayEvents.map(e => (
+-                      <div
+-                        key={e.id}
+-                        onClick={() => setSelectedEvent(e)}
+-                        style={{ borderLeftColor: e.color }}
+-                        className="text-[9px] font-semibold text-zinc-305 truncate p-1 rounded bg-zinc-900/90 border-l-2 cursor-pointer hover:bg-zinc-850"
+-                        title={e.title}
+-                      >
+-                        {e.title}
++                ))}
++              </div>
++
++              <div className="grid grid-cols-7 gap-1 flex-1 mt-1">
++                {days.map((item, idx) => {
++                  const dayEvents = getEventsForDay(item.date)
++                  return (
++                    <div
++                      key={idx}
++                      className={`min-h-[75px] p-1.5 rounded-lg border transition-all flex flex-col justify-between ${
++                        item.isCurrentMonth
++                          ? 'bg-zinc-950/15 border-zinc-900/60 hover:border-zinc-800'
++                          : 'bg-zinc-[#09090b]/10 border-transparent opacity-30 pointer-events-none'
++                      }`}
++                    >
++                      <span className={`text-[10px] font-bold ${item.isCurrentMonth ? 'text-zinc-400' : 'text-zinc-700'}`}>
++                        {item.day}
++                      </span>
++                      
++                      <div className="space-y-1 mt-1 flex-1 overflow-y-auto">
++                        {dayEvents.map(e => (
++                          <div
++                            key={e.id}
++                            onClick={() => setSelectedEvent(e)}
++                            style={{ borderLeftColor: e.color }}
++                            className="text-[9px] font-semibold text-zinc-305 truncate p-1 rounded bg-zinc-900/90 border-l-2 cursor-pointer hover:bg-zinc-850"
++                            title={e.title}
++                          >
++                            {e.title}
++                          </div>
++                        ))}
+                       </div>
+-                    ))}
+-                  </div>
+-                </div>
+-              )
+-            })}
+-          </div>
++                    </div>
++                  )
++                })}
++              </div>
++            </>
++          )}
+         </div>
+ 
+         {/* Selected Event Details Panel */}
+diff --git a/frontend/src/pages/ContactsDirectory.tsx b/frontend/src/pages/ContactsDirectory.tsx
+index 4531fdb..66aa522 100644
+--- a/frontend/src/pages/ContactsDirectory.tsx
++++ b/frontend/src/pages/ContactsDirectory.tsx
+@@ -35,6 +35,28 @@ export default function ContactsDirectory() {
+   const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
+   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+ 
++  // Current user parsing
++  const currentUser = useMemo(() => {
++    const saved = localStorage.getItem('current_user')
++    if (saved) {
++      try {
++        return JSON.parse(saved)
++      } catch (e) {
++        return null
++      }
++    }
++    return null
++  }, [])
++
++  // Memoized Saved View Type
++  const activeSavedView = useMemo(() => {
++    if (statusFilter === 'LEAD' && !assigneeFilter) return 'leads'
++    if (statusFilter === 'CUSTOMER' && !assigneeFilter) return 'customers'
++    if (!statusFilter && assigneeFilter && currentUser && String(assigneeFilter) === String(currentUser.id)) return 'assigned_to_me'
++    if (!statusFilter && !assigneeFilter) return 'all'
++    return 'custom'
++  }, [statusFilter, assigneeFilter, currentUser])
++
+   // New Contact Form State
+   const [formData, setFormData] = useState({
+     first_name: '',
+@@ -309,6 +331,68 @@ export default function ContactsDirectory() {
+         </button>
+       </div>
+ 
++      {/* SAVED VIEWS PRESET TABS */}
++      <div className="flex gap-2 border-b border-zinc-900 pb-2">
++        <button
++          onClick={() => {
++            setStatusFilter('')
++            setAssigneeFilter('')
++            setPagination(p => ({ ...p, pageIndex: 0 }))
++          }}
++          className={`px-3.5 py-1.5 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wider cursor-pointer border ${
++            activeSavedView === 'all'
++              ? 'bg-indigo-650 border-indigo-600 text-white shadow-xl shadow-indigo-650/10'
++              : 'bg-zinc-950/80 border-zinc-900 text-zinc-450 hover:text-zinc-200'
++          }`}
++        >
++          All Contacts
++        </button>
++        <button
++          onClick={() => {
++            setStatusFilter('LEAD')
++            setAssigneeFilter('')
++            setPagination(p => ({ ...p, pageIndex: 0 }))
++          }}
++          className={`px-3.5 py-1.5 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wider cursor-pointer border ${
++            activeSavedView === 'leads'
++              ? 'bg-indigo-650 border-indigo-600 text-white shadow-xl shadow-indigo-650/10'
++              : 'bg-zinc-950/80 border-zinc-900 text-zinc-450 hover:text-zinc-200'
++          }`}
++        >
++          Active Leads
++        </button>
++        <button
++          onClick={() => {
++            setStatusFilter('CUSTOMER')
++            setAssigneeFilter('')
++            setPagination(p => ({ ...p, pageIndex: 0 }))
++          }}
++          className={`px-3.5 py-1.5 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wider cursor-pointer border ${
++            activeSavedView === 'customers'
++              ? 'bg-indigo-650 border-indigo-600 text-white shadow-xl shadow-indigo-650/10'
++              : 'bg-zinc-950/80 border-zinc-900 text-zinc-455 hover:text-zinc-200'
++          }`}
++        >
++          Customers
++        </button>
++        {currentUser && (
++          <button
++            onClick={() => {
++              setStatusFilter('')
++              setAssigneeFilter(currentUser.id)
++              setPagination(p => ({ ...p, pageIndex: 0 }))
++            }}
++            className={`px-3.5 py-1.5 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wider cursor-pointer border ${
++              activeSavedView === 'assigned_to_me'
++                ? 'bg-indigo-650 border-indigo-600 text-white shadow-xl shadow-indigo-650/10'
++                : 'bg-zinc-950/80 border-zinc-900 text-zinc-450 hover:text-zinc-200'
++            }`}
++          >
++            Assigned To Me
++          </button>
++        )}
++      </div>
++
+       {/* FILTER BAR PANEL */}
+       <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+         {/* Search */}
+diff --git a/frontend/src/pages/Dashboard.tsx b/frontend/src/pages/Dashboard.tsx
+index 5b2ba61..a6f47ee 100644
+--- a/frontend/src/pages/Dashboard.tsx
++++ b/frontend/src/pages/Dashboard.tsx
+@@ -13,6 +13,7 @@ import ApprovalsWorkspace from './ApprovalsWorkspace'
+ import SettingsWorkspace from './SettingsWorkspace'
+ import CalendarWorkspace from './CalendarWorkspace'
+ import EmailSyncWorkspace from './EmailSyncWorkspace'
++import DetailDrawer from '@/components/DetailDrawer'
+ import {
+   LogOut,
+   Users,
+@@ -53,6 +54,7 @@ type DashboardView =
+ export default function Dashboard() {
+   const navigate = useNavigate()
+   const dropdownRef = useRef<HTMLDivElement>(null)
++  const searchRef = useRef<HTMLDivElement>(null)
+   
+   // App States
+   const [currentUser, setCurrentUser] = useState<User | null>(null)
+@@ -63,6 +65,12 @@ export default function Dashboard() {
+   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
+   const [searchText, setSearchText] = useState('')
++  const [searchResults, setSearchResults] = useState<any | null>(null)
++  const [isSearching, setIsSearching] = useState(false)
++
++  // Drawer States
++  const [drawerType, setDrawerType] = useState<'contact' | 'deal' | null>(null)
++  const [drawerId, setDrawerId] = useState<string | null>(null)
+ 
+   useEffect(() => {
+     // Attempt to load current user from API
+@@ -91,11 +99,39 @@ export default function Dashboard() {
+       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+         setIsProfileDropdownOpen(false)
+       }
++      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
++        setSearchText('')
++        setSearchResults(null)
++      }
+     }
+     document.addEventListener('mousedown', handleClickOutside)
+     return () => document.removeEventListener('mousedown', handleClickOutside)
+   }, [])
+ 
++  // Trigger Search
++  useEffect(() => {
++    if (searchText.trim().length < 2) {
++      setSearchResults(null)
++      return
++    }
++
++    const delayDebounce = setTimeout(async () => {
++      setIsSearching(true)
++      try {
++        const response = await apiClient.get<any>('/search/', {
++          params: { q: searchText }
++        })
++        setSearchResults(response.data)
++      } catch (err) {
++        console.error('Search failed', err)
++      } finally {
++        setIsSearching(false)
++      }
++    }, 300)
++
++    return () => clearTimeout(delayDebounce)
++  }, [searchText])
++
+   const handleLogout = () => {
+     localStorage.removeItem('access_token')
+     localStorage.removeItem('refresh_token')
+@@ -413,7 +449,7 @@ export default function Dashboard() {
+           {/* Combined Options */}
+           <div className="flex items-center gap-4">
+             {/* Global Search Bar */}
+-            <div className="relative hidden md:block">
++            <div className="relative hidden md:block" ref={searchRef}>
+               <Search className="absolute left-2.5 top-2 h-4 w-4 text-zinc-550" />
+               <input
+                 type="text"
+@@ -422,6 +458,174 @@ export default function Dashboard() {
+                 onChange={(e) => setSearchText(e.target.value)}
+                 className="bg-zinc-950 pl-8 pr-3 py-1.5 rounded-lg border border-zinc-900 focus:border-indigo-650 focus:outline-none text-xs text-zinc-305 placeholder-zinc-650 w-52 focus:w-64 transition-all"
+               />
++
++              {/* Dropdown Results Overlay */}
++              {searchText.trim().length >= 2 && (
++                <div className="absolute right-0 top-11 z-[60] bg-zinc-950/95 border border-zinc-900 rounded-xl p-4 shadow-2xl w-[450px] max-h-[480px] overflow-y-auto backdrop-blur-md space-y-4">
++                  <div className="flex items-center justify-between pb-2 border-b border-zinc-900 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
++                    <span>Search Results for "{searchText}"</span>
++                    {isSearching && <Loader2 className="h-3 w-3 text-indigo-400 animate-spin" />}
++                  </div>
++
++                  {!isSearching && searchResults && Object.values(searchResults).every((arr: any) => arr.length === 0) && (
++                    <div className="text-center py-6 text-zinc-500 text-xs font-semibold">
++                      No results matched your query.
++                    </div>
++                  )}
++
++                  {!isSearching && searchResults && (
++                    <div className="space-y-4">
++                      {/* Contacts */}
++                      {searchResults.contacts?.length > 0 && (
++                        <div className="space-y-1.5">
++                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Contacts</span>
++                          {searchResults.contacts.map((c: any) => (
++                            <div
++                              key={c.id}
++                              onClick={() => {
++                                setDrawerType('contact')
++                                setDrawerId(c.id)
++                                setSearchText('')
++                                setSearchResults(null)
++                              }}
++                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
++                            >
++                              <div className="min-w-0">
++                                <span className="text-xs font-bold text-zinc-200 block">{c.title}</span>
++                                <span className="text-[10px] text-zinc-500 block truncate">{c.subtitle}</span>
++                              </div>
++                            </div>
++                          ))}
++                        </div>
++                      )}
++
++                      {/* Deals */}
++                      {searchResults.deals?.length > 0 && (
++                        <div className="space-y-1.5">
++                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Deals</span>
++                          {searchResults.deals.map((d: any) => (
++                            <div
++                              key={d.id}
++                              onClick={() => {
++                                setDrawerType('deal')
++                                setDrawerId(d.id)
++                                setSearchText('')
++                                setSearchResults(null)
++                              }}
++                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-905 transition-all flex items-center justify-between font-semibold"
++                            >
++                              <div className="min-w-0">
++                                <span className="text-xs font-bold text-zinc-200 block">{d.title}</span>
++                                <span className="text-[10px] text-zinc-500 block truncate">{d.subtitle}</span>
++                              </div>
++                            </div>
++                          ))}
++                        </div>
++                      )}
++
++                      {/* Projects */}
++                      {searchResults.projects?.length > 0 && (
++                        <div className="space-y-1.5">
++                          <span className="text-[9px] font-extrabold uppercase text-indigo-455 tracking-wider block">Projects</span>
++                          {searchResults.projects.map((p: any) => (
++                            <div
++                              key={p.id}
++                              onClick={() => {
++                                setCurrentView('projects')
++                                setSearchText('')
++                                setSearchResults(null)
++                              }}
++                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
++                            >
++                              <div className="min-w-0">
++                                <span className="text-xs font-bold text-zinc-200 block">{p.title}</span>
++                                <span className="text-[10px] text-zinc-500 block truncate">{p.subtitle}</span>
++                              </div>
++                            </div>
++                          ))}
++                        </div>
++                      )}
++
++                      {/* Tasks */}
++                      {searchResults.tasks?.length > 0 && (
++                        <div className="space-y-1.5">
++                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Tasks</span>
++                          {searchResults.tasks.map((t: any) => (
++                            <div
++                              key={t.id}
++                              onClick={() => {
++                                if (t.contact_id) {
++                                  setDrawerType('contact')
++                                  setDrawerId(t.contact_id)
++                                } else if (t.deal_id) {
++                                  setDrawerType('deal')
++                                  setDrawerId(t.deal_id)
++                                }
++                                setSearchText('')
++                                setSearchResults(null)
++                              }}
++                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
++                            >
++                              <div className="min-w-0">
++                                <span className="text-xs font-bold text-zinc-200 block">{t.title}</span>
++                                <span className="text-[10px] text-zinc-550 block truncate">{t.subtitle}</span>
++                              </div>
++                            </div>
++                          ))}
++                        </div>
++                      )}
++
++                      {/* Documents */}
++                      {searchResults.documents?.length > 0 && (
++                        <div className="space-y-1.5">
++                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Documents</span>
++                          {searchResults.documents.map((doc: any) => (
++                            <a
++                              key={doc.id}
++                              href={doc.file_url || doc.subtitle}
++                              target="_blank"
++                              rel="noreferrer"
++                              onClick={() => {
++                                setSearchText('')
++                                setSearchResults(null)
++                              }}
++                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
++                            >
++                              <div className="min-w-0">
++                                <span className="text-xs font-bold text-zinc-205 block">{doc.title}</span>
++                                <span className="text-[10px] text-zinc-555 block truncate">{doc.subtitle}</span>
++                              </div>
++                            </a>
++                          ))}
++                        </div>
++                      )}
++
++                      {/* Synced Emails */}
++                      {searchResults.emails?.length > 0 && (
++                        <div className="space-y-1.5">
++                          <span className="text-[9px] font-extrabold uppercase text-indigo-400 tracking-wider block">Synced Emails</span>
++                          {searchResults.emails.map((e: any) => (
++                            <div
++                              key={e.id}
++                              onClick={() => {
++                                setCurrentView('emails')
++                                setSearchText('')
++                                setSearchResults(null)
++                              }}
++                              className="p-2 hover:bg-zinc-900/40 rounded-lg cursor-pointer border border-transparent hover:border-zinc-900 transition-all flex items-center justify-between font-semibold"
++                            >
++                              <div className="min-w-0">
++                                <span className="text-xs font-bold text-zinc-200 block">{e.title}</span>
++                                <span className="text-[10px] text-zinc-500 block truncate">{e.subtitle}</span>
++                              </div>
++                            </div>
++                          ))}
++                        </div>
++                      )}
++                    </div>
++                  )}
++                </div>
++              )}
+             </div>
+ 
+             <button className="relative p-1.5 rounded-lg border border-zinc-900 bg-zinc-950 hover:bg-zinc-905 text-zinc-450 hover:text-white transition-all cursor-pointer">
+@@ -446,6 +650,17 @@ export default function Dashboard() {
+           {currentView === 'emails' && <EmailSyncWorkspace />}
+         </div>
+       </main>
++
++      {/* Global Detail Drawer */}
++      <DetailDrawer
++        isOpen={drawerType !== null && drawerId !== null}
++        type={drawerType || 'contact'}
++        id={drawerId}
++        onClose={() => {
++          setDrawerType(null)
++          setDrawerId(null)
++        }}
++      />
+     </div>
+   )
+ }
+diff --git a/frontend/src/pages/ProjectsWorkspace.tsx b/frontend/src/pages/ProjectsWorkspace.tsx
+index bfa5cc6..3004ccc 100644
+--- a/frontend/src/pages/ProjectsWorkspace.tsx
++++ b/frontend/src/pages/ProjectsWorkspace.tsx
+@@ -47,15 +47,16 @@ export default function ProjectsWorkspace() {
+     setIsLoading(true)
+     try {
+       const [projRes, userRes, dealRes] = await Promise.all([
+-        apiClient.get<Project[]>('/projects'),
+-        apiClient.get<User[]>('/accounts'),
+-        apiClient.get<any>('/deals')
++        apiClient.get<any>('/projects/'),
++        apiClient.get<User[]>('/accounts/'),
++        apiClient.get<any>('/deals/')
+       ])
+-      setProjects(projRes.data)
++      const projList = Array.isArray(projRes.data) ? projRes.data : projRes.data?.items || []
++      setProjects(projList)
+       setUsers(userRes.data)
+       
+       // Some endpoints return nested lists, let's normalize deals list
+-      const dealsList = Array.isArray(dealRes.data) ? dealRes.data : dealRes.data?.results || []
++      const dealsList = Array.isArray(dealRes.data) ? dealRes.data : dealRes.data?.items || dealRes.data?.results || []
+       setDeals(dealsList)
+       setError(null)
+     } catch (err: any) {
+@@ -128,7 +129,7 @@ export default function ProjectsWorkspace() {
+           setSelectedProject(response.data)
+         }
+       } else {
+-        const response = await apiClient.post<Project>('/projects', payload)
++        const response = await apiClient.post<Project>('/projects/', payload)
+         setProjects([response.data, ...projects])
+       }
+       setIsDrawerOpen(false)

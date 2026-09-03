@@ -26,20 +26,29 @@ export default function CalendarWorkspace() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null)
+  const [scope, setScope] = useState<'PERSONAL' | 'TEAM' | 'COMPANY'>('COMPANY')
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   const fetchEvents = async () => {
     setIsLoading(true)
+    setErrorMsg(null)
     try {
       // Fetch calendar window 30 days before/after current date
       const start = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString()
       const end = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0).toISOString()
       
       const response = await apiClient.get<CalendarEvent[]>('/calendar/events', {
-        params: { start_date: start, end_date: end }
+        params: { start_date: start, end_date: end, scope }
       })
       setEvents(response.data)
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      if (err.response?.status === 403) {
+        setErrorMsg("Access denied: only ADMIN and MANAGER roles can access COMPANY or TEAM calendar views.")
+        setEvents([])
+      } else {
+        setErrorMsg("Failed to load calendar events.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -47,7 +56,7 @@ export default function CalendarWorkspace() {
 
   useEffect(() => {
     fetchEvents()
-  }, [currentDate])
+  }, [currentDate, scope])
 
   const nextMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
@@ -103,7 +112,7 @@ export default function CalendarWorkspace() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-900/40 p-6 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-zinc-900/40 p-6 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2.5 text-zinc-150">
             <CalendarIcon className="text-indigo-400 h-5.5 w-5.5" />
@@ -114,72 +123,109 @@ export default function CalendarWorkspace() {
           </p>
         </div>
 
-        {/* Navigation toolbar */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={prevMonth}
-            className="p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-300 hover:text-white cursor-pointer"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          
-          <span className="text-xs font-bold text-zinc-150 uppercase tracking-widest min-w-[120px] text-center">
-            {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
-          </span>
+        <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto justify-between xl:justify-end">
+          {/* Scope Selector */}
+          <div className="flex items-center gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-900">
+            {(['PERSONAL', 'TEAM', 'COMPANY'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setScope(s)}
+                className={`px-3.5 py-1.5 rounded-lg text-[10px] font-bold transition-all uppercase tracking-wider cursor-pointer ${
+                  scope === s
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-zinc-450 hover:text-zinc-200'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
 
-          <button
-            onClick={nextMonth}
-            className="p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-300 hover:text-white cursor-pointer"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          {/* Navigation toolbar */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={prevMonth}
+              className="p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-300 hover:text-white cursor-pointer"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            
+            <span className="text-xs font-bold text-zinc-150 uppercase tracking-widest min-w-[120px] text-center">
+              {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+            </span>
+
+            <button
+              onClick={nextMonth}
+              className="p-2 bg-zinc-950/80 border border-zinc-900 rounded-lg hover:bg-zinc-900 text-zinc-300 hover:text-white cursor-pointer"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Calendar Grid */}
         <div className="lg:col-span-3 bg-zinc-900/40 border border-zinc-850/80 rounded-2xl p-4.5 min-h-[500px] flex flex-col justify-between">
-          <div className="grid grid-cols-7 gap-1">
-            {weekDays.map(wd => (
-              <span key={wd} className="text-center text-[10px] text-zinc-650 font-bold tracking-widest py-2">
-                {wd}
-              </span>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 flex-1 mt-1">
-            {days.map((item, idx) => {
-              const dayEvents = getEventsForDay(item.date)
-              return (
-                <div
-                  key={idx}
-                  className={`min-h-[75px] p-1.5 rounded-lg border transition-all flex flex-col justify-between ${
-                    item.isCurrentMonth
-                      ? 'bg-zinc-950/15 border-zinc-900/60 hover:border-zinc-800'
-                      : 'bg-zinc-[#09090b]/10 border-transparent opacity-30 pointer-events-none'
-                  }`}
-                >
-                  <span className={`text-[10px] font-bold ${item.isCurrentMonth ? 'text-zinc-400' : 'text-zinc-700'}`}>
-                    {item.day}
+          {errorMsg ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+              <AlertCircle className="h-10 w-10 mb-3 text-rose-500/80 drop-shadow-[0_0_8px_rgba(239,68,68,0.2)]" />
+              <p className="text-zinc-200 text-sm font-bold tracking-wide">{errorMsg}</p>
+              <p className="text-zinc-500 text-[10.5px] mt-1.5 max-w-sm leading-relaxed">
+                Your role does not permit access to broader team or company-wide schedules. Switch to the <strong>PERSONAL</strong> scope to view your own assigned events.
+              </p>
+              <button
+                onClick={() => setScope('PERSONAL')}
+                className="mt-4 px-4 py-2 bg-zinc-800 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-xl text-[10px] font-bold text-zinc-200 tracking-wider uppercase transition-all cursor-pointer"
+              >
+                Switch to Personal Scope
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-7 gap-1">
+                {weekDays.map(wd => (
+                  <span key={wd} className="text-center text-[10px] text-zinc-650 font-bold tracking-widest py-2">
+                    {wd}
                   </span>
-                  
-                  <div className="space-y-1 mt-1 flex-1 overflow-y-auto">
-                    {dayEvents.map(e => (
-                      <div
-                        key={e.id}
-                        onClick={() => setSelectedEvent(e)}
-                        style={{ borderLeftColor: e.color }}
-                        className="text-[9px] font-semibold text-zinc-305 truncate p-1 rounded bg-zinc-900/90 border-l-2 cursor-pointer hover:bg-zinc-850"
-                        title={e.title}
-                      >
-                        {e.title}
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 flex-1 mt-1">
+                {days.map((item, idx) => {
+                  const dayEvents = getEventsForDay(item.date)
+                  return (
+                    <div
+                      key={idx}
+                      className={`min-h-[75px] p-1.5 rounded-lg border transition-all flex flex-col justify-between ${
+                        item.isCurrentMonth
+                          ? 'bg-zinc-950/15 border-zinc-900/60 hover:border-zinc-800'
+                          : 'bg-zinc-900/40 border-transparent opacity-30 pointer-events-none'
+                      }`}
+                    >
+                      <span className={`text-[10px] font-bold ${item.isCurrentMonth ? 'text-zinc-400' : 'text-zinc-700'}`}>
+                        {item.day}
+                      </span>
+                      
+                      <div className="space-y-1 mt-1 flex-1 overflow-y-auto">
+                        {dayEvents.map(e => (
+                          <div
+                            key={e.id}
+                            onClick={() => setSelectedEvent(e)}
+                            style={{ borderLeftColor: e.color }}
+                            className="text-[9px] font-semibold text-zinc-305 truncate p-1 rounded bg-zinc-900/90 border-l-2 cursor-pointer hover:bg-zinc-850"
+                            title={e.title}
+                          >
+                            {e.title}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Selected Event Details Panel */}

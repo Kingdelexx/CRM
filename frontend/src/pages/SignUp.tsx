@@ -45,8 +45,8 @@ export default function SignUp() {
   }
 
   return (
-    <div className="min-h-screen py-12 flex items-center justify-center bg-[#09090b] px-4 relative">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-zinc-900/0 to-[#09090b] pointer-events-none" />
+    <div className="min-h-screen py-12 flex items-center justify-center bg-zinc-900 px-4 relative">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-zinc-900/0 to-zinc-900 pointer-events-none" />
 
       <div className="w-full max-w-lg bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/80 p-8 rounded-2xl shadow-2xl z-10">
         <div className="text-center mb-8">
@@ -55,7 +55,7 @@ export default function SignUp() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-950/40 border border-red-500/20 text-red-400 text-xs rounded-lg">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg font-medium">
             {error}
           </div>
         )}

@@ -35,6 +35,28 @@ export default function ContactsDirectory() {
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
+  // Current user parsing
+  const currentUser = useMemo(() => {
+    const saved = localStorage.getItem('current_user')
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch (e) {
+        return null
+      }
+    }
+    return null
+  }, [])
+
+  // Memoized Saved View Type
+  const activeSavedView = useMemo(() => {
+    if (statusFilter === 'LEAD' && !assigneeFilter) return 'leads'
+    if (statusFilter === 'CUSTOMER' && !assigneeFilter) return 'customers'
+    if (!statusFilter && assigneeFilter && currentUser && String(assigneeFilter) === String(currentUser.id)) return 'assigned_to_me'
+    if (!statusFilter && !assigneeFilter) return 'all'
+    return 'custom'
+  }, [statusFilter, assigneeFilter, currentUser])
+
   // New Contact Form State
   const [formData, setFormData] = useState({
     first_name: '',
@@ -307,6 +329,68 @@ export default function ContactsDirectory() {
         >
           <Plus className="h-4 w-4" /> New Contact
         </button>
+      </div>
+
+      {/* SAVED VIEWS PRESET TABS */}
+      <div className="flex gap-2 border-b border-zinc-900 pb-2">
+        <button
+          onClick={() => {
+            setStatusFilter('')
+            setAssigneeFilter('')
+            setPagination(p => ({ ...p, pageIndex: 0 }))
+          }}
+          className={`px-3.5 py-1.5 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wider cursor-pointer border ${
+            activeSavedView === 'all'
+              ? 'bg-indigo-650 border-indigo-600 text-white shadow-xl shadow-indigo-650/10'
+              : 'bg-zinc-950/80 border-zinc-900 text-zinc-450 hover:text-zinc-200'
+          }`}
+        >
+          All Contacts
+        </button>
+        <button
+          onClick={() => {
+            setStatusFilter('LEAD')
+            setAssigneeFilter('')
+            setPagination(p => ({ ...p, pageIndex: 0 }))
+          }}
+          className={`px-3.5 py-1.5 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wider cursor-pointer border ${
+            activeSavedView === 'leads'
+              ? 'bg-indigo-650 border-indigo-600 text-white shadow-xl shadow-indigo-650/10'
+              : 'bg-zinc-950/80 border-zinc-900 text-zinc-450 hover:text-zinc-200'
+          }`}
+        >
+          Active Leads
+        </button>
+        <button
+          onClick={() => {
+            setStatusFilter('CUSTOMER')
+            setAssigneeFilter('')
+            setPagination(p => ({ ...p, pageIndex: 0 }))
+          }}
+          className={`px-3.5 py-1.5 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wider cursor-pointer border ${
+            activeSavedView === 'customers'
+              ? 'bg-indigo-650 border-indigo-600 text-white shadow-xl shadow-indigo-650/10'
+              : 'bg-zinc-950/80 border-zinc-900 text-zinc-455 hover:text-zinc-200'
+          }`}
+        >
+          Customers
+        </button>
+        {currentUser && (
+          <button
+            onClick={() => {
+              setStatusFilter('')
+              setAssigneeFilter(currentUser.id)
+              setPagination(p => ({ ...p, pageIndex: 0 }))
+            }}
+            className={`px-3.5 py-1.5 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wider cursor-pointer border ${
+              activeSavedView === 'assigned_to_me'
+                ? 'bg-indigo-650 border-indigo-600 text-white shadow-xl shadow-indigo-650/10'
+                : 'bg-zinc-950/80 border-zinc-900 text-zinc-450 hover:text-zinc-200'
+            }`}
+          >
+            Assigned To Me
+          </button>
+        )}
       </div>
 
       {/* FILTER BAR PANEL */}

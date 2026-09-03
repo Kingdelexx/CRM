@@ -47,15 +47,16 @@ export default function ProjectsWorkspace() {
     setIsLoading(true)
     try {
       const [projRes, userRes, dealRes] = await Promise.all([
-        apiClient.get<Project[]>('/projects'),
-        apiClient.get<User[]>('/accounts'),
-        apiClient.get<any>('/deals')
+        apiClient.get<any>('/projects/'),
+        apiClient.get<User[]>('/accounts/'),
+        apiClient.get<any>('/deals/')
       ])
-      setProjects(projRes.data)
+      const projList = Array.isArray(projRes.data) ? projRes.data : projRes.data?.items || []
+      setProjects(projList)
       setUsers(userRes.data)
       
       // Some endpoints return nested lists, let's normalize deals list
-      const dealsList = Array.isArray(dealRes.data) ? dealRes.data : dealRes.data?.results || []
+      const dealsList = Array.isArray(dealRes.data) ? dealRes.data : dealRes.data?.items || dealRes.data?.results || []
       setDeals(dealsList)
       setError(null)
     } catch (err: any) {
@@ -128,7 +129,7 @@ export default function ProjectsWorkspace() {
           setSelectedProject(response.data)
         }
       } else {
-        const response = await apiClient.post<Project>('/projects', payload)
+        const response = await apiClient.post<Project>('/projects/', payload)
         setProjects([response.data, ...projects])
       }
       setIsDrawerOpen(false)

@@ -28,7 +28,7 @@ interface DetailDrawerProps {
 
 export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: DetailDrawerProps) {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'notes' | 'tasks'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'activities' | 'notes' | 'tasks' | 'documents'>('overview')
   const [isEditing, setIsEditing] = useState(false)
 
   // Quick note/call logger states
@@ -250,6 +250,71 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
     }
   })
 
+  // Fetch Documents
+  const { data: documentsData = [], refetch: refetchDocuments } = useQuery({
+    queryKey: ['documents', type, id],
+    queryFn: async () => {
+      if (!id) return []
+      const response = await apiClient.get<any[]>('/documents/', {
+        params: {
+          [type === 'contact' ? 'contact_id' : 'deal_id']: id
+        }
+      })
+      return response.data
+    },
+    enabled: isOpen && !!id
+  })
+
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+
+  const addDocumentMutation = useMutation({
+    mutationFn: async (payload: { name: string; file_url: string; file_type: string; file_size: number }) => {
+      const body = {
+        ...payload,
+        [type === 'contact' ? 'contact_id' : 'deal_id']: id
+      }
+      return apiClient.post('/documents/', body)
+    },
+    onSuccess: () => {
+      refetchDocuments()
+      queryClient.invalidateQueries({ queryKey: ['documents', type, id] })
+    }
+  })
+
+  const deleteDocumentMutation = useMutation({
+    mutationFn: async (docId: string) => {
+      return apiClient.delete(`/documents/${docId}`)
+    },
+    onSuccess: () => {
+      refetchDocuments()
+      queryClient.invalidateQueries({ queryKey: ['documents', type, id] })
+    }
+  })
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    setUploadProgress(0)
+
+    // Simulate upload progress
+    for (let p = 0; p <= 100; p += 20) {
+      setUploadProgress(p)
+      await new Promise(resolve => setTimeout(resolve, 80))
+    }
+
+    addDocumentMutation.mutate({
+      name: file.name,
+      file_url: `/mock-cdn/uploads/${Date.now()}-${file.name}`,
+      file_type: file.name.split('.').pop()?.toUpperCase() || 'FILE',
+      file_size: file.size
+    })
+
+    setIsUploading(false)
+  }
+
   // Mutation: Toggle Task Check status
   const toggleTaskMutation = useMutation({
     mutationFn: async ({ taskId, task }: { taskId: string; task: Task }) => {
@@ -277,8 +342,8 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
     queryKey: ['associated-deals', id],
     queryFn: async () => {
       if (type !== 'contact' || !id) return []
-      const response = await apiClient.get<Deal[]>('/deals/', { params: { contact_id: id } })
-      return response.data
+      const response = await apiClient.get<any>('/deals/', { params: { contact_id: id } })
+      return response.data.items || []
     },
     enabled: isOpen && type === 'contact' && !!id
   })
@@ -288,8 +353,8 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
     queryKey: ['associated-projects', id],
     queryFn: async () => {
       if (type !== 'contact' || !id) return []
-      const response = await apiClient.get<any[]>('/projects/', { params: { contact_id: id } })
-      return response.data
+      const response = await apiClient.get<any>('/projects/', { params: { contact_id: id } })
+      return response.data.items || []
     },
     enabled: isOpen && type === 'contact' && !!id
   })
@@ -483,13 +548,13 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
 
             {/* TAB SELECTOR HEADER */}
             <div className="flex bg-zinc-950 border-b border-zinc-900 px-6 flex-shrink-0">
-              {(['overview', 'activities', 'notes', 'tasks'] as const).map((tab) => (
+              {(['overview', 'activities', 'notes', 'tasks', 'documents'] as const).map((tab) => (
                 <button
                   key={tab}
                   className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
                     activeTab === tab
                       ? 'border-indigo-500 text-indigo-400'
-                      : 'border-transparent text-zinc-450 hover:text-zinc-200'
+                      : 'border-transparent text-zinc-455 hover:text-zinc-200'
                   }`}
                   onClick={() => setActiveTab(tab)}
                 >
@@ -1102,7 +1167,7 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                               key={task.id}
                               className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
                                 isCompleted
-                                  ? 'bg-[#09090b]/40 border-zinc-950 opacity-60'
+                                  ? 'bg-zinc-900/40 border-zinc-950 opacity-60'
                                   : 'bg-zinc-950/60 border-zinc-900 hover:border-zinc-800'
                               }`}
                             >
@@ -1151,6 +1216,94 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                           )
                         })}
                       </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ------------ DOCUMENTS TAB ------------ */}
+              {activeTab === 'documents' && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center pb-2 border-b border-zinc-900/60">
+                    <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5 font-bold uppercase tracking-wider">
+                      <FileText className="h-4 w-4 text-indigo-400" /> Documents & Attachments
+                    </span>
+                  </div>
+
+                  {/* Upload file component */}
+                  <div className="bg-zinc-900/20 border border-dashed border-zinc-800 rounded-xl p-6 text-center space-y-3">
+                    <div className="flex flex-col items-center">
+                      <Plus className="h-6 w-6 text-zinc-550 mb-1.5" />
+                      <span className="text-xs text-zinc-300 font-bold block">Upload new attachment</span>
+                      <span className="text-[10px] text-zinc-550 block mt-0.5">PDF, Excel, images (Max 10MB)</span>
+                    </div>
+
+                    <div className="relative inline-block">
+                      <input
+                        type="file"
+                        onChange={handleFileChange}
+                        disabled={isUploading}
+                        id="document-file-upload-input"
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                      />
+                      <button
+                        type="button"
+                        disabled={isUploading}
+                        className="px-4.5 py-2 bg-indigo-650 hover:bg-indigo-600 active:bg-indigo-700 disabled:bg-zinc-800 text-white text-[10.5px] font-bold tracking-wide uppercase rounded-xl transition-all cursor-pointer shadow-md flex items-center gap-2"
+                      >
+                        {isUploading ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Uploading {uploadProgress}%
+                          </>
+                        ) : (
+                          'Choose File'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Documents List */}
+                  <div className="space-y-2 mt-4">
+                    {documentsData.length === 0 ? (
+                      <div className="text-center p-8 border border-dashed border-zinc-900 rounded-xl text-zinc-650 text-xs font-semibold">
+                        No attachments uploaded for this {type}.
+                      </div>
+                    ) : (
+                      documentsData.map((doc: any) => (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl hover:border-zinc-850 transition-all font-semibold"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="p-2 bg-zinc-950/80 rounded-lg text-indigo-400 border border-zinc-900 flex-shrink-0">
+                              <span className="text-[9px] font-extrabold uppercase tracking-wide">
+                                {doc.file_type}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <a
+                                href={doc.file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-zinc-205 hover:text-indigo-400 font-bold block truncate"
+                              >
+                                {doc.name}
+                              </a>
+                              <span className="text-[10px] text-zinc-500 block">
+                                {(doc.file_size / 1024).toFixed(1)} KB • Uploaded by {doc.uploaded_by?.email || 'System'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => deleteDocumentMutation.mutate(doc.id)}
+                            className="p-1.5 text-zinc-550 hover:text-rose-500 hover:bg-rose-500/10 rounded transition-colors cursor-pointer border border-transparent hover:border-rose-500/10 flex-shrink-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>

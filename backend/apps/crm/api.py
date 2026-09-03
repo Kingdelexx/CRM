@@ -15,7 +15,7 @@ from apps.planning.models import Task, Activity
 from .models import (
     Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
     Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document
 )
 from .schemas import (
     CompanySchema, CompanyCreateSchema,
@@ -37,7 +37,8 @@ from .schemas import (
     AutomationRuleSchema, AutomationRuleCreateSchema,
     NotificationSchema, NotificationPreferenceSchema,
     ApprovalWorkflowSchema, ApprovalWorkflowCreateSchema,
-    ApprovalRequestSchema, ApprovalRequestCreateSchema
+    ApprovalRequestSchema, ApprovalRequestCreateSchema,
+    DocumentSchema, DocumentCreateSchema
 )
 
 # Route instances initialized with JWT Auth
@@ -57,6 +58,9 @@ automations_router = Router(auth=JWTAuth())
 notifications_router = Router(auth=JWTAuth())
 approvals_router = Router(auth=JWTAuth())
 calendar_router = Router(auth=JWTAuth())
+documents_router = Router(auth=JWTAuth())
+search_router = Router(auth=JWTAuth())
+
 
 # Helper: check user belongs to organization
 def check_tenant(request_user, obj):
@@ -531,6 +535,10 @@ def create_project(request, data: ProjectCreateSchema):
     deal_id = payload.pop('deal_id', None)
     members_ids = payload.pop('members_ids', None) or []
     
+    # Ensure attachments list is not Null
+    if payload.get('attachments') is None:
+        payload['attachments'] = []
+        
     manager = None
     if manager_id:
         manager = User.objects.filter(id=manager_id, organization=request.user.organization).first()
@@ -560,26 +568,33 @@ def update_project(request, id: UUID, data: ProjectCreateSchema):
     if not project:
         raise HttpError(404, "Project not found.")
         
-    payload = data.dict()
-    manager_id = payload.pop('manager_id', None)
-    deal_id = payload.pop('deal_id', None)
-    members_ids = payload.pop('members_ids', None)
+    # Use exclude_unset=True to avoid overwriting omitted fields like attachments
+    payload = data.dict(exclude_unset=True)
     
-    if manager_id:
-        manager = User.objects.filter(id=manager_id, organization=request.user.organization).first()
-        project.manager = manager
-    else:
-        project.manager = None
-        
-    if deal_id:
-        deal = Deal.objects.filter(id=deal_id, organization=request.user.organization).first()
-        project.deal = deal
-    else:
-        project.deal = None
-        
-    if members_ids is not None:
-        members = User.objects.filter(id__in=members_ids, organization=request.user.organization)
-        project.members.set(members)
+    if 'manager_id' in payload:
+        manager_id = payload.pop('manager_id')
+        if manager_id:
+            manager = User.objects.filter(id=manager_id, organization=request.user.organization).first()
+            project.manager = manager
+        else:
+            project.manager = None
+            
+    if 'deal_id' in payload:
+        deal_id = payload.pop('deal_id')
+        if deal_id:
+            deal = Deal.objects.filter(id=deal_id, organization=request.user.organization).first()
+            project.deal = deal
+        else:
+            project.deal = None
+            
+    if 'members_ids' in payload:
+        members_ids = payload.pop('members_ids')
+        if members_ids is not None:
+            members = User.objects.filter(id__in=members_ids, organization=request.user.organization)
+            project.members.set(members)
+            
+    if 'attachments' in payload and payload['attachments'] is None:
+        payload['attachments'] = []
         
     for k, v in payload.items():
         setattr(project, k, v)
@@ -1396,7 +1411,7 @@ def update_approval_status(request, id: UUID, decision: str, comments: Optional[
 
 # ----------------- CALENDAR API -----------------
 @calendar_router.get("/events")
-def list_calendar_events(request, start_date: str, end_date: str):
+def list_calendar_events(request, start_date: str, end_date: str, scope: str = 'COMPANY'):
     try:
         sd = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
         ed = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
@@ -1406,9 +1421,41 @@ def list_calendar_events(request, start_date: str, end_date: str):
         
     events = []
     org = request.user.organization
-    
-    # 1. Deals: expected_close_date
+    user = request.user
+
+    # Enforce scope permissions
+    if scope in ['COMPANY', 'TEAM'] and user.role not in [User.ADMIN, User.MANAGER]:
+        raise HttpError(403, f"Access denied: role {user.role} does not have permissions for {scope} calendar view.")
+
+    # Initialize querysets
     deals = Deal.objects.filter(organization=org, expected_close_date__range=[sd.date(), ed.date()])
+    projects = Project.objects.filter(organization=org).filter(
+        Q(start_date__isnull=False) & (
+            Q(start_date__range=[sd.date(), ed.date()]) | Q(end_date__range=[sd.date(), ed.date()])
+        )
+    )
+    tasks = Task.objects.filter(organization=org, due_date__range=[sd, ed])
+    activities = Activity.objects.filter(organization=org, activity_date__range=[sd, ed])
+
+    # Filter querysets based on scope
+    if scope == 'PERSONAL':
+        deals = deals.filter(contact__assigned_to=user)
+        projects = projects.filter(Q(manager=user) | Q(members=user)).distinct()
+        tasks = tasks.filter(assignee=user)
+        activities = activities.filter(performed_by=user)
+    elif scope == 'TEAM':
+        if user.team:
+            deals = deals.filter(Q(contact__assigned_to__team=user.team) | Q(contact__assigned_team=user.team)).distinct()
+            projects = projects.filter(Q(manager__team=user.team) | Q(members__team=user.team)).distinct()
+            tasks = tasks.filter(assignee__team=user.team)
+            activities = activities.filter(performed_by__team=user.team)
+        else:
+            deals = deals.filter(contact__assigned_to=user)
+            projects = projects.filter(Q(manager=user) | Q(members=user)).distinct()
+            tasks = tasks.filter(assignee=user)
+            activities = activities.filter(performed_by=user)
+
+    # 1. Deals: expected_close_date
     for d in deals:
         events.append({
             "id": f"deal-{d.id}",
@@ -1421,7 +1468,6 @@ def list_calendar_events(request, start_date: str, end_date: str):
         })
         
     # 2. Projects: start_date, end_date
-    projects = Project.objects.filter(organization=org, start_date__isnull=False)
     for p in projects:
         if p.start_date and sd.date() <= p.start_date <= ed.date():
             events.append({
@@ -1445,7 +1491,6 @@ def list_calendar_events(request, start_date: str, end_date: str):
             })
             
     # 3. Tasks: due_date
-    tasks = Task.objects.filter(organization=org, due_date__range=[sd, ed])
     for t in tasks:
         events.append({
             "id": f"task-{t.id}",
@@ -1458,7 +1503,6 @@ def list_calendar_events(request, start_date: str, end_date: str):
         })
         
     # 4. Activities: activity_date
-    activities = Activity.objects.filter(organization=org, activity_date__range=[sd, ed])
     for act in activities:
         events.append({
             "id": f"activity-{act.id}",
@@ -1471,3 +1515,180 @@ def list_calendar_events(request, start_date: str, end_date: str):
         })
         
     return events
+
+
+
+# ----------------- DOCUMENTS API -----------------
+@documents_router.get("", response=List[DocumentSchema])
+def list_documents(
+    request,
+    contact_id: Optional[UUID] = None,
+    company_id: Optional[UUID] = None,
+    task_id: Optional[UUID] = None,
+    project_id: Optional[UUID] = None,
+    deal_id: Optional[UUID] = None,
+    custom_record_id: Optional[UUID] = None
+):
+    qs = Document.objects.filter(organization=request.user.organization)
+    if contact_id:
+        qs = qs.filter(contact_id=contact_id)
+    if company_id:
+        qs = qs.filter(company_id=company_id)
+    if task_id:
+        qs = qs.filter(task_id=task_id)
+    if project_id:
+        qs = qs.filter(project_id=project_id)
+    if deal_id:
+        qs = qs.filter(deal_id=deal_id)
+    if custom_record_id:
+        qs = qs.filter(custom_record_id=custom_record_id)
+    return qs
+
+
+@documents_router.post("", response={201: DocumentSchema})
+def create_document(request, data: DocumentCreateSchema):
+    doc = Document.objects.create(
+        organization=request.user.organization,
+        uploaded_by=request.user,
+        name=data.name,
+        file_url=data.file_url,
+        file_type=data.file_type,
+        file_size=data.file_size,
+        contact_id=data.contact_id,
+        company_id=data.company_id,
+        task_id=data.task_id,
+        project_id=data.project_id,
+        deal_id=data.deal_id,
+        custom_record_id=data.custom_record_id
+    )
+    return 201, doc
+
+
+@documents_router.delete("/{id}", response={204: None})
+def delete_document(request, id: UUID):
+    doc = Document.objects.filter(id=id, organization=request.user.organization).first()
+    if not doc:
+        raise HttpError(404, "Document not found")
+    doc.delete()
+    return 204, None
+
+
+# ----------------- GLOBAL SEARCH API -----------------
+@search_router.get("", response=dict)
+def global_search(request, q: str):
+    org = request.user.organization
+    if not q or len(q.strip()) < 1:
+        return {
+            "contacts": [], "tasks": [], "projects": [], "deals": [],
+            "emails": [], "whatsapp": [], "documents": [], "activities": []
+        }
+    
+    q_str = q.strip()
+    
+    # 1. Contacts
+    contacts = Contact.objects.filter(
+        organization=org
+    ).filter(
+        Q(first_name__icontains=q_str) |
+        Q(last_name__icontains=q_str) |
+        Q(email__icontains=q_str) |
+        Q(phone__icontains=q_str)
+    )[:10]
+    
+    # 2. Tasks
+    tasks = Task.objects.filter(
+        organization=org
+    ).filter(
+        Q(title__icontains=q_str) |
+        Q(description__icontains=q_str)
+    )[:10]
+
+    # 3. Projects
+    projects = Project.objects.filter(
+        organization=org
+    ).filter(
+        Q(name__icontains=q_str) |
+        Q(description__icontains=q_str)
+    )[:10]
+
+    # 4. Deals
+    deals = Deal.objects.filter(
+        organization=org
+    ).filter(
+        Q(title__icontains=q_str)
+    )[:10]
+
+    # 5. Emails (Activities of type EMAIL containing q)
+    emails = Activity.objects.filter(
+        organization=org,
+        type=Activity.EMAIL
+    ).filter(
+        Q(content__icontains=q_str)
+    )[:10]
+
+    # 6. WhatsApp Messages
+    whatsapp = WhatsAppMessage.objects.filter(
+        conversation__whatsapp_account__organization=org
+    ).filter(
+        Q(text__icontains=q_str) |
+        Q(sender_name__icontains=q_str)
+    ).select_related('conversation')[:10]
+
+    # 7. Documents
+    documents = Document.objects.filter(
+        organization=org
+    ).filter(
+        Q(name__icontains=q_str) |
+        Q(file_url__icontains=q_str)
+    )[:10]
+
+    # 8. Activities (all other types)
+    activities = Activity.objects.filter(
+        organization=org
+    ).exclude(
+        type=Activity.EMAIL
+    ).filter(
+        Q(content__icontains=q_str)
+    )[:10]
+
+    return {
+        "contacts": [
+            {"id": str(c.id), "title": f"{c.first_name} {c.last_name}", "subtitle": f"{c.email} | {c.job_title or 'No Title'}"}
+            for c in contacts
+        ],
+        "tasks": [
+            {
+                "id": str(t.id),
+                "title": t.title,
+                "subtitle": f"Status: {t.status} | Priority: {t.priority}",
+                "contact_id": str(t.contact_id) if t.contact_id else None,
+                "deal_id": str(t.deal_id) if t.deal_id else None
+            }
+            for t in tasks
+        ],
+        "projects": [
+            {"id": str(p.id), "title": p.name, "subtitle": f"Status: {p.status} | Progress: {p.progress}%"}
+            for p in projects
+        ],
+        "deals": [
+            {"id": str(d.id), "title": d.title, "subtitle": f"Value: {d.value} {d.currency} | Status: {d.status}"}
+            for d in deals
+        ],
+        "emails": [
+            {"id": str(e.id), "title": "Email Message", "subtitle": e.content[:100]}
+            for e in emails
+        ],
+        "whatsapp": [
+            {"id": str(w.id), "title": f"WhatsApp Msg from {w.sender_name}", "subtitle": w.text[:100]}
+            for w in whatsapp
+        ],
+        "documents": [
+            {"id": str(d.id), "title": d.name, "subtitle": d.file_url, "file_url": d.file_url}
+            for d in documents
+        ],
+        "activities": [
+            {"id": str(a.id), "title": f"{a.type} Activity", "subtitle": a.content[:100]}
+            for a in activities
+        ]
+    }
+
