@@ -6,7 +6,7 @@ from .models import (
     Company, Stage, Contact, Deal, Project, Pipeline, CustomFieldDefinition,
     Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
     AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest,
-    Document, CustomModuleRecord
+    Document, CustomModuleRecord, Invoice, Receipt
 )
 from apps.accounts.schemas import UserSchema, OrganizationSchema
 
@@ -292,4 +292,70 @@ class DocumentCreateSchema(Schema):
     project_id: Optional[UUID] = None
     deal_id: Optional[UUID] = None
     custom_record_id: Optional[UUID] = None
+
+
+class InvoiceSchema(ModelSchema):
+    contact: Optional[ContactSchema] = None
+    company: Optional[CompanySchema] = None
+    deal: Optional[DealSchema] = None
+
+    class Meta:
+        model = Invoice
+        fields = [
+            'id', 'invoice_number', 'issue_date', 'due_date', 'status',
+            'receiver_name', 'receiver_tel', 'receiver_email', 'receiver_address',
+            'total_value_items', 'expected_parcel_no', 'parcel_handler',
+            'items', 'services', 'total_ngn', 'total_gbp', 'amount_paid',
+            'currency', 'sla_terms_url', 'notes', 'created_at', 'updated_at'
+        ]
+
+
+class InvoiceCreateSchema(Schema):
+    invoice_number: Optional[str] = None
+    contact_id: Optional[UUID] = None
+    company_id: Optional[UUID] = None
+    deal_id: Optional[UUID] = None
+    issue_date: date
+    due_date: Optional[date] = None
+    status: Optional[str] = 'DRAFT'
+    receiver_name: Optional[str] = None
+    receiver_tel: Optional[str] = None
+    receiver_email: Optional[str] = None
+    receiver_address: Optional[str] = None
+    total_value_items: Optional[float] = 0.0
+    expected_parcel_no: Optional[str] = None
+    parcel_handler: Optional[str] = None
+    items: Optional[list] = None
+    services: Optional[list] = None
+    total_ngn: Optional[float] = 0.0
+    total_gbp: Optional[float] = 0.0
+    amount_paid: Optional[float] = 0.0
+    currency: Optional[str] = 'NGN'
+    sla_terms_url: Optional[str] = 'https://www.mintana.co.uk/terms-and-conditions'
+    notes: Optional[str] = None
+
+
+class ReceiptSchema(ModelSchema):
+    invoice: Optional[InvoiceSchema] = None
+    contact: Optional[ContactSchema] = None
+
+    class Meta:
+        model = Receipt
+        fields = [
+            'id', 'receipt_number', 'payment_date', 'amount_paid_ngn', 'amount_paid_gbp',
+            'payment_method', 'reference_number', 'items_summary', 'notes', 'created_at', 'updated_at'
+        ]
+
+
+class ReceiptCreateSchema(Schema):
+    invoice_id: Optional[UUID] = None
+    contact_id: Optional[UUID] = None
+    receipt_number: Optional[str] = None
+    amount_paid_ngn: Optional[float] = 0.0
+    amount_paid_gbp: Optional[float] = 0.0
+    payment_method: Optional[str] = 'BANK_TRANSFER'
+    reference_number: Optional[str] = None
+    items_summary: Optional[dict] = None
+    notes: Optional[str] = None
+
 

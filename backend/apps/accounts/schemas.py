@@ -81,6 +81,18 @@ class OrgUpdateSchema(BaseModel):
     business_phone: Optional[str] = None
     other_info: Optional[str] = None
 
+class UserCreateSchema(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=6)
+    first_name: str
+    last_name: str
+    role: str = 'SALES_REP'
+    phone: Optional[str] = None
+    department_id: Optional[UUID] = None
+    team_id: Optional[UUID] = None
+    custom_role_id: Optional[UUID] = None
+    manager_id: Optional[UUID] = None
+
 class UserUpdateSchema(BaseModel):
     role: Optional[str] = None
     custom_role_id: Optional[UUID] = None
@@ -88,6 +100,7 @@ class UserUpdateSchema(BaseModel):
     team_id: Optional[UUID] = None
     manager_id: Optional[UUID] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 class DepartmentCreateSchema(BaseModel):
     name: str

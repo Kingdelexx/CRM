@@ -547,7 +547,7 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
             </div>
 
             {/* TAB SELECTOR HEADER */}
-            <div className="flex bg-zinc-950 border-b border-zinc-900 px-6 flex-shrink-0">
+            <div className="flex bg-zinc-950 border-b border-zinc-900 px-4 sm:px-6 flex-shrink-0 overflow-x-auto">
               {(['overview', 'activities', 'notes', 'tasks', 'documents'] as const).map((tab) => (
                 <button
                   key={tab}

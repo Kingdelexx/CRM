@@ -281,3 +281,147 @@ export interface Activity extends BaseEntity {
   company?: Company;
 }
 
+export interface LogisticsItem {
+  dos?: string;
+  nature_of_item: string;
+  weight_kg?: number;
+  price_ngn?: number;
+  price_gbp?: number;
+  total_ngn?: number;
+  total_gbp?: number;
+}
+
+export interface LogisticsService {
+  sn?: string | number;
+  service_name: string;
+  price_ngn?: number;
+  price_gbp?: number;
+}
+
+export interface Invoice extends BaseEntity {
+  invoice_number: string;
+  contact?: Contact;
+  company?: Company;
+  deal?: Deal;
+  issue_date: string;
+  due_date?: string;
+  status: 'DRAFT' | 'SENT' | 'PAID' | 'PARTIALLY_PAID' | 'OVERDUE' | 'CANCELLED';
+  receiver_name?: string;
+  receiver_tel?: string;
+  receiver_email?: string;
+  receiver_address?: string;
+  total_value_items?: number;
+  expected_parcel_no?: string;
+  parcel_handler?: string;
+  items?: LogisticsItem[];
+  services?: LogisticsService[];
+  total_ngn: number;
+  total_gbp: number;
+  amount_paid: number;
+  currency: string;
+  sla_terms_url?: string;
+  notes?: string;
+}
+
+export interface Receipt extends BaseEntity {
+  receipt_number: string;
+  invoice?: Invoice;
+  contact?: Contact;
+  payment_date: string;
+  amount_paid_ngn: number;
+  amount_paid_gbp: number;
+  payment_method: string;
+  reference_number?: string;
+  items_summary?: Record<string, any>;
+  notes?: string;
+}
+
+export interface DashboardActivity {
+  id: string;
+  type: string;
+  content: string;
+  performed_by: string;
+  time: string;
+}
+
+export interface EmployeeDashboardMetrics {
+  mode: 'EMPLOYEE';
+  tasks: {
+    total: number;
+    todo: number;
+    in_progress: number;
+    completed: number;
+    due_today: number;
+    overdue: number;
+  };
+  leads: {
+    total_leads: number;
+    total_customers: number;
+    pipeline_value: number;
+    win_rate: number;
+  };
+  activities: DashboardActivity[];
+}
+
+export interface ManagerDashboardMetrics {
+  mode: 'MANAGER';
+  stats: {
+    total_revenue: number;
+    pipeline_value: number;
+    active_deals: number;
+    win_rate: number;
+  };
+  tasks: {
+    todo: number;
+    in_progress: number;
+    completed: number;
+    overdue: number;
+  };
+  members: Array<{
+    id: string;
+    name: string;
+    role: string;
+    tasks_completed: number;
+    tasks_pending: number;
+    deals_won: number;
+    pipeline_value: number;
+  }>;
+  activities: DashboardActivity[];
+}
+
+export interface BossDashboardMetrics {
+  mode: 'BOSS';
+  stats: {
+    total_revenue: number;
+    pipeline_value: number;
+    active_deals: number;
+    win_rate: number;
+  };
+  tasks: {
+    todo: number;
+    in_progress: number;
+    completed: number;
+    overdue: number;
+  };
+  departments: Array<{
+    id: string;
+    name: string;
+    revenue: number;
+    pipeline: number;
+    deals_won: number;
+    members_count: number;
+  }>;
+  projects: {
+    total: number;
+    planning: number;
+    in_progress: number;
+    ready: number;
+    delivered: number;
+  };
+  activities: DashboardActivity[];
+}
+
+export type DashboardMetrics = EmployeeDashboardMetrics | ManagerDashboardMetrics | BossDashboardMetrics;
+
+
+

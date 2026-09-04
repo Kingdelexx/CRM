@@ -589,3 +589,112 @@ class Document(TimeStampedModel):
         return f"{self.name} ({self.file_url})"
 
 
+class Invoice(TimeStampedModel):
+    DRAFT = 'DRAFT'
+    SENT = 'SENT'
+    PAID = 'PAID'
+    PARTIALLY_PAID = 'PARTIALLY_PAID'
+    OVERDUE = 'OVERDUE'
+    CANCELLED = 'CANCELLED'
+
+    STATUS_CHOICES = [
+        (DRAFT, 'Draft'),
+        (SENT, 'Sent'),
+        (PAID, 'Paid'),
+        (PARTIALLY_PAID, 'Partially Paid'),
+        (OVERDUE, 'Overdue'),
+        (CANCELLED, 'Cancelled'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='invoices'
+    )
+    invoice_number = models.CharField(max_length=100, db_index=True)
+    contact = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='invoices'
+    )
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='invoices'
+    )
+    deal = models.ForeignKey(
+        Deal,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='invoices'
+    )
+    issue_date = models.DateField()
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default=DRAFT, db_index=True)
+    
+    # Customer & Logistics details
+    receiver_name = models.CharField(max_length=255, null=True, blank=True)
+    receiver_tel = models.CharField(max_length=50, null=True, blank=True)
+    receiver_email = models.CharField(max_length=255, null=True, blank=True)
+    receiver_address = models.TextField(null=True, blank=True)
+    total_value_items = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    expected_parcel_no = models.CharField(max_length=100, null=True, blank=True)
+    parcel_handler = models.CharField(max_length=150, null=True, blank=True)
+    
+    # Items & Services JSON lists
+    items = models.JSONField(default=list, blank=True)
+    services = models.JSONField(default=list, blank=True)
+    
+    # Financial Totals
+    total_ngn = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    total_gbp = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    currency = models.CharField(max_length=10, default='NGN')
+    
+    # Terms & SLA Link
+    sla_terms_url = models.CharField(max_length=500, default='https://www.mintana.co.uk/terms-and-conditions')
+    notes = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Invoice {self.invoice_number} - {self.receiver_name or 'Client'}"
+
+
+class Receipt(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='receipts'
+    )
+    receipt_number = models.CharField(max_length=100, db_index=True)
+    invoice = models.ForeignKey(
+        Invoice,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='receipts'
+    )
+    contact = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='receipts'
+    )
+    payment_date = models.DateTimeField(auto_now_add=True)
+    amount_paid_ngn = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    amount_paid_gbp = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    payment_method = models.CharField(max_length=50, default='BANK_TRANSFER')
+    reference_number = models.CharField(max_length=100, null=True, blank=True)
+    items_summary = models.JSONField(default=dict, blank=True)
+    notes = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Receipt {self.receipt_number} ({self.amount_paid_ngn} NGN / {self.amount_paid_gbp} GBP)"
+
+
+

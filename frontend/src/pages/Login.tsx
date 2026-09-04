@@ -45,11 +45,13 @@ export default function Login() {
 
       <div className="w-full max-w-md bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/80 p-8 rounded-2xl shadow-2xl relative">
         <div className="flex flex-col items-center mb-6">
-          <div className="h-12 w-12 rounded-xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-3">
-            <BarChart2 className="h-6 w-6" />
-          </div>
+          <img 
+            src="/mintana-logo.jpg" 
+            alt="Mintana Global Logistics Logo" 
+            className="h-16 w-auto object-contain bg-white px-4 py-2 rounded-2xl mb-3 shadow-xl border border-sky-100" 
+          />
           <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">Mintana CRM</h2>
-          <p className="text-zinc-400 text-sm mt-1">Sign in to manage sales pipelines</p>
+          <p className="text-zinc-400 text-sm mt-1">Sign in to manage sales pipelines & logistics</p>
         </div>
 
         {error && (

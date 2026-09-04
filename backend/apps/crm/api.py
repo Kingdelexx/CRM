@@ -15,7 +15,7 @@ from apps.planning.models import Task, Activity
 from .models import (
     Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
     Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt
 )
 from .schemas import (
     CompanySchema, CompanyCreateSchema,
@@ -38,7 +38,9 @@ from .schemas import (
     NotificationSchema, NotificationPreferenceSchema,
     ApprovalWorkflowSchema, ApprovalWorkflowCreateSchema,
     ApprovalRequestSchema, ApprovalRequestCreateSchema,
-    DocumentSchema, DocumentCreateSchema
+    DocumentSchema, DocumentCreateSchema,
+    InvoiceSchema, InvoiceCreateSchema,
+    ReceiptSchema, ReceiptCreateSchema
 )
 
 # Route instances initialized with JWT Auth
@@ -59,6 +61,8 @@ notifications_router = Router(auth=JWTAuth())
 approvals_router = Router(auth=JWTAuth())
 calendar_router = Router(auth=JWTAuth())
 documents_router = Router(auth=JWTAuth())
+invoices_router = Router(auth=JWTAuth())
+receipts_router = Router(auth=JWTAuth())
 search_router = Router(auth=JWTAuth())
 
 
@@ -1691,4 +1695,205 @@ def global_search(request, q: str):
             for a in activities
         ]
     }
+
+
+# ----------------- INVOICES API -----------------
+
+@invoices_router.get("", response=List[InvoiceSchema])
+@paginate(LimitOffsetPagination)
+def list_invoices(request, search: Optional[str] = None, status: Optional[str] = None, contact_id: Optional[UUID] = None):
+    qs = Invoice.objects.filter(organization=request.user.organization).select_related('contact', 'company', 'deal')
+    if search:
+        qs = qs.filter(
+            Q(invoice_number__icontains=search) |
+            Q(receiver_name__icontains=search) |
+            Q(receiver_email__icontains=search) |
+            Q(expected_parcel_no__icontains=search)
+        )
+    if status:
+        qs = qs.filter(status=status)
+    if contact_id:
+        qs = qs.filter(contact_id=contact_id)
+    return qs.order_by('-created_at')
+
+@invoices_router.get("/{id}", response=InvoiceSchema)
+def get_invoice(request, id: UUID):
+    inv = Invoice.objects.filter(id=id, organization=request.user.organization).select_related('contact', 'company', 'deal').first()
+    if not inv:
+        raise HttpError(404, "Invoice not found.")
+    return inv
+
+@invoices_router.post("", response={201: InvoiceSchema})
+def create_invoice(request, data: InvoiceCreateSchema):
+    payload = data.dict()
+    contact_id = payload.pop('contact_id', None)
+    company_id = payload.pop('company_id', None)
+    deal_id = payload.pop('deal_id', None)
+    
+    if not payload.get('invoice_number'):
+        count = Invoice.objects.filter(organization=request.user.organization).count() + 1
+        payload['invoice_number'] = f"{count:08d}"
+
+    # Recalculate total_ngn and total_gbp from items and services if present
+    items = payload.get('items', []) or []
+    services = payload.get('services', []) or []
+    
+    items_ngn = sum(float(i.get('total_ngn') or i.get('price_ngn') or 0) for i in items if isinstance(i, dict))
+    items_gbp = sum(float(i.get('total_gbp') or i.get('price_gbp') or 0) for i in items if isinstance(i, dict))
+    services_ngn = sum(float(s.get('price_ngn') or 0) for s in services if isinstance(s, dict))
+    services_gbp = sum(float(s.get('price_gbp') or 0) for s in services if isinstance(s, dict))
+    
+    calc_ngn = items_ngn + services_ngn
+    calc_gbp = items_gbp + services_gbp
+    if calc_ngn > 0:
+        payload['total_ngn'] = calc_ngn
+    if calc_gbp > 0:
+        payload['total_gbp'] = calc_gbp
+        
+    contact = None
+    if contact_id:
+        contact = Contact.objects.filter(id=contact_id, organization=request.user.organization).first()
+    company = None
+    if company_id:
+        company = Company.objects.filter(id=company_id, organization=request.user.organization).first()
+    deal = None
+    if deal_id:
+        deal = Deal.objects.filter(id=deal_id, organization=request.user.organization).first()
+        
+    inv = Invoice.objects.create(
+        organization=request.user.organization,
+        contact=contact,
+        company=company,
+        deal=deal,
+        **payload
+    )
+    return 201, inv
+
+@invoices_router.put("/{id}", response=InvoiceSchema)
+def update_invoice(request, id: UUID, data: InvoiceCreateSchema):
+    inv = Invoice.objects.filter(id=id, organization=request.user.organization).first()
+    if not inv:
+        raise HttpError(404, "Invoice not found.")
+    payload = data.dict(exclude_unset=True)
+    if 'contact_id' in payload:
+        cid = payload.pop('contact_id')
+        inv.contact = Contact.objects.filter(id=cid, organization=request.user.organization).first() if cid else None
+    if 'company_id' in payload:
+        cid = payload.pop('company_id')
+        inv.company = Company.objects.filter(id=cid, organization=request.user.organization).first() if cid else None
+    if 'deal_id' in payload:
+        did = payload.pop('deal_id')
+        inv.deal = Deal.objects.filter(id=did, organization=request.user.organization).first() if did else None
+
+    items = payload.get('items', inv.items) or []
+    services = payload.get('services', inv.services) or []
+    items_ngn = sum(float(i.get('total_ngn') or i.get('price_ngn') or 0) for i in items if isinstance(i, dict))
+    items_gbp = sum(float(i.get('total_gbp') or i.get('price_gbp') or 0) for i in items if isinstance(i, dict))
+    services_ngn = sum(float(s.get('price_ngn') or 0) for s in services if isinstance(s, dict))
+    services_gbp = sum(float(s.get('price_gbp') or 0) for s in services if isinstance(s, dict))
+    calc_ngn = items_ngn + services_ngn
+    calc_gbp = items_gbp + services_gbp
+    if calc_ngn > 0:
+        payload['total_ngn'] = calc_ngn
+    if calc_gbp > 0:
+        payload['total_gbp'] = calc_gbp
+
+    for k, v in payload.items():
+        setattr(inv, k, v)
+    inv.save()
+    return inv
+
+@invoices_router.delete("/{id}", response={204: None})
+def delete_invoice(request, id: UUID):
+    inv = Invoice.objects.filter(id=id, organization=request.user.organization).first()
+    if not inv:
+        raise HttpError(404, "Invoice not found.")
+    inv.delete()
+    return 204, None
+
+@invoices_router.post("/{id}/mark-paid", response=ReceiptSchema)
+def mark_invoice_paid(request, id: UUID, payment_method: Optional[str] = 'BANK_TRANSFER', reference_number: Optional[str] = None):
+    inv = Invoice.objects.filter(id=id, organization=request.user.organization).first()
+    if not inv:
+        raise HttpError(404, "Invoice not found.")
+        
+    inv.status = Invoice.PAID
+    inv.amount_paid = inv.total_ngn if inv.total_ngn > 0 else inv.total_gbp
+    inv.save()
+    
+    rcpt_count = Receipt.objects.filter(organization=request.user.organization).count() + 1
+    receipt_no = f"REC-{rcpt_count:08d}"
+    
+    rcpt = Receipt.objects.create(
+        organization=request.user.organization,
+        receipt_number=receipt_no,
+        invoice=inv,
+        contact=inv.contact,
+        amount_paid_ngn=inv.total_ngn,
+        amount_paid_gbp=inv.total_gbp,
+        payment_method=payment_method or 'BANK_TRANSFER',
+        reference_number=reference_number or f"REF-{inv.invoice_number}",
+        items_summary={
+            "invoice_number": inv.invoice_number,
+            "receiver_name": inv.receiver_name,
+            "expected_parcel_no": inv.expected_parcel_no,
+            "items_count": len(inv.items or []),
+            "services_count": len(inv.services or [])
+        },
+        notes=f"Payment receipt for Invoice #{inv.invoice_number}"
+    )
+    return rcpt
+
+
+# ----------------- RECEIPTS API -----------------
+
+@receipts_router.get("", response=List[ReceiptSchema])
+@paginate(LimitOffsetPagination)
+def list_receipts(request, search: Optional[str] = None):
+    qs = Receipt.objects.filter(organization=request.user.organization).select_related('invoice', 'contact')
+    if search:
+        qs = qs.filter(
+            Q(receipt_number__icontains=search) |
+            Q(reference_number__icontains=search) |
+            Q(invoice__invoice_number__icontains=search) |
+            Q(invoice__receiver_name__icontains=search)
+        )
+    return qs.order_by('-payment_date')
+
+@receipts_router.get("/{id}", response=ReceiptSchema)
+def get_receipt(request, id: UUID):
+    rcpt = Receipt.objects.filter(id=id, organization=request.user.organization).select_related('invoice', 'contact').first()
+    if not rcpt:
+        raise HttpError(404, "Receipt not found.")
+    return rcpt
+
+@receipts_router.post("", response={201: ReceiptSchema})
+def create_receipt(request, data: ReceiptCreateSchema):
+    payload = data.dict()
+    invoice_id = payload.pop('invoice_id', None)
+    contact_id = payload.pop('contact_id', None)
+    
+    if not payload.get('receipt_number'):
+        count = Receipt.objects.filter(organization=request.user.organization).count() + 1
+        payload['receipt_number'] = f"REC-{count:08d}"
+        
+    inv = Invoice.objects.filter(id=invoice_id, organization=request.user.organization).first() if invoice_id else None
+    contact = Contact.objects.filter(id=contact_id, organization=request.user.organization).first() if contact_id else None
+    
+    rcpt = Receipt.objects.create(
+        organization=request.user.organization,
+        invoice=inv,
+        contact=contact,
+        **payload
+    )
+    return 201, rcpt
+
+@receipts_router.delete("/{id}", response={204: None})
+def delete_receipt(request, id: UUID):
+    rcpt = Receipt.objects.filter(id=id, organization=request.user.organization).first()
+    if not rcpt:
+        raise HttpError(404, "Receipt not found.")
+    rcpt.delete()
+    return 204, None
+
 

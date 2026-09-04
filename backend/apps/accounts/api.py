@@ -11,7 +11,7 @@ from django.db.models import Sum, Count, Q
 
 from apps.accounts.models import Organization, Role, Department, Team
 from apps.accounts.schemas import (
-    SignUpInputSchema, UserSchema, OrgUpdateSchema, UserUpdateSchema,
+    SignUpInputSchema, UserSchema, OrgUpdateSchema, UserUpdateSchema, UserCreateSchema,
     DepartmentSchema, DepartmentCreateSchema, TeamSchema, TeamCreateSchema,
     RoleSchema, RoleCreateSchema
 )
@@ -95,26 +95,32 @@ def update_organization(request, data: OrgUpdateSchema):
 
 # -- User / Member Administration --
 @router.post("/users", response={201: UserSchema}, auth=JWTAuth())
-def invite_user(request, email: str, first_name: str, last_name: str, role: str):
+def invite_user(request, data: UserCreateSchema):
     if request.user.role != 'ADMIN':
         raise HttpError(403, "Only admins can add employees.")
         
     User = get_user_model()
-    if User.objects.filter(email=email).exists():
+    if User.objects.filter(email=data.email).exists():
         raise HttpError(400, "A user with this email address already exists.")
         
-    # Generate generic password
-    import secrets
-    password = secrets.token_urlsafe(10)
-    
+    dept = Department.objects.filter(id=data.department_id, organization=request.user.organization).first() if data.department_id else None
+    team = Team.objects.filter(id=data.team_id, organization=request.user.organization).first() if data.team_id else None
+    custom_role = Role.objects.filter(id=data.custom_role_id, organization=request.user.organization).first() if data.custom_role_id else None
+    manager = User.objects.filter(id=data.manager_id, organization=request.user.organization).first() if data.manager_id else None
+
     user = User.objects.create_user(
-        username=email,
-        email=email,
-        password=password,
-        first_name=first_name,
-        last_name=last_name,
-        role=role,
+        username=data.email,
+        email=data.email,
+        password=data.password,
+        first_name=data.first_name,
+        last_name=data.last_name,
+        role=data.role,
         organization=request.user.organization,
+        phone=data.phone,
+        department=dept,
+        team=team,
+        custom_role=custom_role,
+        manager=manager,
         is_active=True
     )
     return 201, user
@@ -134,6 +140,8 @@ def update_user(request, user_id: UUID, data: UserUpdateSchema):
         user.role = payload['role']
     if 'is_active' in payload:
         user.is_active = payload['is_active']
+    if 'password' in payload and payload['password']:
+        user.set_password(payload['password'])
         
     if 'custom_role_id' in payload:
         role_id = payload['custom_role_id']

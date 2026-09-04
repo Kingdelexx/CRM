@@ -315,7 +315,7 @@ export default function ContactsDirectory() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Contacts Directory</h1>
           <p className="text-zinc-400 text-sm mt-1">Manage and assign leads, contacts, and customer directories</p>
@@ -325,14 +325,14 @@ export default function ContactsDirectory() {
             setFormError('')
             setIsModalOpen(true)
           }}
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-indigo-600/10 cursor-pointer"
+          className="flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-indigo-600/10 cursor-pointer w-full sm:w-auto"
         >
           <Plus className="h-4 w-4" /> New Contact
         </button>
       </div>
 
       {/* SAVED VIEWS PRESET TABS */}
-      <div className="flex gap-2 border-b border-zinc-900 pb-2">
+      <div className="flex gap-2 border-b border-zinc-900 pb-2 overflow-x-auto">
         <button
           onClick={() => {
             setStatusFilter('')

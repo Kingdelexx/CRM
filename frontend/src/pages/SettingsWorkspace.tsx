@@ -153,11 +153,18 @@ export default function SettingsWorkspace() {
 
   // Selected User for configuration
   const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [editUserPassword, setEditUserPassword] = useState('')
   const [inviteForm, setInviteForm] = useState({
     email: '',
+    password: '',
     first_name: '',
     last_name: '',
-    role: 'SALES_REP' as 'ADMIN' | 'MANAGER' | 'SALES_REP'
+    role: 'SALES_REP' as 'ADMIN' | 'MANAGER' | 'SALES_REP',
+    phone: '',
+    department_id: '',
+    team_id: '',
+    custom_role_id: '',
+    manager_id: ''
   })
   
   // Organization Editing Form State loaded from request.user
@@ -244,17 +251,37 @@ export default function SettingsWorkspace() {
 
   const inviteUserMutation = useMutation({
     mutationFn: async (body: typeof inviteForm) => {
-      return apiClient.post('/accounts/users', null, {
-        params: body
+      return apiClient.post('/accounts/users', {
+        email: body.email,
+        password: body.password,
+        first_name: body.first_name,
+        last_name: body.last_name,
+        role: body.role,
+        phone: body.phone || null,
+        department_id: body.department_id || null,
+        team_id: body.team_id || null,
+        custom_role_id: body.custom_role_id || null,
+        manager_id: body.manager_id || null
       })
     },
     onSuccess: () => {
       refetchUsers()
-      setInviteForm({ email: '', first_name: '', last_name: '', role: 'SALES_REP' })
-      alert("Employee added successfully.")
+      setInviteForm({
+        email: '',
+        password: '',
+        first_name: '',
+        last_name: '',
+        role: 'SALES_REP',
+        phone: '',
+        department_id: '',
+        team_id: '',
+        custom_role_id: '',
+        manager_id: ''
+      })
+      alert("Staff member created successfully.")
     },
     onError: (err: any) => {
-      alert(`Conflict: ${err?.response?.data?.detail || err.message}`)
+      alert(`Error creating staff member: ${err?.response?.data?.detail || err.message}`)
     }
   })
 
@@ -834,52 +861,115 @@ export default function SettingsWorkspace() {
             </div>
 
             {isUserAdmin && (
-              <div className="bg-zinc-900/20 p-4 border border-zinc-800 rounded-xl space-y-3">
-                <span className="text-[10px] text-zinc-500 font-extrabold uppercase tracking-widest block">Add New Team Employee</span>
+              <div className="bg-zinc-900/40 p-5 border border-zinc-800 rounded-xl space-y-4 shadow-lg">
+                <span className="text-[11px] text-indigo-400 font-extrabold uppercase tracking-widest block flex items-center gap-2">
+                  <UserCheck className="h-4 w-4" /> Add New Staff Member
+                </span>
                 
                 <form
                   onSubmit={(e) => {
                     e.preventDefault()
                     inviteUserMutation.mutate(inviteForm)
                   }}
-                  className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end"
+                  className="space-y-4"
                 >
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-555 font-bold uppercase">First Name</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="John"
-                      value={inviteForm.first_name}
-                      onChange={(e) => setInviteForm(prev => ({ ...prev, first_name: e.target.value }))}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded p-1.5 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase">First Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="John"
+                        value={inviteForm.first_name}
+                        onChange={(e) => setInviteForm(prev => ({ ...prev, first_name: e.target.value }))}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase">Last Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Doe"
+                        value={inviteForm.last_name}
+                        onChange={(e) => setInviteForm(prev => ({ ...prev, last_name: e.target.value }))}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase">Email Account *</label>
+                      <input
+                        type="email"
+                        required
+                        placeholder="staff@company.com"
+                        value={inviteForm.email}
+                        onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase">Set Password *</label>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        placeholder="Min 6 characters"
+                        value={inviteForm.password}
+                        onChange={(e) => setInviteForm(prev => ({ ...prev, password: e.target.value }))}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-555 font-bold uppercase">Last Name</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Doe"
-                      value={inviteForm.last_name}
-                      onChange={(e) => setInviteForm(prev => ({ ...prev, last_name: e.target.value }))}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded p-1.5 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650"
-                    />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase">System Role</label>
+                      <select
+                        value={inviteForm.role}
+                        onChange={(e) => setInviteForm(prev => ({ ...prev, role: e.target.value as any }))}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="SALES_REP">Sales Representative (Staff)</option>
+                        <option value="MANAGER">Manager</option>
+                        <option value="ADMIN">Administrator</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase">Department</label>
+                      <select
+                        value={inviteForm.department_id}
+                        onChange={(e) => setInviteForm(prev => ({ ...prev, department_id: e.target.value }))}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="">Unassigned</option>
+                        {departments.map(d => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-zinc-400 font-bold uppercase">Team</label>
+                      <select
+                        value={inviteForm.team_id}
+                        onChange={(e) => setInviteForm(prev => ({ ...prev, team_id: e.target.value }))}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="">Unassigned</option>
+                        {teams.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={inviteUserMutation.isPending}
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-2.5 rounded transition-all cursor-pointer text-xs disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        {inviteUserMutation.isPending ? 'Creating...' : '+ Create Staff Account'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-555 font-bold uppercase">Email Account</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="john.doe@company.com"
-                      value={inviteForm.email}
-                      onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded p-1.5 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650"
-                    />
-                  </div>
-                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-505 text-white font-bold p-2.5 rounded transition-all cursor-pointer text-xs">
-                    Invite Member
-                  </button>
                 </form>
               </div>
             )}
@@ -1421,6 +1511,18 @@ export default function SettingsWorkspace() {
                 </select>
               </div>
 
+              {/* Reset Password */}
+              <div className="space-y-1 border-t border-zinc-900 pt-3">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase">Reset Password (Optional)</label>
+                <input
+                  type="password"
+                  placeholder="Enter new password to reset"
+                  value={editUserPassword}
+                  onChange={(e) => setEditUserPassword(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-850 rounded p-2 text-xs text-zinc-250 focus:outline-none placeholder:text-zinc-600"
+                />
+              </div>
+
               {/* Toggle isActive button */}
               <div className="flex items-center justify-between border-t border-zinc-900 pt-3">
                 <span className="text-[10px] text-zinc-500 font-bold uppercase">Employee Active Status</span>
@@ -1446,7 +1548,10 @@ export default function SettingsWorkspace() {
               <div className="flex gap-2.5 justify-end border-t border-zinc-900 pt-4 text-xs font-bold">
                 <button
                   type="button"
-                  onClick={() => setEditingUser(null)}
+                  onClick={() => {
+                    setEditingUser(null)
+                    setEditUserPassword('')
+                  }}
                   className="px-4 py-2 border border-zinc-900 rounded text-zinc-400 hover:text-white transition-all cursor-pointer"
                 >
                   Cancel
@@ -1454,17 +1559,22 @@ export default function SettingsWorkspace() {
                 <button
                   type="button"
                   onClick={() => {
+                    const body: any = {
+                      role: editingUser.role,
+                      custom_role_id: editingUser.custom_role?.id || null,
+                      department_id: editingUser.department?.id || null,
+                      team_id: editingUser.team?.id || null,
+                      manager_id: editingUser.manager?.id || null,
+                      is_active: editingUser.is_active
+                    }
+                    if (editUserPassword) {
+                      body.password = editUserPassword
+                    }
                     updateUserMutation.mutate({
                       id: editingUser.id,
-                      body: {
-                        role: editingUser.role,
-                        custom_role_id: editingUser.custom_role?.id || null,
-                        department_id: editingUser.department?.id || null,
-                        team_id: editingUser.team?.id || null,
-                        manager_id: editingUser.manager?.id || null,
-                        is_active: editingUser.is_active
-                      }
+                      body
                     })
+                    setEditUserPassword('')
                   }}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-white transition-all cursor-pointer"
                 >

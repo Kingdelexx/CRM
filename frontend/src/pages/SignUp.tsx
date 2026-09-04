@@ -49,7 +49,12 @@ export default function SignUp() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-zinc-900/0 to-zinc-900 pointer-events-none" />
 
       <div className="w-full max-w-lg bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/80 p-8 rounded-2xl shadow-2xl z-10">
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 flex flex-col items-center">
+          <img 
+            src="/mintana-logo.jpg" 
+            alt="Mintana Global Logistics Logo" 
+            className="h-16 w-auto object-contain bg-white px-4 py-2 rounded-2xl mb-3 shadow-xl border border-sky-100" 
+          />
           <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">Create Workspace</h2>
           <p className="text-zinc-400 text-sm mt-1">Set up your organization and admin user</p>
         </div>
