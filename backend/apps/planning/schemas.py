@@ -32,6 +32,7 @@ class TaskSchema(ModelSchema):
     task_team: Optional[TeamSchema] = None
     deal: Optional[DealSchema] = None
     contact: Optional[ContactSchema] = None
+    partner: Optional[ContactSchema] = None
     company: Optional[CompanySchema] = None
     
     class Meta:
@@ -39,17 +40,19 @@ class TaskSchema(ModelSchema):
         fields = ['id', 'title', 'description', 'start_date', 'due_date', 'priority', 'status', 'attachments', 'checklist', 'comments', 'created_at', 'updated_at']
 
 class TaskCreateSchema(Schema):
-    title: str
+    title: Optional[str] = None
+    subject: Optional[str] = None
     description: Optional[str] = None
-    start_date: Optional[datetime] = None
-    due_date: Optional[datetime] = None
+    start_date: Optional[str] = None
+    due_date: Optional[str] = None
     priority: Optional[str] = 'MEDIUM'
     status: Optional[str] = 'TODO'
-    assignee_id: Optional[UUID] = None
-    task_team_id: Optional[UUID] = None
-    deal_id: Optional[UUID] = None
-    contact_id: Optional[UUID] = None
-    company_id: Optional[UUID] = None
+    assignee_id: Optional[str] = None
+    task_team_id: Optional[str] = None
+    deal_id: Optional[str] = None
+    contact_id: Optional[str] = None
+    partner_id: Optional[str] = None
+    company_id: Optional[str] = None
     attachments: Optional[List[str]] = None
     checklist: Optional[List[dict]] = None
     comments: Optional[List[dict]] = None

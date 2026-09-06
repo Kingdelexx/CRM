@@ -15,7 +15,7 @@ from apps.planning.models import Task, Activity
 from .models import (
     Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
     Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt, Shipment
 )
 from .schemas import (
     CompanySchema, CompanyCreateSchema,
@@ -40,7 +40,8 @@ from .schemas import (
     ApprovalRequestSchema, ApprovalRequestCreateSchema,
     DocumentSchema, DocumentCreateSchema,
     InvoiceSchema, InvoiceCreateSchema,
-    ReceiptSchema, ReceiptCreateSchema
+    ReceiptSchema, ReceiptCreateSchema,
+    ShipmentSchema, ShipmentCreateSchema
 )
 
 # Route instances initialized with JWT Auth
@@ -63,6 +64,7 @@ calendar_router = Router(auth=JWTAuth())
 documents_router = Router(auth=JWTAuth())
 invoices_router = Router(auth=JWTAuth())
 receipts_router = Router(auth=JWTAuth())
+shipments_router = Router(auth=JWTAuth())
 search_router = Router(auth=JWTAuth())
 
 
@@ -1895,5 +1897,111 @@ def delete_receipt(request, id: UUID):
         raise HttpError(404, "Receipt not found.")
     rcpt.delete()
     return 204, None
+
+
+# ----------------- SHIPMENTS API -----------------
+
+@shipments_router.get("", response=List[ShipmentSchema])
+def list_shipments(
+    request,
+    search: Optional[str] = None,
+    shipment_status: Optional[str] = None,
+    payment_status: Optional[str] = None
+):
+    qs = Shipment.objects.filter(organization=request.user.organization).select_related(
+        'sender', 'receiver', 'partner', 'recorded_by'
+    )
+    if search:
+        qs = qs.filter(
+            Q(tracking_id__icontains=search) |
+            Q(invoice_number__icontains=search) |
+            Q(sender_name__icontains=search) |
+            Q(receiver_name__icontains=search) |
+            Q(receiver_email__icontains=search) |
+            Q(receiver_phone__icontains=search)
+        )
+    if shipment_status:
+        qs = qs.filter(shipment_status=shipment_status)
+    if payment_status:
+        qs = qs.filter(payment_status=payment_status)
+    return qs.order_by('-created_at')
+
+@shipments_router.post("", response={201: ShipmentSchema})
+def create_shipment(request, data: ShipmentCreateSchema):
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    sender_id = parse_uuid(payload.pop('sender_id', None))
+    receiver_id = parse_uuid(payload.pop('receiver_id', None))
+    partner_id = parse_uuid(payload.pop('partner_id', None))
+    recorded_by_id = parse_uuid(payload.pop('recorded_by_id', None))
+
+    date_val = payload.pop('date', None)
+    if date_val and str(date_val).strip():
+        payload['date'] = str(date_val).strip()
+    else:
+        payload['date'] = None
+
+    # Clean up empty strings for optional text fields
+    for field in ['sender_name', 'receiver_name', 'receiver_phone', 'receiver_email',
+                  'receiver_address', 'invoice_number', 'partner_name', 'item_received',
+                  'items_shipped', 'items_recieved', 'tracking_id', 'note']:
+        if field in payload and payload[field] is not None and str(payload[field]).strip() == '':
+            payload[field] = None
+
+    # Auto-generate tracking_id if not supplied
+    if not payload.get('tracking_id'):
+        count = Shipment.objects.filter(organization=request.user.organization).count() + 1001
+        payload['tracking_id'] = f"TRK-{timezone.now().strftime('%Y%m%d')}-{count}"
+
+    # Auto-generate invoice_number if not supplied
+    if not payload.get('invoice_number'):
+        count = Shipment.objects.filter(organization=request.user.organization).count() + 1001
+        payload['invoice_number'] = f"INV-SHIP-{count}"
+
+    shipment = Shipment.objects.create(
+        organization=request.user.organization,
+        sender_id=sender_id,
+        receiver_id=receiver_id,
+        partner_id=partner_id,
+        recorded_by_id=recorded_by_id or request.user.id,
+        **payload
+    )
+    return 201, shipment
+
+@shipments_router.get("/{id}", response=ShipmentSchema)
+def get_shipment(request, id: UUID):
+    shipment = Shipment.objects.filter(id=id, organization=request.user.organization).first()
+    if not shipment:
+        raise HttpError(404, "Shipment not found.")
+    return shipment
+
+@shipments_router.put("/{id}", response=ShipmentSchema)
+def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
+    shipment = Shipment.objects.filter(id=id, organization=request.user.organization).first()
+    if not shipment:
+        raise HttpError(404, "Shipment not found.")
+    
+    payload = data.dict(exclude_unset=True)
+    for attr, val in payload.items():
+        setattr(shipment, attr, val)
+    shipment.save()
+    return shipment
+
+@shipments_router.delete("/{id}", response={204: None})
+def delete_shipment(request, id: UUID):
+    shipment = Shipment.objects.filter(id=id, organization=request.user.organization).first()
+    if not shipment:
+        raise HttpError(404, "Shipment not found.")
+    shipment.delete()
+    return 204, None
+
 
 

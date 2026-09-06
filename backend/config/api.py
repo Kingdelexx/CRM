@@ -6,7 +6,7 @@ from apps.crm.api import (
     settings_router, customer_lists_router, custom_modules_router,
     pipelines_router, reports_router, emails_router, whatsapp_router,
     automations_router, notifications_router, approvals_router, calendar_router,
-    documents_router, search_router, invoices_router, receipts_router
+    documents_router, search_router, invoices_router, receipts_router, shipments_router
 )
 from apps.planning.api import activities_router, tasks_router
 from apps.crm.webhooks import router as webhooks_router
@@ -45,6 +45,7 @@ api.add_router("/calendar/", calendar_router)
 api.add_router("/documents/", documents_router)
 api.add_router("/invoices/", invoices_router)
 api.add_router("/receipts/", receipts_router)
+api.add_router("/shipments/", shipments_router)
 api.add_router("/search/", search_router)
 
 

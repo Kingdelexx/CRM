@@ -69,8 +69,13 @@ export interface Contact extends BaseEntity {
   last_name: string;
   email: string;
   phone?: string;
+  whatsapp_number?: string;
+  lead_acquisition_cost?: number;
+  city?: string;
+  state?: string;
+  country?: string;
   job_title?: string;
-  status: 'LEAD' | 'CONTACT' | 'CUSTOMER';
+  status: 'LEAD' | 'CONTACT' | 'CUSTOMER' | 'PARTNER';
   company?: Company;
   assigned_to?: User;
   custom_fields?: Record<string, any>;
@@ -266,6 +271,7 @@ export interface Task extends BaseEntity {
   task_team?: Team;
   deal?: Deal;
   contact?: Contact;
+  partner?: Contact;
   company?: Company;
   attachments?: string[];
   checklist?: ChecklistItem[];
@@ -422,6 +428,35 @@ export interface BossDashboardMetrics {
 }
 
 export type DashboardMetrics = EmployeeDashboardMetrics | ManagerDashboardMetrics | BossDashboardMetrics;
+
+export interface Shipment extends BaseEntity {
+  sender?: Contact;
+  sender_name?: string;
+  receiver?: Contact;
+  receiver_name?: string;
+  receiver_phone?: string;
+  receiver_email?: string;
+  receiver_address?: string;
+  date?: string;
+  shipment_status: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CUSTOMS_HOLD' | 'CANCELLED';
+  payment_status: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
+  currency: 'NGN' | 'USD' | 'GBP';
+  conversion_rate: number;
+  amount: number;
+  invoice_number?: string;
+  number_of_carton: number;
+  partner?: Contact;
+  partner_name?: string;
+  item_received?: string;
+  items_shipped?: string;
+  items_recieved?: string;
+  weight_kg: number;
+  tracking_id: string;
+  value: number;
+  note?: string;
+  recorded_by?: User;
+}
+
 
 
 

@@ -62,6 +62,10 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
           last_name: contact.last_name || '',
           email: contact.email || '',
           phone: contact.phone || '',
+          whatsapp_number: contact.whatsapp_number || '',
+          lead_acquisition_cost: contact.lead_acquisition_cost || 0,
+          city: contact.city || '',
+          state: contact.state || '',
           job_title: contact.job_title || '',
           status: contact.status || 'LEAD',
           company_id: contact.company?.id || '',
@@ -606,6 +610,25 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                             </span>
                           </div>
                           <div className="space-y-1">
+                            <span className="text-zinc-500 font-medium block">WhatsApp Number</span>
+                            <span className="text-emerald-400 font-semibold bg-zinc-900/20 p-2 rounded block flex items-center gap-1.5">
+                              <MessageSquare className="h-3.5 w-3.5 text-emerald-500" />
+                              {(itemData as Contact).whatsapp_number || 'No WhatsApp Registered'}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-zinc-500 font-medium block">Acquisition Cost</span>
+                            <span className="text-emerald-400 font-semibold bg-zinc-900/20 p-2 rounded block">
+                              ₦{Number((itemData as Contact).lead_acquisition_cost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-zinc-500 font-medium block">Location (City, State)</span>
+                            <span className="text-zinc-200 font-semibold bg-zinc-900/20 p-2 rounded block">
+                              {[(itemData as Contact).city, (itemData as Contact).state].filter(Boolean).join(', ') || 'Not Specified'}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
                             <span className="text-zinc-500 font-medium block">CRM Category</span>
                             <span className="text-zinc-200 font-semibold bg-zinc-900/20 p-2 rounded block uppercase">
                               {(itemData as Contact).status}
@@ -693,6 +716,49 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
 
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
+                              <label className="text-[10px] text-zinc-500 font-bold uppercase">WhatsApp Number</label>
+                              <input
+                                type="text"
+                                value={editFields.whatsapp_number || ''}
+                                onChange={(e) => setEditFields(prev => ({ ...prev, whatsapp_number: e.target.value }))}
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-600"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-zinc-500 font-bold uppercase">Acquisition Cost</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={editFields.lead_acquisition_cost || 0}
+                                onChange={(e) => setEditFields(prev => ({ ...prev, lead_acquisition_cost: e.target.value }))}
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-600"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-zinc-500 font-bold uppercase">City</label>
+                              <input
+                                type="text"
+                                value={editFields.city || ''}
+                                onChange={(e) => setEditFields(prev => ({ ...prev, city: e.target.value }))}
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-600"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-zinc-500 font-bold uppercase">State</label>
+                              <input
+                                type="text"
+                                value={editFields.state || ''}
+                                onChange={(e) => setEditFields(prev => ({ ...prev, state: e.target.value }))}
+                                className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-600"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
                               <label className="text-[10px] text-zinc-500 font-bold uppercase">Job Title</label>
                               <input
                                 type="text"
@@ -711,6 +777,7 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                                 <option value="LEAD">Lead</option>
                                 <option value="CONTACT">Contact</option>
                                 <option value="CUSTOMER">Customer</option>
+                                <option value="PARTNER">Partner</option>
                               </select>
                             </div>
                           </div>

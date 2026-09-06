@@ -40,11 +40,13 @@ class Contact(TimeStampedModel):
     LEAD = 'LEAD'
     CONTACT = 'CONTACT'
     CUSTOMER = 'CUSTOMER'
+    PARTNER = 'PARTNER'
     
     STATUS_CHOICES = [
         (LEAD, 'Lead'),
         (CONTACT, 'Contact'),
         (CUSTOMER, 'Customer'),
+        (PARTNER, 'Partner'),
     ]
 
     organization = models.ForeignKey(
@@ -93,6 +95,11 @@ class Contact(TimeStampedModel):
     tags = models.JSONField(default=list, blank=True)
     notes = models.TextField(null=True, blank=True)
     country = models.CharField(max_length=100, null=True, blank=True)
+    whatsapp_number = models.CharField(max_length=50, null=True, blank=True)
+    lead_acquisition_cost = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, null=True, blank=True)
+    city = models.CharField(max_length=100, null=True, blank=True)
+    state = models.CharField(max_length=100, null=True, blank=True)
+
 
     # Lead lifecycle tracking fields
     lifecycle_started_at = models.DateTimeField(null=True, blank=True)
@@ -695,6 +702,98 @@ class Receipt(TimeStampedModel):
 
     def __str__(self):
         return f"Receipt {self.receipt_number} ({self.amount_paid_ngn} NGN / {self.amount_paid_gbp} GBP)"
+
+
+class Shipment(TimeStampedModel):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('IN_TRANSIT', 'In Transit'),
+        ('DELIVERED', 'Delivered'),
+        ('CUSTOMS_HOLD', 'Customs Hold'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    CURRENCY_CHOICES = [
+        ('NGN', 'NGN'),
+        ('USD', 'USD'),
+        ('GBP', 'GBP'),
+    ]
+
+    PAYMENT_STATUS_CHOICES = [
+        ('UNPAID', 'Unpaid'),
+        ('PARTIALLY_PAID', 'Partially Paid'),
+        ('PAID', 'Paid'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='shipments'
+    )
+    
+    # Sender & Receiver Contacts
+    sender = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sent_shipments'
+    )
+    sender_name = models.CharField(max_length=255, null=True, blank=True)
+    
+    receiver = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='received_shipments'
+    )
+    receiver_name = models.CharField(max_length=255, null=True, blank=True)
+    receiver_phone = models.CharField(max_length=50, null=True, blank=True)
+    receiver_email = models.CharField(max_length=255, null=True, blank=True)
+    receiver_address = models.TextField(null=True, blank=True)
+    
+    # Dates & Statuses
+    date = models.DateField(null=True, blank=True)
+    shipment_status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    payment_status = models.CharField(max_length=50, choices=PAYMENT_STATUS_CHOICES, default='UNPAID')
+    
+    # Financials & Currency
+    currency = models.CharField(max_length=10, choices=CURRENCY_CHOICES, default='NGN')
+    conversion_rate = models.DecimalField(max_digits=10, decimal_places=4, default=1.0000)
+    amount = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    invoice_number = models.CharField(max_length=100, null=True, blank=True)
+    
+    # Cartons & Partner
+    number_of_carton = models.IntegerField(default=1)
+    partner = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='partner_shipments'
+    )
+    partner_name = models.CharField(max_length=255, null=True, blank=True)
+
+    # Package Details
+    item_received = models.TextField(null=True, blank=True)
+    items_shipped = models.TextField(null=True, blank=True)
+    items_recieved = models.TextField(null=True, blank=True)
+    weight_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    tracking_id = models.CharField(max_length=100, db_index=True)
+    value = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    note = models.TextField(null=True, blank=True)
+    recorded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='recorded_shipments'
+    )
+
+    def __str__(self):
+        return f"Shipment {self.tracking_id} - {self.receiver_name or 'Receiver'}"
+
 
 
 

@@ -14,10 +14,18 @@ import SettingsWorkspace from './SettingsWorkspace'
 import CalendarWorkspace from './CalendarWorkspace'
 import EmailSyncWorkspace from './EmailSyncWorkspace'
 import { InvoicesWorkspace } from './InvoicesWorkspace'
+import LeadsWorkspace from './LeadsWorkspace'
+import PartnersWorkspace from './PartnersWorkspace'
+import ShipmentWorkspace from './ShipmentWorkspace'
+import TasksWorkspace from './TasksWorkspace'
 import DetailDrawer from '@/components/DetailDrawer'
 import {
   LogOut,
   Users,
+  Target,
+  Handshake,
+  Truck,
+  CheckSquare,
   Briefcase,
   Layers,
   ChevronLeft,
@@ -44,6 +52,10 @@ import {
 
 type DashboardView =
   | 'summary'
+  | 'leads'
+  | 'partners'
+  | 'shipments'
+  | 'tasks'
   | 'pipeline'
   | 'contacts'
   | 'projects'
@@ -161,6 +173,14 @@ export default function Dashboard() {
     switch (currentView) {
       case 'summary':
         return 'Summary Analytics'
+      case 'leads':
+        return 'Leads Management'
+      case 'partners':
+        return 'Partners Management'
+      case 'shipments':
+        return 'Shipments Management'
+      case 'tasks':
+        return 'Tasks Management'
       case 'pipeline':
         return 'Deals Board'
       case 'contacts':
@@ -263,6 +283,66 @@ export default function Dashboard() {
             >
               <TrendingUp className="h-4.5 w-4.5 flex-shrink-0" />
               {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Summary Analytics</span>}
+            </button>
+
+            <button
+              onClick={() => handleNavClick('leads')}
+              className={`w-full flex items-center ${
+                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
+              } rounded-lg text-sm font-medium transition-all ${
+                currentView === 'leads'
+                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
+                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
+              } cursor-pointer`}
+              title="Leads Management"
+            >
+              <Target className="h-4.5 w-4.5 flex-shrink-0 text-sky-400" />
+              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Leads</span>}
+            </button>
+
+            <button
+              onClick={() => handleNavClick('partners')}
+              className={`w-full flex items-center ${
+                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
+              } rounded-lg text-sm font-medium transition-all ${
+                currentView === 'partners'
+                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
+                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
+              } cursor-pointer`}
+              title="Partners Management"
+            >
+              <Handshake className="h-4.5 w-4.5 flex-shrink-0 text-emerald-400" />
+              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Partners</span>}
+            </button>
+
+            <button
+              onClick={() => handleNavClick('shipments')}
+              className={`w-full flex items-center ${
+                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
+              } rounded-lg text-sm font-medium transition-all ${
+                currentView === 'shipments'
+                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
+                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
+              } cursor-pointer`}
+              title="Create Shipment"
+            >
+              <Truck className="h-4.5 w-4.5 flex-shrink-0 text-sky-400" />
+              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Create Shipment</span>}
+            </button>
+
+            <button
+              onClick={() => handleNavClick('tasks')}
+              className={`w-full flex items-center ${
+                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
+              } rounded-lg text-sm font-medium transition-all ${
+                currentView === 'tasks'
+                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
+                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
+              } cursor-pointer`}
+              title="Tasks Management"
+            >
+              <CheckSquare className="h-4.5 w-4.5 flex-shrink-0 text-amber-400" />
+              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Tasks</span>}
             </button>
 
             <button
@@ -695,6 +775,10 @@ export default function Dashboard() {
         {/* Scrollable View Area */}
         <div className="flex-1 p-4 sm:p-8 overflow-y-auto bg-slate-300/50">
           {currentView === 'summary' && <SummaryDashboard />}
+          {currentView === 'leads' && <LeadsWorkspace />}
+          {currentView === 'partners' && <PartnersWorkspace />}
+          {currentView === 'shipments' && <ShipmentWorkspace />}
+          {currentView === 'tasks' && <TasksWorkspace />}
           {currentView === 'pipeline' && <DealsKanban />}
           {currentView === 'contacts' && <ContactsDirectory />}
           {currentView === 'projects' && <ProjectsWorkspace />}

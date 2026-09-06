@@ -6,7 +6,7 @@ from .models import (
     Company, Stage, Contact, Deal, Project, Pipeline, CustomFieldDefinition,
     Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
     AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest,
-    Document, CustomModuleRecord, Invoice, Receipt
+    Document, CustomModuleRecord, Invoice, Receipt, Shipment
 )
 from apps.accounts.schemas import UserSchema, OrganizationSchema
 
@@ -43,7 +43,8 @@ class ContactSchema(ModelSchema):
     class Meta:
         model = Contact
         fields = [
-            'id', 'first_name', 'last_name', 'email', 'phone', 'job_title', 'status',
+            'id', 'first_name', 'last_name', 'email', 'phone', 'whatsapp_number',
+            'lead_acquisition_cost', 'city', 'state', 'job_title', 'status',
             'custom_fields', 'lifecycle_started_at', 'lifecycle_extension_days',
             'lifecycle_status', 'is_active_lead', 'country', 'created_at', 'updated_at'
         ]
@@ -53,6 +54,10 @@ class ContactCreateSchema(Schema):
     last_name: str
     email: str
     phone: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    lead_acquisition_cost: Optional[float] = 0.0
+    city: Optional[str] = None
+    state: Optional[str] = None
     job_title: Optional[str] = None
     status: Optional[str] = 'LEAD'
     company_id: Optional[UUID] = None
@@ -357,5 +362,50 @@ class ReceiptCreateSchema(Schema):
     reference_number: Optional[str] = None
     items_summary: Optional[dict] = None
     notes: Optional[str] = None
+
+
+class ShipmentSchema(ModelSchema):
+    sender: Optional[ContactSchema] = None
+    receiver: Optional[ContactSchema] = None
+    partner: Optional[ContactSchema] = None
+    recorded_by: Optional[UserSchema] = None
+
+    class Meta:
+        model = Shipment
+        fields = [
+            'id', 'sender_name', 'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
+            'date', 'shipment_status', 'payment_status', 'currency', 'conversion_rate', 'amount',
+            'invoice_number', 'number_of_carton', 'partner_name', 'item_received', 'items_shipped',
+            'items_recieved', 'weight_kg', 'tracking_id', 'value', 'note', 'created_at', 'updated_at'
+        ]
+
+
+class ShipmentCreateSchema(Schema):
+    sender_id: Optional[str] = None
+    sender_name: Optional[str] = None
+    receiver_id: Optional[str] = None
+    receiver_name: Optional[str] = None
+    receiver_phone: Optional[str] = None
+    receiver_email: Optional[str] = None
+    receiver_address: Optional[str] = None
+    date: Optional[str] = None
+    shipment_status: Optional[str] = 'PENDING'
+    payment_status: Optional[str] = 'UNPAID'
+    currency: Optional[str] = 'NGN'
+    conversion_rate: Optional[float] = 1.0000
+    amount: Optional[float] = 0.00
+    invoice_number: Optional[str] = None
+    number_of_carton: Optional[int] = 1
+    partner_id: Optional[str] = None
+    partner_name: Optional[str] = None
+    item_received: Optional[str] = None
+    items_shipped: Optional[str] = None
+    items_recieved: Optional[str] = None
+    weight_kg: Optional[float] = 0.00
+    tracking_id: Optional[str] = None
+    value: Optional[float] = 0.00
+    note: Optional[str] = None
+    recorded_by_id: Optional[str] = None
+
 
 

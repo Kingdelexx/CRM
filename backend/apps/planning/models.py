@@ -148,6 +148,13 @@ class Task(TimeStampedModel):
         blank=True,
         related_name='tasks'
     )
+    partner = models.ForeignKey(
+        'crm.Contact',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='partner_tasks'
+    )
 
     class Meta:
         ordering = ['due_date', 'created_at']

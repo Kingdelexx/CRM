@@ -38,6 +38,7 @@ export default function TasksWorkspace() {
   
   // New Task Dialog state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [newTaskForm, setNewTaskForm] = useState({
     title: '',
     description: '',
@@ -49,6 +50,7 @@ export default function TasksWorkspace() {
     task_team_id: '',
     deal_id: '',
     contact_id: '',
+    partner_id: '',
     company_id: ''
   })
 
@@ -69,8 +71,8 @@ export default function TasksWorkspace() {
       if (filterTeam) params.team_id = filterTeam
       if (filterOverdue !== null) params.overdue = filterOverdue
       
-      const response = await apiClient.get<{ items: Task[] }>('/tasks/', { params })
-      return response.data.items
+      const response = await apiClient.get<any>('/tasks/', { params })
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
     }
   })
 
@@ -78,7 +80,7 @@ export default function TasksWorkspace() {
     queryKey: ['workspace-users'],
     queryFn: async () => {
       const response = await apiClient.get<User[]>('/accounts/')
-      return response.data
+      return Array.isArray(response.data) ? response.data : (response.data as any)?.items || []
     }
   })
 
@@ -86,15 +88,31 @@ export default function TasksWorkspace() {
     queryKey: ['workspace-teams'],
     queryFn: async () => {
       const response = await apiClient.get<Team[]>('/accounts/teams')
-      return response.data
+      return Array.isArray(response.data) ? response.data : (response.data as any)?.items || []
     }
   })
 
   const { data: deals = [] } = useQuery<Deal[]>({
     queryKey: ['workspace-deals'],
     queryFn: async () => {
-      const response = await apiClient.get<{ items: Deal[] }>('/deals/', { params: { limit: 100 } })
-      return response.data.items
+      const response = await apiClient.get<any>('/deals/', { params: { limit: 100 } })
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
+    }
+  })
+
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ['workspace-contacts'],
+    queryFn: async () => {
+      const response = await apiClient.get<any>('/contacts/')
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
+    }
+  })
+
+  const { data: partners = [] } = useQuery<Contact[]>({
+    queryKey: ['workspace-partners'],
+    queryFn: async () => {
+      const response = await apiClient.get<any>('/contacts/partners')
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
     }
   })
 
@@ -112,13 +130,17 @@ export default function TasksWorkspace() {
   const createTaskMutation = useMutation({
     mutationFn: async (body: typeof newTaskForm) => {
       const formatted = {
-        ...body,
+        title: body.title,
+        description: body.description || null,
         start_date: body.start_date ? new Date(body.start_date).toISOString() : null,
         due_date: body.due_date ? new Date(body.due_date).toISOString() : null,
+        priority: body.priority,
+        status: body.status,
         assignee_id: body.assignee_id || null,
         task_team_id: body.task_team_id || null,
         deal_id: body.deal_id || null,
         contact_id: body.contact_id || null,
+        partner_id: body.partner_id || null,
         company_id: body.company_id || null
       }
       return apiClient.post('/tasks/', formatted)
@@ -126,6 +148,7 @@ export default function TasksWorkspace() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workspace-tasks'] })
       setIsCreateModalOpen(false)
+      setErrorMessage(null)
       setNewTaskForm({
         title: '',
         description: '',
@@ -137,8 +160,24 @@ export default function TasksWorkspace() {
         task_team_id: '',
         deal_id: '',
         contact_id: '',
+        partner_id: '',
         company_id: ''
       })
+    },
+    onError: (err: any) => {
+      console.error("Task creation failed:", err)
+      if (err.response?.data?.detail) {
+        const detail = err.response.data.detail
+        if (Array.isArray(detail)) {
+          setErrorMessage(detail.map((e: any) => `${e.loc?.join(' -> ')}: ${e.msg}`).join(', '))
+        } else if (typeof detail === 'string') {
+          setErrorMessage(detail)
+        } else {
+          setErrorMessage("Failed to create task.")
+        }
+      } else {
+        setErrorMessage("Failed to create task. Please check input data.")
+      }
     }
   })
 
@@ -762,79 +801,16 @@ export default function TasksWorkspace() {
               }}
               className="p-6 space-y-4 text-xs font-semibold text-zinc-400"
             >
-              <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase">Task Name / Title</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Task title details..."
-                  value={newTaskForm.title}
-                  onChange={(e) => setNewTaskForm(prev => ({ ...prev, title: e.target.value }))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650"
-                />
-              </div>
+              {errorMessage && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded text-xs">
+                  {errorMessage}
+                </div>
+              )}
 
-              <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase">Description</label>
-                <textarea
-                  placeholder="Task description details..."
-                  value={newTaskForm.description}
-                  onChange={(e) => setNewTaskForm(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 h-16 resize-none focus:outline-none focus:border-indigo-650"
-                />
-              </div>
-
+              {/* Task Owner (Staff) & Subject */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Start Date</label>
-                  <input
-                    type="date"
-                    value={newTaskForm.start_date}
-                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, start_date: e.target.value }))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Due Date</label>
-                  <input
-                    type="date"
-                    value={newTaskForm.due_date}
-                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, due_date: e.target.value }))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Priority</label>
-                  <select
-                    value={newTaskForm.priority}
-                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, priority: e.target.value as any }))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
-                  >
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Status</label>
-                  <select
-                    value={newTaskForm.status}
-                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, status: e.target.value as any }))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
-                  >
-                    <option value="TODO">To Do</option>
-                    <option value="IN_PROGRESS">In Progress</option>
-                    <option value="DONE">Completed</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Assignee Member</label>
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Task Owner (Staff)</label>
                   <select
                     value={newTaskForm.assignee_id}
                     onChange={(e) => setNewTaskForm(prev => ({ ...prev, assignee_id: e.target.value }))}
@@ -847,32 +823,100 @@ export default function TasksWorkspace() {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Assigned Team Unit</label>
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Subject *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Task subject..."
+                    value={newTaskForm.title}
+                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650"
+                  />
+                </div>
+              </div>
+
+              {/* Due Date & Contact */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Due Date</label>
+                  <input
+                    type="date"
+                    value={newTaskForm.due_date}
+                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, due_date: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Contact</label>
                   <select
-                    value={newTaskForm.task_team_id}
-                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, task_team_id: e.target.value }))}
+                    value={newTaskForm.contact_id}
+                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, contact_id: e.target.value }))}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
                   >
-                    <option value="">No Team</option>
-                    {teams.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
+                    <option value="">No Contact</option>
+                    {contacts.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.first_name} {c.last_name || ''} ({c.phone || c.email || 'No contact info'})
+                      </option>
                     ))}
                   </select>
                 </div>
               </div>
 
+              {/* Partner & Priority */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Partner</label>
+                  <select
+                    value={newTaskForm.partner_id}
+                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, partner_id: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
+                  >
+                    <option value="">No Partner</option>
+                    {partners.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : (p.company_name || 'Partner')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Priority</label>
+                  <select
+                    value={newTaskForm.priority}
+                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, priority: e.target.value as any }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Status */}
               <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase">Map to Active Deal Opportunity</label>
+                <label className="text-[10px] text-zinc-500 font-bold uppercase">Status</label>
                 <select
-                  value={newTaskForm.deal_id}
-                  onChange={(e) => setNewTaskForm(prev => ({ ...prev, deal_id: e.target.value }))}
+                  value={newTaskForm.status}
+                  onChange={(e) => setNewTaskForm(prev => ({ ...prev, status: e.target.value as any }))}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
                 >
-                  <option value="">None</option>
-                  {deals.map(d => (
-                    <option key={d.id} value={d.id}>{d.title} (${d.value.toLocaleString()})</option>
-                  ))}
+                  <option value="TODO">To Do</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="DONE">Completed</option>
                 </select>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase">Description</label>
+                <textarea
+                  placeholder="Task description details..."
+                  value={newTaskForm.description}
+                  onChange={(e) => setNewTaskForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 h-20 resize-none focus:outline-none focus:border-indigo-650"
+                />
               </div>
 
               <div className="flex gap-2.5 justify-end pt-3 text-xs">

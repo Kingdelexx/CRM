@@ -115,27 +115,30 @@ tasks_router = Router(auth=JWTAuth())
 @paginate(LimitOffsetPagination)
 def list_tasks(
     request,
-    deal_id: Optional[UUID] = None,
-    contact_id: Optional[UUID] = None,
-    company_id: Optional[UUID] = None,
-    assignee_id: Optional[UUID] = None,
-    team_id: Optional[UUID] = None,
+    deal_id: Optional[str] = None,
+    contact_id: Optional[str] = None,
+    partner_id: Optional[str] = None,
+    company_id: Optional[str] = None,
+    assignee_id: Optional[str] = None,
+    team_id: Optional[str] = None,
     status: Optional[str] = None,
     overdue: Optional[bool] = None
 ):
     from django.utils import timezone
-    qs = Task.objects.filter(organization=request.user.organization).select_related('assignee', 'task_team', 'deal', 'contact', 'company')
-    if deal_id:
+    qs = Task.objects.filter(organization=request.user.organization).select_related('assignee', 'task_team', 'deal', 'contact', 'partner', 'company')
+    if deal_id and deal_id.strip():
         qs = qs.filter(deal_id=deal_id)
-    if contact_id:
+    if contact_id and contact_id.strip():
         qs = qs.filter(contact_id=contact_id)
-    if company_id:
+    if partner_id and partner_id.strip():
+        qs = qs.filter(partner_id=partner_id)
+    if company_id and company_id.strip():
         qs = qs.filter(company_id=company_id)
-    if assignee_id:
+    if assignee_id and assignee_id.strip():
         qs = qs.filter(assignee_id=assignee_id)
-    if team_id:
+    if team_id and team_id.strip():
         qs = qs.filter(task_team_id=team_id)
-    if status:
+    if status and status.strip():
         qs = qs.filter(status=status)
     if overdue is not None:
         if overdue:
@@ -146,50 +149,64 @@ def list_tasks(
 
 @tasks_router.get("/{id}", response=TaskSchema)
 def get_task(request, id: UUID):
-    task = Task.objects.filter(id=id, organization=request.user.organization).select_related('assignee', 'task_team', 'deal', 'contact', 'company').first()
+    task = Task.objects.filter(id=id, organization=request.user.organization).select_related('assignee', 'task_team', 'deal', 'contact', 'partner', 'company').first()
     if not task:
         raise HttpError(404, "Task not found.")
     return task
 
 @tasks_router.post("", response={201: TaskSchema})
 def create_task(request, data: TaskCreateSchema):
-    payload = data.dict()
-    assignee_id = payload.pop('assignee_id', None)
-    task_team_id = payload.pop('task_team_id', None)
-    deal_id = payload.pop('deal_id', None)
-    contact_id = payload.pop('contact_id', None)
-    company_id = payload.pop('company_id', None)
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    assignee_id = parse_uuid(payload.pop('assignee_id', None))
+    task_team_id = parse_uuid(payload.pop('task_team_id', None))
+    deal_id = parse_uuid(payload.pop('deal_id', None))
+    contact_id = parse_uuid(payload.pop('contact_id', None))
+    partner_id = parse_uuid(payload.pop('partner_id', None))
+    company_id = parse_uuid(payload.pop('company_id', None))
+
+    subject = payload.pop('subject', None)
+    title = payload.get('title') or subject or 'Untitled Task'
+    payload['title'] = title
+
+    start_date = payload.pop('start_date', None)
+    due_date = payload.pop('due_date', None)
+
+    payload['start_date'] = str(start_date).strip() if start_date and str(start_date).strip() else None
+    payload['due_date'] = str(due_date).strip() if due_date and str(due_date).strip() else None
 
     assignee = None
     if assignee_id:
         assignee = User.objects.filter(id=assignee_id, organization=request.user.organization).first()
-        if not assignee:
-            raise HttpError(400, "Invalid Assignee ID.")
 
     task_team = None
     if task_team_id:
         from apps.accounts.models import Team
         task_team = Team.objects.filter(id=task_team_id, organization=request.user.organization).first()
-        if not task_team:
-            raise HttpError(400, "Invalid Team ID.")
 
     deal = None
     if deal_id:
         deal = Deal.objects.filter(id=deal_id, organization=request.user.organization).first()
-        if not deal:
-            raise HttpError(400, "Invalid Deal ID.")
 
     contact = None
     if contact_id:
         contact = Contact.objects.filter(id=contact_id, organization=request.user.organization).first()
-        if not contact:
-            raise HttpError(400, "Invalid Contact ID.")
+
+    partner = None
+    if partner_id:
+        partner = Contact.objects.filter(id=partner_id, organization=request.user.organization).first()
 
     company = None
     if company_id:
         company = Company.objects.filter(id=company_id, organization=request.user.organization).first()
-        if not company:
-            raise HttpError(400, "Invalid Company ID.")
 
     # Filter out None values for default fields
     for field in ['attachments', 'checklist', 'comments']:
@@ -202,6 +219,7 @@ def create_task(request, data: TaskCreateSchema):
         task_team=task_team,
         deal=deal,
         contact=contact,
+        partner=partner,
         company=company,
         **payload
     )
