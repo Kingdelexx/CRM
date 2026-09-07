@@ -173,10 +173,12 @@ export default function TasksWorkspace() {
         } else if (typeof detail === 'string') {
           setErrorMessage(detail)
         } else {
-          setErrorMessage("Failed to create task.")
+          setErrorMessage(JSON.stringify(detail))
         }
+      } else if (err.response?.data?.message) {
+        setErrorMessage(err.response.data.message)
       } else {
-        setErrorMessage("Failed to create task. Please check input data.")
+        setErrorMessage(err.message || "Failed to create task. Please check input data.")
       }
     }
   })

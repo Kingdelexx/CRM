@@ -4,65 +4,65 @@
 
 @layer base {
   :root {
-    --background: 248 250 252; /* Canvas / Background #F8FAFC */
-    --foreground: 26 26 26; /* Primary Body Text #1A1A1A */
+    --background: 212 220 230; /* dimmed slate tone */
+    --foreground: 15 23 42; /* slate-900 */
 
-    --card: 255 255 255;
-    --card-foreground: 26 26 26;
+    --card: 255 255 255; /* pure white */
+    --card-foreground: 15 23 42;
 
     --popover: 255 255 255;
-    --popover-foreground: 26 26 26;
+    --popover-foreground: 15 23 42;
 
-    --primary: 9 116 176; /* Primary Brand / Action #0974B0 */
+    --primary: 14 165 233; /* sky-500 */
     --primary-foreground: 255 255 255;
 
-    --secondary: 226 232 240; /* Deep Header / Sidebar #E2E8F0 */
-    --secondary-foreground: 26 26 26;
+    --secondary: 203 213 225; /* slate-300 */
+    --secondary-foreground: 15 23 42;
 
-    --muted: 226 232 240;
-    --muted-foreground: 100 116 139; /* Muted Text / Labels #64748B */
+    --muted: 203 213 225;
+    --muted-foreground: 71 85 105; /* slate-600 */
 
-    --accent: 226 232 240;
-    --accent-foreground: 26 26 26;
+    --accent: 203 213 225;
+    --accent-foreground: 15 23 42;
 
     --destructive: 239 68 68;
     --destructive-foreground: 255 255 255;
 
-    --border: 203 213 225; /* #CBD5E1 */
-    --input: 203 213 225;
-    --ring: 9 116 176;
+    --border: 180 195 212; /* slate-300+ */
+    --input: 180 195 212;
+    --ring: 14 165 233;
 
     --radius: 0.6rem;
   }
 
   .dark {
-    --background: 248 250 252;
-    --foreground: 26 26 26;
+    --background: 212 220 230;
+    --foreground: 15 23 42;
 
     --card: 255 255 255;
-    --card-foreground: 26 26 26;
+    --card-foreground: 15 23 42;
 
     --popover: 255 255 255;
-    --popover-foreground: 26 26 26;
+    --popover-foreground: 15 23 42;
 
-    --primary: 9 116 176;
+    --primary: 14 165 233;
     --primary-foreground: 255 255 255;
 
-    --secondary: 226 232 240;
-    --secondary-foreground: 26 26 26;
+    --secondary: 241 245 249;
+    --secondary-foreground: 15 23 42;
 
-    --muted: 226 232 240;
-    --muted-foreground: 100 116 139;
+    --muted: 241 245 249;
+    --muted-foreground: 71 85 105;
 
-    --accent: 226 232 240;
-    --accent-foreground: 26 26 26;
+    --accent: 241 245 249;
+    --accent-foreground: 15 23 42;
 
     --destructive: 239 68 68;
     --destructive-foreground: 255 255 255;
 
     --border: 226 232 240;
     --input: 226 232 240;
-    --ring: 9 116 176;
+    --ring: 14 165 233;
   }
 }
 

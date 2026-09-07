@@ -29,6 +29,7 @@ from typing import List
 
 class TaskSchema(ModelSchema):
     assignee: Optional[UserSchema] = None
+    created_by: Optional[UserSchema] = None
     task_team: Optional[TeamSchema] = None
     deal: Optional[DealSchema] = None
     contact: Optional[ContactSchema] = None

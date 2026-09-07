@@ -2,6 +2,7 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 from django.db.models import Q
+from django.utils import timezone
 from ninja import Router
 from ninja.errors import HttpError
 from ninja.pagination import paginate, LimitOffsetPagination
@@ -125,7 +126,12 @@ def list_tasks(
     overdue: Optional[bool] = None
 ):
     from django.utils import timezone
-    qs = Task.objects.filter(organization=request.user.organization).select_related('assignee', 'task_team', 'deal', 'contact', 'partner', 'company')
+    qs = Task.objects.filter(organization=request.user.organization).select_related('assignee', 'created_by', 'task_team', 'deal', 'contact', 'partner', 'company')
+    
+    # Non-admin staff users can only see tasks assigned to them or created by them (admin-created tasks are only visible to the assignee staff member)
+    if request.user.role != User.ADMIN:
+        qs = qs.filter(Q(assignee=request.user) | Q(created_by=request.user))
+
     if deal_id and deal_id.strip():
         qs = qs.filter(deal_id=deal_id)
     if contact_id and contact_id.strip():
@@ -149,7 +155,10 @@ def list_tasks(
 
 @tasks_router.get("/{id}", response=TaskSchema)
 def get_task(request, id: UUID):
-    task = Task.objects.filter(id=id, organization=request.user.organization).select_related('assignee', 'task_team', 'deal', 'contact', 'partner', 'company').first()
+    qs = Task.objects.filter(id=id, organization=request.user.organization).select_related('assignee', 'created_by', 'task_team', 'deal', 'contact', 'partner', 'company')
+    if request.user.role != User.ADMIN:
+        qs = qs.filter(Q(assignee=request.user) | Q(created_by=request.user))
+    task = qs.first()
     if not task:
         raise HttpError(404, "Task not found.")
     return task
@@ -216,6 +225,7 @@ def create_task(request, data: TaskCreateSchema):
     task = Task.objects.create(
         organization=request.user.organization,
         assignee=assignee,
+        created_by=request.user,
         task_team=task_team,
         deal=deal,
         contact=contact,
@@ -230,6 +240,7 @@ def create_task(request, data: TaskCreateSchema):
         performed_by=request.user,
         type='NOTE',
         content=f"Created Task '{task.title}'",
+        activity_date=timezone.now(),
         deal=deal,
         contact=contact,
         company=company
@@ -309,6 +320,7 @@ def update_task(request, id: UUID, data: TaskCreateSchema):
             performed_by=request.user,
             type='NOTE',
             content=f"Updated Task '{task.title}' status from {old_status} to {new_status}",
+            activity_date=timezone.now(),
             deal=task.deal,
             contact=task.contact,
             company=task.company

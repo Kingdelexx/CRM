@@ -100,6 +100,13 @@ class Task(TimeStampedModel):
         blank=True, 
         related_name='tasks'
     )
+    created_by = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='created_tasks'
+    )
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     start_date = models.DateTimeField(null=True, blank=True)
