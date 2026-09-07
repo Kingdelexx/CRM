@@ -875,7 +875,7 @@ export default function TasksWorkspace() {
                     <option value="">No Partner</option>
                     {partners.map(p => (
                       <option key={p.id} value={p.id}>
-                        {p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : (p.company_name || 'Partner')}
+                        {p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : (p.company?.name || 'Partner')}
                       </option>
                     ))}
                   </select>
