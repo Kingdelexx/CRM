@@ -70,6 +70,25 @@ type DashboardView =
   | 'emails'
   | 'invoices'
 
+const sidebarNavItems: { id: DashboardView; label: string; icon: React.ReactNode }[] = [
+  { id: 'summary', label: 'Summary Analytics', icon: <TrendingUp className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
+  { id: 'leads', label: 'Leads', icon: <Target className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
+  { id: 'partners', label: 'Partners', icon: <Handshake className="h-4.5 w-4.5 flex-shrink-0 text-emerald-600" /> },
+  { id: 'shipments', label: 'Shipments', icon: <Truck className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
+  { id: 'escalations', label: 'Escalations', icon: <ShieldAlert className="h-4.5 w-4.5 flex-shrink-0 text-red-600" /> },
+  { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="h-4.5 w-4.5 flex-shrink-0 text-amber-600" /> },
+  { id: 'pipeline', label: 'Pipeline Dashboard', icon: <Layers className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
+  { id: 'contacts', label: 'Contacts', icon: <Users className="h-4.5 w-4.5 flex-shrink-0 text-blue-600" /> },
+  { id: 'projects', label: 'Projects', icon: <FolderKanban className="h-4.5 w-4.5 flex-shrink-0 text-teal-600" /> },
+  { id: 'invoices', label: 'Invoices & Receipts', icon: <ReceiptIcon className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
+  { id: 'calendar', label: 'CRM Calendar', icon: <CalendarIcon className="h-4.5 w-4.5 flex-shrink-0 text-purple-600" /> },
+  { id: 'emails', label: 'Emails Sync', icon: <Mail className="h-4.5 w-4.5 flex-shrink-0 text-rose-600" /> },
+  { id: 'whatsapp', label: 'WhatsApp Inbox', icon: <MessageSquare className="h-4.5 w-4.5 flex-shrink-0 text-emerald-600" /> },
+  { id: 'automations', label: 'Automation Rules', icon: <Zap className="h-4.5 w-4.5 flex-shrink-0 text-amber-600" /> },
+  { id: 'approvals', label: 'Signoff Compliance', icon: <FileCheck className="h-4.5 w-4.5 flex-shrink-0 text-emerald-600" /> },
+  { id: 'reports', label: 'Reports Visualizer', icon: <BarChart3 className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
+]
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -228,7 +247,7 @@ export default function Dashboard() {
       {/* Sidebar - Desktop & Mobile Off-canvas Drawer */}
       <aside
         className={`
-          fixed md:relative inset-y-0 left-0 z-50 bg-zinc-950 border-r border-zinc-900 flex flex-col justify-between p-4 transition-all duration-300 ease-in-out flex-shrink-0
+          fixed md:relative inset-y-0 left-0 z-50 bg-slate-50 border-r border-slate-200 flex flex-col justify-between p-4 transition-all duration-300 ease-in-out flex-shrink-0
           ${isSidebarCollapsed ? 'md:w-18' : 'md:w-64'}
           ${isMobileSidebarOpen ? 'translate-x-0 w-72' : '-translate-x-full md:translate-x-0'}
         `}
@@ -243,7 +262,7 @@ export default function Dashboard() {
                 className="h-8 w-auto object-contain rounded bg-white px-1.5 py-0.5 shadow-md flex-shrink-0" 
               />
               {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-                <span className="font-bold text-zinc-100 text-sm tracking-tight whitespace-nowrap">
+                <span className="font-bold text-[#1A202C] text-sm tracking-tight whitespace-nowrap" style={{ color: '#1A202C' }}>
                   Mintana CRM
                 </span>
               )}
@@ -252,7 +271,7 @@ export default function Dashboard() {
             {/* Desktop Collapse Toggle */}
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="hidden md:block p-1 rounded-md hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 text-zinc-405 hover:text-white transition-colors cursor-pointer"
+              className="hidden md:block p-1 rounded-md hover:bg-slate-200 border border-slate-200 text-[#1A202C] transition-colors cursor-pointer"
             >
               {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
             </button>
@@ -260,7 +279,7 @@ export default function Dashboard() {
             {/* Mobile Close Drawer Button */}
             <button
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="md:hidden p-1 rounded-md hover:bg-zinc-900 border border-zinc-900 text-zinc-400 hover:text-white transition-colors"
+              className="md:hidden p-1 rounded-md hover:bg-slate-200 border border-slate-200 text-[#1A202C] transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -269,286 +288,74 @@ export default function Dashboard() {
           {/* Navigation Links */}
           <nav className="space-y-1">
             {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-              <span className="px-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">
+              <span className="px-2 text-[10px] font-bold uppercase tracking-widest block mb-2" style={{ color: '#1A202C' }}>
                 Main Menu
               </span>
             )}
             
-            <button
-              onClick={() => handleNavClick('summary')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'summary'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Summary Dashboard"
-            >
-              <TrendingUp className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Summary Analytics</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('leads')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'leads'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Leads Management"
-            >
-              <Target className="h-4.5 w-4.5 flex-shrink-0 text-sky-400" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Leads</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('partners')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'partners'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Partners Management"
-            >
-              <Handshake className="h-4.5 w-4.5 flex-shrink-0 text-emerald-400" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Partners</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('shipments')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'shipments'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Shipments Management"
-            >
-              <Truck className="h-4.5 w-4.5 flex-shrink-0 text-sky-400" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Shipments</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('escalations')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'escalations'
-                  ? 'bg-red-600/10 text-red-400 border border-red-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Shipment Escalations & Complaints"
-            >
-              <ShieldAlert className="h-4.5 w-4.5 flex-shrink-0 text-red-400" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Escalations</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('tasks')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'tasks'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Tasks Management"
-            >
-              <CheckSquare className="h-4.5 w-4.5 flex-shrink-0 text-amber-400" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Tasks</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('pipeline')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'pipeline'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Deals Pipeline Board"
-            >
-              <Layers className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Pipeline Dashboard</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('contacts')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'contacts'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Contacts Directory"
-            >
-              <Users className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Contacts</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('projects')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'projects'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Project Modules"
-            >
-              <FolderKanban className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Projects</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('invoices')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'invoices'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Invoices & Receipts"
-            >
-              <ReceiptIcon className="h-4.5 w-4.5 flex-shrink-0 text-sky-400" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Invoices & Receipts</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('calendar')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'calendar'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Shared Calendar"
-            >
-              <CalendarIcon className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>CRM Calendar</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('emails')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'emails'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Email Sync Lines"
-            >
-              <Mail className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Emails Sync</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('whatsapp')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'whatsapp'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-655/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="WhatsApp Channel"
-            >
-              <MessageSquare className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>WhatsApp Inbox</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('automations')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'automations'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-655/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Automations Engine"
-            >
-              <Zap className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Automation Rules</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('approvals')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'approvals'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Approvals Workflow"
-            >
-              <FileCheck className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Signoff Compliance</span>}
-            </button>
-
-            <button
-              onClick={() => handleNavClick('reports')}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-              } rounded-lg text-sm font-medium transition-all ${
-                currentView === 'reports'
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-655/20'
-                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
-              } cursor-pointer`}
-              title="Visual Reports"
-            >
-              <BarChart3 className="h-4.5 w-4.5 flex-shrink-0" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Reports Visualizer</span>}
-            </button>
+            {sidebarNavItems.map((item) => {
+              const isActive = currentView === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item.id)}
+                  className={`w-full flex items-center ${
+                    isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
+                  } rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-indigo-100/70 text-indigo-700 font-bold border border-indigo-200/80 shadow-xs'
+                      : 'hover:bg-slate-200/60 border border-transparent'
+                  } cursor-pointer`}
+                  title={item.label}
+                >
+                  {item.icon}
+                  {(!isSidebarCollapsed || isMobileSidebarOpen) && (
+                    <span 
+                      style={{ color: isActive ? undefined : '#1A202C' }} 
+                      className={isActive ? 'text-indigo-700 font-bold' : 'font-semibold text-[#1A202C]'}
+                    >
+                      {item.label}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </nav>
         </div>
 
         {/* User Identity - Collapsible Dropdown Trigger inside Footer */}
-        <div className="border-t border-zinc-900 pt-4 relative" ref={dropdownRef}>
+        <div className="border-t border-slate-200 pt-4 relative" ref={dropdownRef}>
           <button
             onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-            className="w-full flex items-center justify-between hover:bg-zinc-900/60 p-1.5 rounded-lg transition-colors cursor-pointer text-left focus:outline-none"
+            className="w-full flex items-center justify-between hover:bg-slate-200/60 p-1.5 rounded-lg transition-colors cursor-pointer text-left focus:outline-none"
           >
             <div className="flex items-center gap-2 min-w-0">
-              <div className="h-7 w-7 rounded-full bg-indigo-600/20 border border-indigo-600/35 flex items-center justify-center text-xs font-bold text-indigo-400 uppercase flex-shrink-0">
+              <div className="h-7 w-7 rounded-full bg-indigo-600/20 border border-indigo-600/35 flex items-center justify-center text-xs font-bold text-indigo-600 uppercase flex-shrink-0">
                 {userInitials}
               </div>
               {(!isSidebarCollapsed || isMobileSidebarOpen) && (
                 <div className="min-w-0 flex flex-col">
-                  <span className="text-xs font-semibold text-zinc-300 truncate">
+                  <span className="text-xs font-bold text-[#1A202C] truncate" style={{ color: '#1A202C' }}>
                     {currentUser?.first_name} {currentUser?.last_name}
                   </span>
-                  <span className="text-[10px] text-zinc-400 truncate font-semibold uppercase">
+                  <span className="text-[10px] text-[#1A202C] opacity-80 truncate font-semibold uppercase" style={{ color: '#1A202C' }}>
                     {currentUser?.role === 'ADMIN' ? 'Administrator' : currentUser?.role === 'MANAGER' ? 'Manager' : 'Staff Member'}
                   </span>
                 </div>
               )}
             </div>
             {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-              <ChevronRight className="h-3 w-3 text-zinc-500 hover:text-zinc-300 transition-colors" />
+              <ChevronRight className="h-3 w-3 text-[#1A202C] transition-colors" />
             )}
           </button>
 
           {/* User Popover Profile Dropdown menu */}
           {isProfileDropdownOpen && (
-            <div className={`absolute bottom-12 ${isSidebarCollapsed && !isMobileSidebarOpen ? 'left-14' : 'left-0 right-0'} z-50 bg-zinc-950 border border-zinc-900 rounded-lg p-2.5 shadow-xl w-56 flex flex-col space-y-1.5`}>
-              <div className="px-2 py-1.5 border-b border-zinc-900">
-                <span className="text-[10px] font-bold text-zinc-505 uppercase tracking-wider block">Currently Logged In</span>
-                <span className="text-xs font-semibold text-zinc-200">{currentUser?.email}</span>
-                <span className="text-[9px] font-medium text-indigo-400 block mt-0.5 uppercase tracking-wide">
+            <div className={`absolute bottom-12 ${isSidebarCollapsed && !isMobileSidebarOpen ? 'left-14' : 'left-0 right-0'} z-50 bg-white border border-slate-200 rounded-lg p-2.5 shadow-xl w-56 flex flex-col space-y-1.5 text-[#1A202C]`}>
+              <div className="px-2 py-1.5 border-b border-slate-200">
+                <span className="text-[10px] font-bold text-[#1A202C] opacity-70 uppercase tracking-wider block" style={{ color: '#1A202C' }}>Currently Logged In</span>
+                <span className="text-xs font-semibold text-[#1A202C]" style={{ color: '#1A202C' }}>{currentUser?.email}</span>
+                <span className="text-[9px] font-medium text-indigo-600 block mt-0.5 uppercase tracking-wide">
                   Tenant: {currentUser?.organization?.name || 'Local'}
                 </span>
               </div>
@@ -559,16 +366,17 @@ export default function Dashboard() {
                     handleNavClick('settings');
                     setIsProfileDropdownOpen(false);
                   }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-zinc-400 hover:text-white rounded hover:bg-zinc-900 cursor-pointer text-left focus:outline-none"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-[#1A202C] hover:bg-slate-100 rounded cursor-pointer text-left focus:outline-none"
+                  style={{ color: '#1A202C' }}
                 >
-                  <Settings className="h-3.5 w-3.5" />
+                  <Settings className="h-3.5 w-3.5 text-[#1A202C]" />
                   <span>Org Settings</span>
                 </button>
               </div>
 
               <button
                 onClick={handleLogout}
-                className="w-full border-t border-zinc-900 pt-1.5 mt-1.5 flex items-center gap-2 px-2 py-1.5 text-xs text-red-400 hover:text-red-300 rounded hover:bg-red-500/10 transition-colors cursor-pointer text-left font-medium focus:outline-none"
+                className="w-full border-t border-slate-200 pt-1.5 mt-1.5 flex items-center gap-2 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer text-left font-medium focus:outline-none"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 <span>Log Out Session</span>
