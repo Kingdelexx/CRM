@@ -6,7 +6,8 @@ from .models import (
     Company, Stage, Contact, Deal, Project, Pipeline, CustomFieldDefinition,
     Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
     AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest,
-    Document, CustomModuleRecord, Invoice, Receipt, Shipment, ShipmentEscalation
+    Document, CustomModuleRecord, Invoice, Receipt, Shipment, ShipmentEscalation,
+    CSRReport
 )
 from apps.accounts.schemas import UserSchema, OrganizationSchema
 
@@ -437,6 +438,61 @@ class ShipmentEscalationCreateSchema(Schema):
     escalation_to_id: Optional[str] = None
     resolution: Optional[str] = None
     resolution_date: Optional[str] = None
+
+
+class CSRReportSchema(ModelSchema):
+    staff: Optional[UserSchema] = None
+    reported_to: Optional[UserSchema] = None
+
+    class Meta:
+        model = CSRReport
+        fields = [
+            'id', 'date', 'report_type',
+            'new_enquiries', 'packages_expected', 'quotation_sent', 'shipment_booked',
+            'outstanding_follow_up', 'customer_complaint_resolved', 'returning_customers',
+            'packages_received', 'customer_converted_paid', 'follow_up_completed',
+            'customer_complaint_received', 'customer_escalated_to_manager',
+            'shipment_delays_and_reason', 'biggest_challenge_week', 'support_needed',
+            'biggest_achievement_week', 'suggestion_for_improvement',
+            'social_media_follows_encouraged', 'video_testimonial_received',
+            'biggest_challenge_month', 'biggest_achievement_month',
+            'created_at', 'updated_at'
+        ]
+
+
+class CSRReportCreateSchema(Schema):
+    date: Optional[str] = None
+    report_type: Optional[str] = 'DAILY'
+    staff_id: Optional[str] = None
+    reported_to_id: Optional[str] = None
+
+    # Daily Report Metrics
+    new_enquiries: Optional[int] = 0
+    packages_expected: Optional[int] = 0
+    quotation_sent: Optional[int] = 0
+    shipment_booked: Optional[int] = 0
+    outstanding_follow_up: Optional[int] = 0
+    customer_complaint_resolved: Optional[int] = 0
+    returning_customers: Optional[int] = 0
+    packages_received: Optional[int] = 0
+    customer_converted_paid: Optional[int] = 0
+    follow_up_completed: Optional[int] = 0
+    customer_complaint_received: Optional[int] = 0
+    customer_escalated_to_manager: Optional[int] = 0
+
+    # Weekly Report Qualitative Details
+    shipment_delays_and_reason: Optional[str] = None
+    biggest_challenge_week: Optional[str] = None
+    support_needed: Optional[str] = None
+    biggest_achievement_week: Optional[str] = None
+    suggestion_for_improvement: Optional[str] = None
+
+    # Monthly Report Specific & Qualitative Details
+    social_media_follows_encouraged: Optional[int] = 0
+    video_testimonial_received: Optional[int] = 0
+    biggest_challenge_month: Optional[str] = None
+    biggest_achievement_month: Optional[str] = None
+
 
 
 

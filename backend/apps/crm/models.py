@@ -876,6 +876,67 @@ class ShipmentEscalation(TimeStampedModel):
         return f"Escalation for {self.customer_name or 'Customer'} - Status: {self.status}"
 
 
+class CSRReport(TimeStampedModel):
+    REPORT_TYPE_CHOICES = [
+        ('DAILY', 'Daily Report'),
+        ('WEEKLY', 'Weekly Report'),
+        ('MONTHLY', 'Monthly Report'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='csr_reports'
+    )
+    staff = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='csr_reports_submitted'
+    )
+    reported_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='csr_reports_received'
+    )
+    date = models.DateField(null=True, blank=True)
+    report_type = models.CharField(max_length=50, choices=REPORT_TYPE_CHOICES, default='DAILY', db_index=True)
+
+    # Daily Report Metrics
+    new_enquiries = models.IntegerField(default=0)
+    packages_expected = models.IntegerField(default=0)
+    quotation_sent = models.IntegerField(default=0)
+    shipment_booked = models.IntegerField(default=0)
+    outstanding_follow_up = models.IntegerField(default=0)
+    customer_complaint_resolved = models.IntegerField(default=0)
+    returning_customers = models.IntegerField(default=0)
+    packages_received = models.IntegerField(default=0)
+    customer_converted_paid = models.IntegerField(default=0)
+    follow_up_completed = models.IntegerField(default=0)
+    customer_complaint_received = models.IntegerField(default=0)
+    customer_escalated_to_manager = models.IntegerField(default=0)
+
+    # Weekly Report Qualitative Details
+    shipment_delays_and_reason = models.TextField(null=True, blank=True)
+    biggest_challenge_week = models.TextField(null=True, blank=True)
+    support_needed = models.TextField(null=True, blank=True)
+    biggest_achievement_week = models.TextField(null=True, blank=True)
+    suggestion_for_improvement = models.TextField(null=True, blank=True)
+
+    # Monthly Report Specific & Qualitative Details
+    social_media_follows_encouraged = models.IntegerField(default=0)
+    video_testimonial_received = models.IntegerField(default=0)
+    biggest_challenge_month = models.TextField(null=True, blank=True)
+    biggest_achievement_month = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.get_report_type_display()} - {self.staff.first_name if self.staff else 'Staff'} ({self.date})"
+
+
+
 
 
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import type { Shipment, Contact, User, ShipmentEscalation, EscalationType, EscalationPriority, EscalationStatus } from '@/types/crm'
@@ -39,11 +39,21 @@ import {
   Check
 } from 'lucide-react'
 
-export default function ShipmentWorkspace() {
+interface ShipmentWorkspaceProps {
+  initialTab?: 'shipments' | 'escalations';
+}
+
+export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps = {}) {
   const queryClient = useQueryClient()
   
   // Primary Workspace Tab
-  const [workspaceTab, setWorkspaceTab] = useState<'shipments' | 'escalations'>('shipments')
+  const [workspaceTab, setWorkspaceTab] = useState<'shipments' | 'escalations'>(initialTab || 'shipments')
+
+  useEffect(() => {
+    if (initialTab) {
+      setWorkspaceTab(initialTab)
+    }
+  }, [initialTab])
 
   // Search & Filters for Shipments
   const [searchTerm, setSearchTerm] = useState('')

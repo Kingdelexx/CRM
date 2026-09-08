@@ -477,6 +477,59 @@ export interface ShipmentEscalation extends BaseEntity {
   created_by?: User;
 }
 
+export type CSRReportType = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+export interface CSRReport extends BaseEntity {
+  date?: string;
+  report_type: CSRReportType;
+  staff?: User;
+  reported_to?: User;
+
+  // Daily Report Metrics
+  new_enquiries: number;
+  packages_expected: number;
+  quotation_sent: number;
+  shipment_booked: number;
+  outstanding_follow_up: number;
+  customer_complaint_resolved: number;
+  returning_customers: number;
+  packages_received: number;
+  customer_converted_paid: number;
+  follow_up_completed: number;
+  customer_complaint_received: number;
+  customer_escalated_to_manager: number;
+
+  // Weekly Report Qualitative Details
+  shipment_delays_and_reason?: string;
+  biggest_challenge_week?: string;
+  support_needed?: string;
+  biggest_achievement_week?: string;
+  suggestion_for_improvement?: string;
+
+  // Monthly Report Specific & Qualitative Details
+  social_media_follows_encouraged: number;
+  video_testimonial_received: number;
+  biggest_challenge_month?: string;
+  biggest_achievement_month?: string;
+}
+
+export interface CSRAggregationResult {
+  new_enquiries: number;
+  packages_expected: number;
+  quotation_sent: number;
+  shipment_booked: number;
+  outstanding_follow_up: number;
+  customer_complaint_resolved: number;
+  returning_customers: number;
+  packages_received: number;
+  customer_converted_paid: number;
+  follow_up_completed: number;
+  customer_complaint_received: number;
+  customer_escalated_to_manager: number;
+  count_daily_reports: number;
+}
+
+
 
 
 

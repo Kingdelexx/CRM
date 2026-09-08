@@ -16,6 +16,8 @@ import {
   Table as TableIcon
 } from 'lucide-react'
 
+import { CSRReportsWorkspace } from '@/components/CSRReportsWorkspace'
+
 interface ReportData {
   rows: any[]
   summary: Record<string, any>
@@ -23,6 +25,8 @@ interface ReportData {
 }
 
 export default function ReportsWorkspace() {
+  const [activeTab, setActiveTab] = useState<'CUSTOM' | 'CSR'>('CSR')
+
   const [reports, setReports] = useState<Report[]>([])
   const [selectedReport, setSelectedReport] = useState<Report | null>(null)
   const [reportData, setReportData] = useState<ReportData | null>(null)
@@ -236,27 +240,61 @@ export default function ReportsWorkspace() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-900/40 p-6 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2.5 text-zinc-150">
-            <BarChart3 className="text-indigo-400 h-5.5 w-5.5" />
-            Decision Intelligence & Reports
-          </h1>
-          <p className="text-xs text-zinc-450 mt-1">
-            Build specialized workspace analytics, inspect performance indexes, and download database stats.
-          </p>
-        </div>
+      {/* Workspace Navigation Tabs */}
+      <div className="flex border-b border-zinc-800 space-x-6">
         <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/15 cursor-pointer transform hover:scale-[1.02] transition-all"
+          onClick={() => setActiveTab('CSR')}
+          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'CSR'
+              ? 'border-indigo-500 text-indigo-400 font-bold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-200'
+          }`}
         >
-          <Plus className="h-4 w-4" />
-          Create Custom Report
+          <FileText className="w-4 h-4" />
+          CSR Performance Reports
+        </button>
+
+        <button
+          onClick={() => setActiveTab('CUSTOM')}
+          className={`pb-3 text-sm font-semibold flex items-center gap-2 border-b-2 transition-all cursor-pointer ${
+            activeTab === 'CUSTOM'
+              ? 'border-indigo-500 text-indigo-400 font-bold'
+              : 'border-transparent text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Analytics & Custom Reports
         </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      {activeTab === 'CSR' ? (
+        <CSRReportsWorkspace />
+      ) : (
+        <>
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-zinc-900/40 p-6 rounded-2xl border border-zinc-800/80 backdrop-blur-md">
+            <div>
+              <h1 className="text-xl font-bold flex items-center gap-2.5 text-zinc-150">
+                <BarChart3 className="text-indigo-400 h-5.5 w-5.5" />
+                Decision Intelligence & Reports
+              </h1>
+              <p className="text-xs text-zinc-450 mt-1">
+                Build specialized workspace analytics, inspect performance indexes, and download database stats.
+              </p>
+            </div>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/15 cursor-pointer transform hover:scale-[1.02] transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              Create Custom Report
+            </button>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'CUSTOM' && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Left Side Roster */}
         <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-800/80 h-fit space-y-4">
           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block px-1">Available Templates</span>
@@ -399,6 +437,7 @@ export default function ReportsWorkspace() {
           )}
         </div>
       </div>
+      )}
 
       {/* Creation Modal dialog */}
       {isModalOpen && (

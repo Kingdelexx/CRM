@@ -4,7 +4,7 @@ import json
 from django.utils import timezone
 from datetime import date, datetime, timedelta
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 from ninja import Router
 from ninja.errors import HttpError
 from ninja.pagination import paginate, LimitOffsetPagination
@@ -15,7 +15,8 @@ from apps.planning.models import Task, Activity
 from .models import (
     Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
     Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt, Shipment, ShipmentEscalation
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt, Shipment, ShipmentEscalation,
+    CSRReport
 )
 from .schemas import (
     CompanySchema, CompanyCreateSchema,
@@ -42,7 +43,8 @@ from .schemas import (
     InvoiceSchema, InvoiceCreateSchema,
     ReceiptSchema, ReceiptCreateSchema,
     ShipmentSchema, ShipmentCreateSchema,
-    ShipmentEscalationSchema, ShipmentEscalationCreateSchema
+    ShipmentEscalationSchema, ShipmentEscalationCreateSchema,
+    CSRReportSchema, CSRReportCreateSchema
 )
 
 # Route instances initialized with JWT Auth
@@ -67,6 +69,7 @@ invoices_router = Router(auth=JWTAuth())
 receipts_router = Router(auth=JWTAuth())
 shipments_router = Router(auth=JWTAuth())
 shipment_escalations_router = Router(auth=JWTAuth())
+csr_reports_router = Router(auth=JWTAuth())
 search_router = Router(auth=JWTAuth())
 
 
@@ -2161,6 +2164,181 @@ def delete_shipment_escalation(request, id: UUID):
         raise HttpError(404, "Shipment escalation not found.")
     escalation.delete()
     return 204, None
+
+
+# ----------------- CSR REPORTS API -----------------
+
+@csr_reports_router.get("", response=List[CSRReportSchema])
+def list_csr_reports(
+    request,
+    search: Optional[str] = None,
+    report_type: Optional[str] = None,
+    staff_id: Optional[UUID] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    qs = CSRReport.objects.filter(organization=request.user.organization).select_related('staff', 'reported_to')
+    if search:
+        qs = qs.filter(
+            Q(staff__first_name__icontains=search) |
+            Q(staff__last_name__icontains=search) |
+            Q(reported_to__first_name__icontains=search) |
+            Q(reported_to__last_name__icontains=search) |
+            Q(shipment_delays_and_reason__icontains=search) |
+            Q(biggest_challenge_week__icontains=search) |
+            Q(biggest_achievement_week__icontains=search) |
+            Q(biggest_challenge_month__icontains=search) |
+            Q(biggest_achievement_month__icontains=search)
+        )
+    if report_type:
+        qs = qs.filter(report_type=report_type)
+    if staff_id:
+        qs = qs.filter(staff_id=staff_id)
+    if start_date:
+        qs = qs.filter(date__gte=start_date)
+    if end_date:
+        qs = qs.filter(date__lte=end_date)
+
+    return qs.order_by('-date', '-created_at')
+
+
+@csr_reports_router.get("/aggregate", response=dict)
+def aggregate_csr_daily_reports(
+    request,
+    start_date: str,
+    end_date: str,
+    staff_id: Optional[UUID] = None
+):
+    qs = CSRReport.objects.filter(
+        organization=request.user.organization,
+        report_type='DAILY',
+        date__range=[start_date, end_date]
+    )
+    if staff_id:
+        qs = qs.filter(staff_id=staff_id)
+
+    aggregated = qs.aggregate(
+        total_new_enquiries=Sum('new_enquiries'),
+        total_packages_expected=Sum('packages_expected'),
+        total_quotation_sent=Sum('quotation_sent'),
+        total_shipment_booked=Sum('shipment_booked'),
+        total_outstanding_follow_up=Sum('outstanding_follow_up'),
+        total_customer_complaint_resolved=Sum('customer_complaint_resolved'),
+        total_returning_customers=Sum('returning_customers'),
+        total_packages_received=Sum('packages_received'),
+        total_customer_converted_paid=Sum('customer_converted_paid'),
+        total_follow_up_completed=Sum('follow_up_completed'),
+        total_customer_complaint_received=Sum('customer_complaint_received'),
+        total_customer_escalated_to_manager=Sum('customer_escalated_to_manager')
+    )
+
+    return {
+        "new_enquiries": aggregated['total_new_enquiries'] or 0,
+        "packages_expected": aggregated['total_packages_expected'] or 0,
+        "quotation_sent": aggregated['total_quotation_sent'] or 0,
+        "shipment_booked": aggregated['total_shipment_booked'] or 0,
+        "outstanding_follow_up": aggregated['total_outstanding_follow_up'] or 0,
+        "customer_complaint_resolved": aggregated['total_customer_complaint_resolved'] or 0,
+        "returning_customers": aggregated['total_returning_customers'] or 0,
+        "packages_received": aggregated['total_packages_received'] or 0,
+        "customer_converted_paid": aggregated['total_customer_converted_paid'] or 0,
+        "follow_up_completed": aggregated['total_follow_up_completed'] or 0,
+        "customer_complaint_received": aggregated['total_customer_complaint_received'] or 0,
+        "customer_escalated_to_manager": aggregated['total_customer_escalated_to_manager'] or 0,
+        "count_daily_reports": qs.count()
+    }
+
+
+@csr_reports_router.post("", response={201: CSRReportSchema})
+def create_csr_report(request, data: CSRReportCreateSchema):
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    staff_id = parse_uuid(payload.pop('staff_id', None))
+    reported_to_id = parse_uuid(payload.pop('reported_to_id', None))
+
+    date_val = payload.pop('date', None)
+    if date_val and str(date_val).strip():
+        payload['date'] = str(date_val).strip()
+    else:
+        payload['date'] = timezone.localdate()
+
+    staff = User.objects.filter(id=staff_id, organization=request.user.organization).first() if staff_id else request.user
+    reported_to = User.objects.filter(id=reported_to_id, organization=request.user.organization).first() if reported_to_id else None
+
+    report = CSRReport.objects.create(
+        organization=request.user.organization,
+        staff=staff,
+        reported_to=reported_to,
+        **payload
+    )
+    return 201, report
+
+
+@csr_reports_router.get("/{id}", response=CSRReportSchema)
+def get_csr_report(request, id: UUID):
+    report = CSRReport.objects.filter(
+        id=id, organization=request.user.organization
+    ).select_related('staff', 'reported_to').first()
+    if not report:
+        raise HttpError(404, "CSR report not found.")
+    return report
+
+
+@csr_reports_router.put("/{id}", response=CSRReportSchema)
+def update_csr_report(request, id: UUID, data: CSRReportCreateSchema):
+    report = CSRReport.objects.filter(
+        id=id, organization=request.user.organization
+    ).first()
+    if not report:
+        raise HttpError(404, "CSR report not found.")
+
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    if 'staff_id' in payload:
+        s_id = parse_uuid(payload.pop('staff_id'))
+        report.staff = User.objects.filter(id=s_id, organization=request.user.organization).first() if s_id else None
+
+    if 'reported_to_id' in payload:
+        r_id = parse_uuid(payload.pop('reported_to_id'))
+        report.reported_to = User.objects.filter(id=r_id, organization=request.user.organization).first() if r_id else None
+
+    if 'date' in payload:
+        d = payload.pop('date')
+        report.date = str(d).strip() if d and str(d).strip() else None
+
+    for attr, val in payload.items():
+        setattr(report, attr, val)
+
+    report.save()
+    return report
+
+
+@csr_reports_router.delete("/{id}", response={204: None})
+def delete_csr_report(request, id: UUID):
+    report = CSRReport.objects.filter(
+        id=id, organization=request.user.organization
+    ).first()
+    if not report:
+        raise HttpError(404, "CSR report not found.")
+    report.delete()
+    return 204, None
+
 
 
 

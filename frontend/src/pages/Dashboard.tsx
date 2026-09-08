@@ -46,6 +46,7 @@ import {
   Calendar as CalendarIcon,
   Mail,
   Receipt as ReceiptIcon,
+  ShieldAlert,
   Menu,
   X
 } from 'lucide-react'
@@ -55,6 +56,7 @@ type DashboardView =
   | 'leads'
   | 'partners'
   | 'shipments'
+  | 'escalations'
   | 'tasks'
   | 'pipeline'
   | 'contacts'
@@ -179,6 +181,8 @@ export default function Dashboard() {
         return 'Partners Management'
       case 'shipments':
         return 'Shipments Management'
+      case 'escalations':
+        return 'Shipment Escalations & Complaints'
       case 'tasks':
         return 'Tasks Management'
       case 'pipeline':
@@ -324,10 +328,25 @@ export default function Dashboard() {
                   ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-650/20'
                   : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
               } cursor-pointer`}
-              title="Create Shipment"
+              title="Shipments Management"
             >
               <Truck className="h-4.5 w-4.5 flex-shrink-0 text-sky-400" />
-              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Create Shipment</span>}
+              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Shipments</span>}
+            </button>
+
+            <button
+              onClick={() => handleNavClick('escalations')}
+              className={`w-full flex items-center ${
+                isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
+              } rounded-lg text-sm font-medium transition-all ${
+                currentView === 'escalations'
+                  ? 'bg-red-600/10 text-red-400 border border-red-650/20'
+                  : 'text-zinc-450 hover:text-zinc-100 hover:bg-zinc-900/50 border border-transparent'
+              } cursor-pointer`}
+              title="Shipment Escalations & Complaints"
+            >
+              <ShieldAlert className="h-4.5 w-4.5 flex-shrink-0 text-red-400" />
+              {(!isSidebarCollapsed || isMobileSidebarOpen) && <span>Escalations</span>}
             </button>
 
             <button
@@ -777,7 +796,9 @@ export default function Dashboard() {
           {currentView === 'summary' && <SummaryDashboard />}
           {currentView === 'leads' && <LeadsWorkspace />}
           {currentView === 'partners' && <PartnersWorkspace />}
-          {currentView === 'shipments' && <ShipmentWorkspace />}
+          {(currentView === 'shipments' || currentView === 'escalations') && (
+            <ShipmentWorkspace initialTab={currentView === 'escalations' ? 'escalations' : 'shipments'} />
+          )}
           {currentView === 'tasks' && <TasksWorkspace />}
           {currentView === 'pipeline' && <DealsKanban />}
           {currentView === 'contacts' && <ContactsDirectory />}
