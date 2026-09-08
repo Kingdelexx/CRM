@@ -795,5 +795,87 @@ class Shipment(TimeStampedModel):
         return f"Shipment {self.tracking_id} - {self.receiver_name or 'Receiver'}"
 
 
+class ShipmentEscalation(TimeStampedModel):
+    ESCALATION_TYPE_CHOICES = [
+        ('DELAY', 'Delay in Delivery'),
+        ('DAMAGED_GOODS', 'Damaged Goods'),
+        ('MISSING_ITEM', 'Missing Item/Package'),
+        ('BILLING_ISSUE', 'Billing / Overcharge Issue'),
+        ('CUSTOMS_HOLD', 'Customs Hold / Documentation'),
+        ('WRONG_DELIVERY', 'Wrong Delivery Address'),
+        ('OTHER', 'Other'),
+    ]
+
+    PRIORITY_CHOICES = [
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+        ('URGENT', 'Urgent / Critical'),
+    ]
+
+    STATUS_CHOICES = [
+        ('OPEN', 'Open'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('RESOLVED', 'Resolved'),
+        ('CLOSED', 'Closed'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='shipment_escalations'
+    )
+    date = models.DateField(null=True, blank=True)
+    
+    # Escalating for (Shipment relation)
+    shipment = models.ForeignKey(
+        Shipment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='escalations'
+    )
+    
+    # Customer name (Contact Partner relation or text fallback)
+    customer = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='shipment_escalations'
+    )
+    customer_name = models.CharField(max_length=255, null=True, blank=True)
+    
+    escalation_type = models.CharField(max_length=100, choices=ESCALATION_TYPE_CHOICES, default='DELAY')
+    priority = models.CharField(max_length=50, choices=PRIORITY_CHOICES, default='MEDIUM')
+    complaint_summary = models.TextField()
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='OPEN')
+    internal = models.TextField(null=True, blank=True)  # Internal notes / updates
+    
+    # Escalation to (Admins/Staff)
+    escalation_to = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_shipment_escalations'
+    )
+    
+    resolution = models.TextField(null=True, blank=True)
+    resolution_date = models.DateField(null=True, blank=True)
+    
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_shipment_escalations'
+    )
+
+    def __str__(self):
+        return f"Escalation for {self.customer_name or 'Customer'} - Status: {self.status}"
+
+
+
 
 

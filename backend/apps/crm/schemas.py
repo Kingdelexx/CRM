@@ -6,9 +6,10 @@ from .models import (
     Company, Stage, Contact, Deal, Project, Pipeline, CustomFieldDefinition,
     Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
     AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest,
-    Document, CustomModuleRecord, Invoice, Receipt, Shipment
+    Document, CustomModuleRecord, Invoice, Receipt, Shipment, ShipmentEscalation
 )
 from apps.accounts.schemas import UserSchema, OrganizationSchema
+
 
 
 class CompanySchema(ModelSchema):
@@ -406,6 +407,37 @@ class ShipmentCreateSchema(Schema):
     value: Optional[float] = 0.00
     note: Optional[str] = None
     recorded_by_id: Optional[str] = None
+
+
+class ShipmentEscalationSchema(ModelSchema):
+    shipment: Optional[ShipmentSchema] = None
+    customer: Optional[ContactSchema] = None
+    escalation_to: Optional[UserSchema] = None
+    created_by: Optional[UserSchema] = None
+
+    class Meta:
+        model = ShipmentEscalation
+        fields = [
+            'id', 'date', 'customer_name', 'escalation_type', 'priority',
+            'complaint_summary', 'status', 'internal', 'resolution',
+            'resolution_date', 'created_at', 'updated_at'
+        ]
+
+
+class ShipmentEscalationCreateSchema(Schema):
+    date: Optional[str] = None
+    shipment_id: Optional[str] = None
+    customer_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    escalation_type: Optional[str] = 'DELAY'
+    priority: Optional[str] = 'MEDIUM'
+    complaint_summary: str
+    status: Optional[str] = 'OPEN'
+    internal: Optional[str] = None
+    escalation_to_id: Optional[str] = None
+    resolution: Optional[str] = None
+    resolution_date: Optional[str] = None
+
 
 
 

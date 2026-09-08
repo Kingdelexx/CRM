@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { Shipment, Contact, User } from '@/types/crm'
+import type { Shipment, Contact, User, ShipmentEscalation, EscalationType, EscalationPriority, EscalationStatus } from '@/types/crm'
 import {
   useLegacyTable as useReactTable,
   getCoreRowModel
@@ -27,23 +27,46 @@ import {
   CheckCircle2,
   AlertTriangle,
   Handshake,
-  Tag
+  Tag,
+  AlertOctagon,
+  ShieldAlert,
+  MessageSquare,
+  UserCheck,
+  Trash2,
+  Edit3,
+  ExternalLink,
+  RefreshCw,
+  Check
 } from 'lucide-react'
 
 export default function ShipmentWorkspace() {
   const queryClient = useQueryClient()
   
-  // Search & Filters
+  // Primary Workspace Tab
+  const [workspaceTab, setWorkspaceTab] = useState<'shipments' | 'escalations'>('shipments')
+
+  // Search & Filters for Shipments
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('')
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
+  
+  // Search & Filters for Escalations
+  const [escalationSearchTerm, setEscalationSearchTerm] = useState('')
+  const [escalationTypeFilter, setEscalationTypeFilter] = useState('')
+  const [escalationPriorityFilter, setEscalationPriorityFilter] = useState('')
+  const [escalationStatusFilter, setEscalationStatusFilter] = useState('')
   
   // Modal & Drawer State
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'shipment' | 'package'>('shipment')
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null)
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false)
+
+  // Escalation Modal & Drawer State
+  const [isEscalationModalOpen, setIsEscalationModalOpen] = useState(false)
+  const [selectedEscalation, setSelectedEscalation] = useState<ShipmentEscalation | null>(null)
+  const [isEscalationDrawerOpen, setIsEscalationDrawerOpen] = useState(false)
+
 
   // Form State
   const [formData, setFormData] = useState({
@@ -76,6 +99,23 @@ export default function ShipmentWorkspace() {
   })
   const [formError, setFormError] = useState('')
 
+  // Escalation Form State
+  const [escalationFormData, setEscalationFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
+    shipment_id: '',
+    customer_id: '',
+    customer_name: '',
+    escalation_type: 'DELAY' as EscalationType,
+    priority: 'MEDIUM' as EscalationPriority,
+    complaint_summary: '',
+    status: 'OPEN' as EscalationStatus,
+    internal: '',
+    escalation_to_id: '',
+    resolution: '',
+    resolution_date: ''
+  })
+  const [escalationFormError, setEscalationFormError] = useState('')
+
   // 1. Fetch Shipments list
   const { data: shipmentsData, isLoading, isError } = useQuery({
     queryKey: ['shipments', searchTerm, statusFilter, paymentFilter],
@@ -90,6 +130,128 @@ export default function ShipmentWorkspace() {
       return response.data
     }
   })
+
+  // 1b. Fetch Shipment Escalations list
+  const { data: escalationsData, isLoading: isEscalationsLoading, isError: isEscalationsError } = useQuery({
+    queryKey: ['shipment-escalations', escalationSearchTerm, escalationTypeFilter, escalationPriorityFilter, escalationStatusFilter],
+    queryFn: async () => {
+      const response = await apiClient.get<ShipmentEscalation[]>('/shipment-escalations/', {
+        params: {
+          search: escalationSearchTerm || undefined,
+          escalation_type: escalationTypeFilter || undefined,
+          priority: escalationPriorityFilter || undefined,
+          status: escalationStatusFilter || undefined
+        }
+      })
+      return response.data
+    }
+  })
+
+  // Escalation Metrics Summary
+  const escalationMetrics = useMemo(() => {
+    const items = Array.isArray(escalationsData) ? escalationsData : []
+    const total = items.length
+    const open = items.filter(e => e.status === 'OPEN' || e.status === 'IN_PROGRESS').length
+    const urgent = items.filter(e => e.priority === 'URGENT' || e.priority === 'HIGH').length
+    const resolved = items.filter(e => e.status === 'RESOLVED' || e.status === 'CLOSED').length
+    return { total, open, urgent, resolved }
+  }, [escalationsData])
+
+  // Create Escalation Mutation
+  const createEscalationMutation = useMutation({
+    mutationFn: async (payload: typeof escalationFormData) => {
+      const formatted = {
+        date: payload.date || null,
+        shipment_id: payload.shipment_id || null,
+        customer_id: payload.customer_id || null,
+        customer_name: payload.customer_name || null,
+        escalation_type: payload.escalation_type,
+        priority: payload.priority,
+        complaint_summary: payload.complaint_summary,
+        status: payload.status,
+        internal: payload.internal || null,
+        escalation_to_id: payload.escalation_to_id || null,
+        resolution: payload.resolution || null,
+        resolution_date: payload.resolution_date || null
+      }
+      return apiClient.post('/shipment-escalations/', formatted)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shipment-escalations'] })
+      setIsEscalationModalOpen(false)
+      setEscalationFormError('')
+      resetEscalationForm()
+    },
+    onError: (err: any) => {
+      const detail = err?.response?.data?.detail
+      let errMsg = 'Failed to create escalation'
+      if (typeof detail === 'string') errMsg = detail
+      else if (err?.message) errMsg = err.message
+      setEscalationFormError(errMsg)
+    }
+  })
+
+  // Update Escalation Mutation
+  const updateEscalationMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      return apiClient.put(`/shipment-escalations/${id}`, data)
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['shipment-escalations'] })
+      if (res.data) {
+        setSelectedEscalation(res.data)
+      }
+    }
+  })
+
+  // Delete Escalation Mutation
+  const deleteEscalationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiClient.delete(`/shipment-escalations/${id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shipment-escalations'] })
+      setIsEscalationDrawerOpen(false)
+      setSelectedEscalation(null)
+    }
+  })
+
+  const resetEscalationForm = () => {
+    setEscalationFormData({
+      date: new Date().toISOString().split('T')[0],
+      shipment_id: '',
+      customer_id: '',
+      customer_name: '',
+      escalation_type: 'DELAY',
+      priority: 'MEDIUM',
+      complaint_summary: '',
+      status: 'OPEN',
+      internal: '',
+      escalation_to_id: '',
+      resolution: '',
+      resolution_date: ''
+    })
+  }
+
+  const handleEscalateShipment = (shipment: Shipment) => {
+    setEscalationFormData({
+      date: new Date().toISOString().split('T')[0],
+      shipment_id: shipment.id,
+      customer_id: shipment.receiver?.id || shipment.sender?.id || '',
+      customer_name: shipment.receiver_name || shipment.sender_name || '',
+      escalation_type: 'DELAY',
+      priority: 'HIGH',
+      complaint_summary: `Escalation issue logged for shipment tracking ID: ${shipment.tracking_id}`,
+      status: 'OPEN',
+      internal: '',
+      escalation_to_id: '',
+      resolution: '',
+      resolution_date: ''
+    })
+    setIsDetailDrawerOpen(false)
+    setIsEscalationModalOpen(true)
+  }
+
 
   // 2. Fetch Contacts for Sender / Receiver / Partner selection
   const { data: contactsData } = useQuery({
@@ -266,7 +428,48 @@ export default function ShipmentWorkspace() {
   }
 
   // Helper badge renderers
+  const getEscalationPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'URGENT':
+        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-500/10 text-red-400 border border-red-500/20"><AlertOctagon className="h-3 w-3" /> URGENT</span>
+      case 'HIGH':
+        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20"><AlertTriangle className="h-3 w-3" /> HIGH</span>
+      case 'MEDIUM':
+        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">MEDIUM</span>
+      default:
+        return <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">LOW</span>
+    }
+  }
+
+  const getEscalationStatusBadge = (status: string) => {
+    switch (status) {
+      case 'OPEN':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20"><AlertCircle className="h-3 w-3" /> Open</span>
+      case 'IN_PROGRESS':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20"><RefreshCw className="h-3 w-3" /> In Progress</span>
+      case 'RESOLVED':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><CheckCircle2 className="h-3 w-3" /> Resolved</span>
+      case 'CLOSED':
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700"><Check className="h-3 w-3" /> Closed</span>
+      default:
+        return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">{status}</span>
+    }
+  }
+
+  const getEscalationTypeLabel = (type: string) => {
+    switch (type) {
+      case 'DELAY': return 'Delay in Delivery'
+      case 'DAMAGED_GOODS': return 'Damaged Goods'
+      case 'MISSING_ITEM': return 'Missing Item'
+      case 'BILLING_ISSUE': return 'Billing Issue'
+      case 'CUSTOMS_HOLD': return 'Customs Hold'
+      case 'WRONG_DELIVERY': return 'Wrong Delivery'
+      default: return type || 'Other'
+    }
+  }
+
   const getStatusBadge = (status: string) => {
+
     switch (status) {
       case 'IN_TRANSIT':
         return <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20"><Truck className="h-3 w-3" /> In Transit</span>
@@ -409,193 +612,524 @@ export default function ShipmentWorkspace() {
     getCoreRowModel: getCoreRowModel()
   })
 
+  // Escalation Columns Setup
+  const escalationColumns = useMemo(() => [
+    {
+      accessorKey: 'date',
+      header: 'Date',
+      cell: (info: any) => {
+        const val = info.getValue()
+        if (!val) return <span className="text-xs text-zinc-500">-</span>
+        return <span className="text-xs text-zinc-300 font-medium">{val}</span>
+      }
+    },
+    {
+      id: 'shipment',
+      header: 'Escalating For',
+      cell: (info: any) => {
+        const sh = info.row.original.shipment
+        if (!sh) return <span className="text-xs text-zinc-500 italic">Unlinked Shipment</span>
+        return (
+          <div className="space-y-0.5">
+            <div className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+              <Package className="h-3.5 w-3.5" />
+              <span>{sh.tracking_id}</span>
+            </div>
+            {sh.receiver_name && <div className="text-[11px] text-zinc-400">To: {sh.receiver_name}</div>}
+          </div>
+        )
+      }
+    },
+    {
+      id: 'customer',
+      header: 'Customer / Partner',
+      cell: (info: any) => {
+        const cName = info.row.original.customer_name || (info.row.original.customer ? `${info.row.original.customer.first_name} ${info.row.original.customer.last_name || ''}` : 'N/A')
+        return (
+          <div className="font-semibold text-zinc-200 text-xs flex items-center gap-1.5">
+            <UserIcon className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+            <span className="truncate">{cName}</span>
+          </div>
+        )
+      }
+    },
+    {
+      accessorKey: 'escalation_type',
+      header: 'Escalation Type',
+      cell: (info: any) => (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-medium">
+          <Tag className="h-3 w-3 text-amber-400" />
+          {getEscalationTypeLabel(info.getValue())}
+        </span>
+      )
+    },
+    {
+      accessorKey: 'priority',
+      header: 'Priority',
+      cell: (info: any) => getEscalationPriorityBadge(info.getValue())
+    },
+    {
+      accessorKey: 'complaint_summary',
+      header: 'Complaint Summary',
+      cell: (info: any) => (
+        <p className="text-xs text-zinc-300 line-clamp-2 max-w-xs" title={info.getValue()}>
+          {info.getValue()}
+        </p>
+      )
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      cell: (info: any) => getEscalationStatusBadge(info.getValue())
+    },
+    {
+      id: 'escalation_to',
+      header: 'Escalated To',
+      cell: (info: any) => {
+        const admin = info.row.original.escalation_to
+        if (!admin) return <span className="text-xs text-zinc-600 italic">Unassigned</span>
+        return (
+          <div className="flex items-center gap-1.5 text-xs text-indigo-300">
+            <div className="h-5 w-5 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-[10px]">
+              {admin.first_name?.[0] || 'A'}
+            </div>
+            <span>{admin.first_name} {admin.last_name || ''}</span>
+          </div>
+        )
+      }
+    }
+  ], [])
+
+  const escalationTableData = useMemo(() => (Array.isArray(escalationsData) ? escalationsData : []), [escalationsData])
+
+  const escalationTable = useReactTable({
+    data: escalationTableData,
+    columns: escalationColumns,
+    getCoreRowModel: getCoreRowModel()
+  })
+
+
   return (
     <div className="space-y-6">
-      {/* Workspace Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Workspace Header & Navigation Tabs */}
+
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Truck className="h-6 w-6 text-emerald-400" />
             Shipment Management
           </h1>
-          <p className="text-zinc-400 text-sm mt-1">Create, track, and manage parcel shipments and package details</p>
-        </div>
-        <button
-          onClick={() => {
-            resetForm()
-            setFormError('')
-            setIsModalOpen(true)
-          }}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer w-full sm:w-auto"
-        >
-          <Plus className="h-4.5 w-4.5" /> Create Shipment
-        </button>
-      </div>
-
-      {/* METRICS CARDS BANNER */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Shipments</span>
-            <span className="text-2xl font-black text-white mt-1 block">{metrics.total}</span>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <Package className="h-5 w-5" />
-          </div>
+          <p className="text-zinc-400 text-sm mt-1">Create, track, escalate and resolve parcel shipments and customer complaints</p>
         </div>
 
-        <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">In Transit</span>
-            <span className="text-2xl font-black text-sky-400 mt-1 block">{metrics.inTransit}</span>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
-            <Truck className="h-5 w-5" />
-          </div>
-        </div>
-
-        <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Delivered</span>
-            <span className="text-2xl font-black text-emerald-400 mt-1 block">{metrics.delivered}</span>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <CheckCircle2 className="h-5 w-5" />
-          </div>
-        </div>
-
-        <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Revenue</span>
-            <span className="text-2xl font-black text-emerald-400 mt-1 block">
-              NGN {metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-            </span>
-          </div>
-          <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <DollarSign className="h-5 w-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* FILTER TOOLBAR */}
-      <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
-        {/* Search */}
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Search by Tracking ID, Receiver, Invoice..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-zinc-950 pl-10 pr-4 py-2 rounded-lg border border-zinc-900 focus:border-emerald-600 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
-          />
-        </div>
-
-        {/* Filter Dropdowns */}
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          {/* Shipment Status */}
-          <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-900 text-xs">
-            <Truck className="h-4 w-4 text-zinc-500" />
-            <span className="text-zinc-400 font-medium">Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent text-zinc-200 border-none outline-none focus:ring-0 cursor-pointer font-semibold"
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+            <button
+              onClick={() => setWorkspaceTab('shipments')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                workspaceTab === 'shipments'
+                  ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
             >
-              <option value="" className="bg-zinc-950">All Statuses</option>
-              <option value="PENDING" className="bg-zinc-950">Pending</option>
-              <option value="IN_TRANSIT" className="bg-zinc-950">In Transit</option>
-              <option value="DELIVERED" className="bg-zinc-950">Delivered</option>
-              <option value="CUSTOMS_HOLD" className="bg-zinc-950">Customs Hold</option>
-              <option value="CANCELLED" className="bg-zinc-950">Cancelled</option>
-            </select>
-          </div>
-
-          {/* Payment Status */}
-          <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-900 text-xs">
-            <DollarSign className="h-4 w-4 text-zinc-500" />
-            <span className="text-zinc-400 font-medium">Payment:</span>
-            <select
-              value={paymentFilter}
-              onChange={(e) => setPaymentFilter(e.target.value)}
-              className="bg-transparent text-zinc-200 border-none outline-none focus:ring-0 cursor-pointer font-semibold"
+              <Package className="h-4 w-4" /> All Shipments
+            </button>
+            <button
+              onClick={() => setWorkspaceTab('escalations')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                workspaceTab === 'escalations'
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-600/20'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
             >
-              <option value="" className="bg-zinc-950">All Payments</option>
-              <option value="UNPAID" className="bg-zinc-950">Unpaid</option>
-              <option value="PARTIALLY_PAID" className="bg-zinc-950">Partially Paid</option>
-              <option value="PAID" className="bg-zinc-950">Paid</option>
-            </select>
+              <ShieldAlert className="h-4 w-4" /> Escalations & Complaints
+              {escalationMetrics.open > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-black">
+                  {escalationMetrics.open}
+                </span>
+              )}
+            </button>
           </div>
 
-          {(searchTerm || statusFilter || paymentFilter) && (
+          {workspaceTab === 'shipments' ? (
             <button
               onClick={() => {
-                setSearchTerm('')
-                setStatusFilter('')
-                setPaymentFilter('')
+                resetForm()
+                setFormError('')
+                setIsModalOpen(true)
               }}
-              className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
             >
-              <X className="h-3.5 w-3.5" /> Clear Filters
+              <Plus className="h-4 w-4" /> Create Shipment
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                resetEscalationForm()
+                setEscalationFormError('')
+                setIsEscalationModalOpen(true)
+              }}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-red-600/20 cursor-pointer"
+            >
+              <Plus className="h-4 w-4" /> Log Escalation
             </button>
           )}
         </div>
       </div>
 
-      {/* SHIPMENTS TABLE */}
-      <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl overflow-hidden shadow-xl">
-        {isLoading ? (
-          <div className="py-20 text-center text-zinc-400 flex flex-col items-center gap-2">
-            <div className="h-6 w-6 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></div>
-            <span className="text-xs">Loading shipments directory...</span>
+      {workspaceTab === 'escalations' ? (
+        <div className="space-y-6">
+          {/* ESCALATIONS METRICS BANNER */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Escalations</span>
+                <span className="text-2xl font-black text-white mt-1 block">{escalationMetrics.total}</span>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300">
+                <ShieldAlert className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Open / In Progress</span>
+                <span className="text-2xl font-black text-amber-400 mt-1 block">{escalationMetrics.open}</span>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Urgent / High Priority</span>
+                <span className="text-2xl font-black text-red-400 mt-1 block">{escalationMetrics.urgent}</span>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
+                <AlertOctagon className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Resolved Escalations</span>
+                <span className="text-2xl font-black text-emerald-400 mt-1 block">{escalationMetrics.resolved}</span>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </div>
           </div>
-        ) : isError ? (
-          <div className="py-20 text-center text-red-400 flex items-center justify-center gap-2">
-            <AlertCircle className="h-5 w-5" />
-            <span className="text-xs">Failed to fetch shipments. Please check backend API.</span>
+
+          {/* ESCALATION FILTER TOOLBAR */}
+          <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search complaint, customer, tracking ID..."
+                value={escalationSearchTerm}
+                onChange={(e) => setEscalationSearchTerm(e.target.value)}
+                className="w-full bg-zinc-950 pl-10 pr-4 py-2 rounded-lg border border-zinc-900 focus:border-red-600 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              {/* Type Filter */}
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-900 text-xs">
+                <Tag className="h-4 w-4 text-zinc-500" />
+                <span className="text-zinc-400 font-medium">Type:</span>
+                <select
+                  value={escalationTypeFilter}
+                  onChange={(e) => setEscalationTypeFilter(e.target.value)}
+                  className="bg-transparent text-zinc-200 border-none outline-none focus:ring-0 cursor-pointer font-semibold"
+                >
+                  <option value="" className="bg-zinc-950">All Types</option>
+                  <option value="DELAY" className="bg-zinc-950">Delay in Delivery</option>
+                  <option value="DAMAGED_GOODS" className="bg-zinc-950">Damaged Goods</option>
+                  <option value="MISSING_ITEM" className="bg-zinc-950">Missing Item</option>
+                  <option value="BILLING_ISSUE" className="bg-zinc-950">Billing Issue</option>
+                  <option value="CUSTOMS_HOLD" className="bg-zinc-950">Customs Hold</option>
+                  <option value="WRONG_DELIVERY" className="bg-zinc-950">Wrong Delivery</option>
+                  <option value="OTHER" className="bg-zinc-950">Other</option>
+                </select>
+              </div>
+
+              {/* Priority Filter */}
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-900 text-xs">
+                <AlertOctagon className="h-4 w-4 text-zinc-500" />
+                <span className="text-zinc-400 font-medium">Priority:</span>
+                <select
+                  value={escalationPriorityFilter}
+                  onChange={(e) => setEscalationPriorityFilter(e.target.value)}
+                  className="bg-transparent text-zinc-200 border-none outline-none focus:ring-0 cursor-pointer font-semibold"
+                >
+                  <option value="" className="bg-zinc-950">All Priorities</option>
+                  <option value="URGENT" className="bg-zinc-950">Urgent</option>
+                  <option value="HIGH" className="bg-zinc-950">High</option>
+                  <option value="MEDIUM" className="bg-zinc-950">Medium</option>
+                  <option value="LOW" className="bg-zinc-950">Low</option>
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-900 text-xs">
+                <Clock className="h-4 w-4 text-zinc-500" />
+                <span className="text-zinc-400 font-medium">Status:</span>
+                <select
+                  value={escalationStatusFilter}
+                  onChange={(e) => setEscalationStatusFilter(e.target.value)}
+                  className="bg-transparent text-zinc-200 border-none outline-none focus:ring-0 cursor-pointer font-semibold"
+                >
+                  <option value="" className="bg-zinc-950">All Statuses</option>
+                  <option value="OPEN" className="bg-zinc-950">Open</option>
+                  <option value="IN_PROGRESS" className="bg-zinc-950">In Progress</option>
+                  <option value="RESOLVED" className="bg-zinc-950">Resolved</option>
+                  <option value="CLOSED" className="bg-zinc-950">Closed</option>
+                </select>
+              </div>
+
+              {(escalationSearchTerm || escalationTypeFilter || escalationPriorityFilter || escalationStatusFilter) && (
+                <button
+                  onClick={() => {
+                    setEscalationSearchTerm('')
+                    setEscalationTypeFilter('')
+                    setEscalationPriorityFilter('')
+                    setEscalationStatusFilter('')
+                  }}
+                  className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" /> Clear Filters
+                </button>
+              )}
+            </div>
           </div>
-        ) : tableData.length === 0 ? (
-          <div className="py-20 text-center text-zinc-500 flex flex-col items-center justify-center gap-2">
-            <Truck className="h-10 w-10 text-zinc-700" />
-            <p className="text-semibold text-sm text-zinc-300">No shipments found</p>
-            <p className="text-xs text-zinc-500">Click "+ Create Shipment" to register a new shipment</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                {table.getHeaderGroups().map((hg: any) => (
-                  <tr key={hg.id} className="border-b border-zinc-900 bg-zinc-950/80">
-                    {hg.headers.map((h: any) => (
-                      <th key={h.id} className="px-6 py-3 font-semibold text-zinc-400 text-xs uppercase tracking-wider">
-                        {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
-                      </th>
+
+          {/* ESCALATIONS TABLE */}
+          <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl overflow-hidden shadow-xl">
+            {isEscalationsLoading ? (
+              <div className="py-20 text-center text-zinc-400 flex flex-col items-center gap-2">
+                <div className="h-6 w-6 rounded-full border-2 border-red-500 border-t-transparent animate-spin"></div>
+                <span className="text-xs">Loading shipment escalations...</span>
+              </div>
+            ) : isEscalationsError ? (
+              <div className="py-20 text-center text-red-400 flex items-center justify-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                <span className="text-xs">Failed to fetch shipment escalations.</span>
+              </div>
+            ) : escalationTableData.length === 0 ? (
+              <div className="py-20 text-center text-zinc-500 flex flex-col items-center justify-center gap-2">
+                <ShieldAlert className="h-10 w-10 text-zinc-700" />
+                <p className="text-semibold text-sm text-zinc-300">No shipment escalations recorded</p>
+                <p className="text-xs text-zinc-500">Click "+ Log Escalation" to record a customer complaint or issue</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    {escalationTable.getHeaderGroups().map((hg: any) => (
+                      <tr key={hg.id} className="border-b border-zinc-900 bg-zinc-950/80">
+                        {hg.headers.map((h: any) => (
+                          <th key={h.id} className="px-6 py-3 font-semibold text-zinc-400 text-xs uppercase tracking-wider">
+                            {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
+                          </th>
+                        ))}
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-              </thead>
-              <tbody className="divide-y divide-zinc-900/60">
-                {table.getRowModel().rows.map((row: any) => (
-                  <tr
-                    key={row.id}
-                    onClick={() => {
-                      setSelectedShipment(row.original)
-                      setIsDetailDrawerOpen(true)
-                    }}
-                    className="hover:bg-zinc-900/40 transition-colors cursor-pointer"
-                  >
-                    {row.getVisibleCells().map((c: any) => (
-                      <td key={c.id} className="px-6 py-4 whitespace-nowrap text-zinc-300">
-                        {flexRender(c.column.columnDef.cell, c.getContext())}
-                      </td>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-900/60">
+                    {escalationTable.getRowModel().rows.map((row: any) => (
+                      <tr
+                        key={row.id}
+                        onClick={() => {
+                          setSelectedEscalation(row.original)
+                          setIsEscalationDrawerOpen(true)
+                        }}
+                        className="hover:bg-zinc-900/40 transition-colors cursor-pointer"
+                      >
+                        {row.getVisibleCells().map((c: any) => (
+                          <td key={c.id} className="px-6 py-4 whitespace-nowrap text-zinc-300">
+                            {flexRender(c.column.columnDef.cell, c.getContext())}
+                          </td>
+                        ))}
+                      </tr>
                     ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* METRICS CARDS BANNER */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Shipments</span>
+                <span className="text-2xl font-black text-white mt-1 block">{metrics.total}</span>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <Package className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">In Transit</span>
+                <span className="text-2xl font-black text-sky-400 mt-1 block">{metrics.inTransit}</span>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                <Truck className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Delivered</span>
+                <span className="text-2xl font-black text-emerald-400 mt-1 block">{metrics.delivered}</span>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </div>
+
+            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Revenue</span>
+                <span className="text-2xl font-black text-emerald-400 mt-1 block">
+                  NGN {metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <DollarSign className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* FILTER TOOLBAR */}
+          <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+            {/* Search */}
+            <div className="relative w-full md:w-80">
+              <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search by Tracking ID, Receiver, Invoice..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-zinc-950 pl-10 pr-4 py-2 rounded-lg border border-zinc-900 focus:border-emerald-600 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
+              />
+            </div>
+
+            {/* Filter Dropdowns */}
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              {/* Shipment Status */}
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-900 text-xs">
+                <Truck className="h-4 w-4 text-zinc-500" />
+                <span className="text-zinc-400 font-medium">Status:</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-transparent text-zinc-200 border-none outline-none focus:ring-0 cursor-pointer font-semibold"
+                >
+                  <option value="" className="bg-zinc-950">All Statuses</option>
+                  <option value="PENDING" className="bg-zinc-950">Pending</option>
+                  <option value="IN_TRANSIT" className="bg-zinc-950">In Transit</option>
+                  <option value="DELIVERED" className="bg-zinc-950">Delivered</option>
+                  <option value="CUSTOMS_HOLD" className="bg-zinc-950">Customs Hold</option>
+                  <option value="CANCELLED" className="bg-zinc-950">Cancelled</option>
+                </select>
+              </div>
+
+              {/* Payment Status */}
+              <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-900 text-xs">
+                <DollarSign className="h-4 w-4 text-zinc-500" />
+                <span className="text-zinc-400 font-medium">Payment:</span>
+                <select
+                  value={paymentFilter}
+                  onChange={(e) => setPaymentFilter(e.target.value)}
+                  className="bg-transparent text-zinc-200 border-none outline-none focus:ring-0 cursor-pointer font-semibold"
+                >
+                  <option value="" className="bg-zinc-950">All Payments</option>
+                  <option value="UNPAID" className="bg-zinc-950">Unpaid</option>
+                  <option value="PARTIALLY_PAID" className="bg-zinc-950">Partially Paid</option>
+                  <option value="PAID" className="bg-zinc-950">Paid</option>
+                </select>
+              </div>
+
+              {(searchTerm || statusFilter || paymentFilter) && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('')
+                    setStatusFilter('')
+                    setPaymentFilter('')
+                  }}
+                  className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" /> Clear Filters
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* SHIPMENTS TABLE */}
+          <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl overflow-hidden shadow-xl">
+            {isLoading ? (
+              <div className="py-20 text-center text-zinc-400 flex flex-col items-center gap-2">
+                <div className="h-6 w-6 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></div>
+                <span className="text-xs">Loading shipments directory...</span>
+              </div>
+            ) : isError ? (
+              <div className="py-20 text-center text-red-400 flex items-center justify-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                <span className="text-xs">Failed to fetch shipments. Please check backend API.</span>
+              </div>
+            ) : tableData.length === 0 ? (
+              <div className="py-20 text-center text-zinc-500 flex flex-col items-center justify-center gap-2">
+                <Truck className="h-10 w-10 text-zinc-700" />
+                <p className="text-semibold text-sm text-zinc-300">No shipments found</p>
+                <p className="text-xs text-zinc-500">Click "+ Create Shipment" to register a new shipment</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    {table.getHeaderGroups().map((hg: any) => (
+                      <tr key={hg.id} className="border-b border-zinc-900 bg-zinc-950/80">
+                        {hg.headers.map((h: any) => (
+                          <th key={h.id} className="px-6 py-3 font-semibold text-zinc-400 text-xs uppercase tracking-wider">
+                            {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
+                          </th>
+                        ))}
+                      </tr>
+                    ))}
+                  </thead>
+                  <tbody className="divide-y divide-zinc-900/60">
+                    {table.getRowModel().rows.map((row: any) => (
+                      <tr
+                        key={row.id}
+                        onClick={() => {
+                          setSelectedShipment(row.original)
+                          setIsDetailDrawerOpen(true)
+                        }}
+                        className="hover:bg-zinc-900/40 transition-colors cursor-pointer"
+                      >
+                        {row.getVisibleCells().map((c: any) => (
+                          <td key={c.id} className="px-6 py-4 whitespace-nowrap text-zinc-300">
+                            {flexRender(c.column.columnDef.cell, c.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
 
       {/* CREATE SHIPMENT MODAL */}
       {isModalOpen && (
@@ -1097,6 +1631,20 @@ export default function ShipmentWorkspace() {
                 </div>
               </div>
 
+              {/* Quick Escalate Action */}
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs text-red-400 font-medium">
+                  <ShieldAlert className="h-4 w-4" />
+                  <span>Report issue or customer complaint?</span>
+                </div>
+                <button
+                  onClick={() => handleEscalateShipment(selectedShipment)}
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-red-600/20 cursor-pointer flex items-center gap-1"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Escalate
+                </button>
+              </div>
+
               {/* Receiver & Sender */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Receiver Info</h4>
@@ -1163,6 +1711,462 @@ export default function ShipmentWorkspace() {
           </div>
         </div>
       )}
+
+      {/* CREATE SHIPMENT ESCALATION MODAL */}
+      {isEscalationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/75 p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/40">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-red-400" />
+                <h3 className="text-md font-bold text-white">Log Shipment Escalation</h3>
+              </div>
+              <button
+                onClick={() => setIsEscalationModalOpen(false)}
+                className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!escalationFormData.complaint_summary.trim()) {
+                  setEscalationFormError('Complaint Summary is required.')
+                  return
+                }
+                createEscalationMutation.mutate(escalationFormData)
+              }}
+              className="p-6 space-y-4 flex-1 overflow-y-auto max-h-[75vh]"
+            >
+              {escalationFormError && (
+                <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="h-4.5 w-4.5 flex-shrink-0" />
+                  <span>{escalationFormError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* 1. Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5 text-zinc-400" /> Date
+                  </label>
+                  <input
+                    type="date"
+                    value={escalationFormData.date}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                  />
+                </div>
+
+                {/* 2. Escalating For (Shipment) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <Package className="h-3.5 w-3.5 text-zinc-400" /> Escalating For (Shipment)
+                  </label>
+                  <select
+                    value={escalationFormData.shipment_id}
+                    onChange={(e) => {
+                      const selectedSh = shipmentsData?.find(s => s.id === e.target.value)
+                      setEscalationFormData(prev => ({
+                        ...prev,
+                        shipment_id: e.target.value,
+                        customer_name: selectedSh?.receiver_name || prev.customer_name
+                      }))
+                    }}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                  >
+                    <option value="" className="bg-zinc-950">Select Shipment (Tracking ID)</option>
+                    {shipmentsData?.map(s => (
+                      <option key={s.id} value={s.id} className="bg-zinc-950">
+                        {s.tracking_id} - {s.receiver_name || 'No Receiver'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Customer Name / Partner */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <UserIcon className="h-3.5 w-3.5 text-zinc-400" /> Customer Name (Contact Partner)
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <select
+                      value={escalationFormData.customer_id}
+                      onChange={(e) => {
+                        const contact = contactsData?.find(c => c.id === e.target.value)
+                        const name = contact ? [contact.first_name, contact.last_name === '.' ? '' : contact.last_name].filter(Boolean).join(' ') : ''
+                        setEscalationFormData(prev => ({
+                          ...prev,
+                          customer_id: e.target.value,
+                          customer_name: name || prev.customer_name
+                        }))
+                      }}
+                      className="bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                    >
+                      <option value="" className="bg-zinc-950">Select Existing Contact</option>
+                      {contactsData?.map(c => (
+                        <option key={c.id} value={c.id} className="bg-zinc-950">
+                          {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.phone || c.email || 'Contact'})
+                        </option>
+                      ))}
+                    </select>
+
+                    <input
+                      type="text"
+                      placeholder="Or type customer name..."
+                      value={escalationFormData.customer_name}
+                      onChange={(e) => setEscalationFormData(prev => ({ ...prev, customer_name: e.target.value }))}
+                      className="bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Escalation Type */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <Tag className="h-3.5 w-3.5 text-zinc-400" /> Escalation Type
+                  </label>
+                  <select
+                    value={escalationFormData.escalation_type}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, escalation_type: e.target.value as EscalationType }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                  >
+                    <option value="DELAY" className="bg-zinc-950">Delay in Delivery</option>
+                    <option value="DAMAGED_GOODS" className="bg-zinc-950">Damaged Goods</option>
+                    <option value="MISSING_ITEM" className="bg-zinc-950">Missing Item</option>
+                    <option value="BILLING_ISSUE" className="bg-zinc-950">Billing Issue</option>
+                    <option value="CUSTOMS_HOLD" className="bg-zinc-950">Customs Hold</option>
+                    <option value="WRONG_DELIVERY" className="bg-zinc-950">Wrong Delivery</option>
+                    <option value="OTHER" className="bg-zinc-950">Other</option>
+                  </select>
+                </div>
+
+                {/* 5. Priority */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <AlertOctagon className="h-3.5 w-3.5 text-zinc-400" /> Priority
+                  </label>
+                  <select
+                    value={escalationFormData.priority}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, priority: e.target.value as EscalationPriority }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                  >
+                    <option value="LOW" className="bg-zinc-950">Low</option>
+                    <option value="MEDIUM" className="bg-zinc-950">Medium</option>
+                    <option value="HIGH" className="bg-zinc-950">High</option>
+                    <option value="URGENT" className="bg-zinc-950">Urgent</option>
+                  </select>
+                </div>
+
+                {/* 6. Complaint Summary */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <MessageSquare className="h-3.5 w-3.5 text-zinc-400" /> Complaint Summary <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Provide details of the customer complaint or shipment issue..."
+                    value={escalationFormData.complaint_summary}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, complaint_summary: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+
+                {/* 7. Status */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5 text-zinc-400" /> Status
+                  </label>
+                  <select
+                    value={escalationFormData.status}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, status: e.target.value as EscalationStatus }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                  >
+                    <option value="OPEN" className="bg-zinc-950">Open</option>
+                    <option value="IN_PROGRESS" className="bg-zinc-950">In Progress</option>
+                    <option value="RESOLVED" className="bg-zinc-950">Resolved</option>
+                    <option value="CLOSED" className="bg-zinc-950">Closed</option>
+                  </select>
+                </div>
+
+                {/* 8. Escalation To (Admins/Staff) */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <UserCheck className="h-3.5 w-3.5 text-zinc-400" /> Escalation To (Admin / Staff)
+                  </label>
+                  <select
+                    value={escalationFormData.escalation_to_id}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, escalation_to_id: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                  >
+                    <option value="" className="bg-zinc-950">Select Admin/Staff Member</option>
+                    {usersData?.map(u => (
+                      <option key={u.id} value={u.id} className="bg-zinc-950">
+                        {u.first_name} {u.last_name} ({u.role || 'Staff'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 9. Internal Notes */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs text-zinc-300 font-semibold">Internal Team Notes</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Internal team discussions or notes (not shared with customer)..."
+                    value={escalationFormData.internal}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, internal: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+
+                {/* 10 & 11. Resolution & Resolution Date */}
+                <div className="space-y-1.5 sm:col-span-2 border-t border-zinc-900 pt-3">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> Resolution Details & Resolution Date
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <textarea
+                      rows={2}
+                      placeholder="Resolution details or steps taken..."
+                      value={escalationFormData.resolution}
+                      onChange={(e) => setEscalationFormData(prev => ({ ...prev, resolution: e.target.value }))}
+                      className="sm:col-span-2 bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                    />
+                    <input
+                      type="date"
+                      value={escalationFormData.resolution_date}
+                      onChange={(e) => setEscalationFormData(prev => ({ ...prev, resolution_date: e.target.value }))}
+                      className="bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 border-t border-zinc-900 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEscalationModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createEscalationMutation.isPending}
+                  className="px-5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-lg shadow-red-600/20 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                >
+                  {createEscalationMutation.isPending && (
+                    <span className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin"></span>
+                  )}
+                  Save Escalation
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DETAIL DRAWER FOR VIEWING / UPDATING ESCALATION */}
+      {isEscalationDrawerOpen && selectedEscalation && (
+        <div className="fixed inset-0 z-50 flex justify-end backdrop-blur-sm bg-black/60">
+          <div className="bg-zinc-950 border-l border-zinc-800 w-full max-w-lg h-full p-6 overflow-y-auto space-y-6 flex flex-col">
+            <div className="flex items-center justify-between border-b border-zinc-900 pb-4">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="h-5 w-5 text-red-400" />
+                <h3 className="font-bold text-lg text-white">Escalation Details</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setIsEscalationDrawerOpen(false)
+                  setSelectedEscalation(null)
+                }}
+                className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-5 flex-1 text-sm text-zinc-300">
+              {/* Badges Overview */}
+              <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Incident Date</span>
+                  <span className="text-xs text-zinc-300 font-medium">{selectedEscalation.date || 'N/A'}</span>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Priority & Type</span>
+                  <div className="flex items-center gap-2">
+                    {getEscalationPriorityBadge(selectedEscalation.priority)}
+                    <span className="px-2 py-0.5 rounded text-[11px] bg-zinc-800 text-zinc-300 border border-zinc-700 font-medium">
+                      {getEscalationTypeLabel(selectedEscalation.escalation_type)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
+                  <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Current Status</span>
+                  {getEscalationStatusBadge(selectedEscalation.status)}
+                </div>
+              </div>
+
+              {/* Linked Shipment & Customer */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/80 space-y-1 text-xs">
+                  <span className="text-zinc-500 font-semibold block">Escalating For</span>
+                  {selectedEscalation.shipment ? (
+                    <div>
+                      <p className="font-bold text-emerald-400">{selectedEscalation.shipment.tracking_id}</p>
+                      <p className="text-zinc-400">{selectedEscalation.shipment.receiver_name || 'Receiver N/A'}</p>
+                    </div>
+                  ) : (
+                    <p className="text-zinc-500 italic">No shipment linked</p>
+                  )}
+                </div>
+
+                <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/80 space-y-1 text-xs">
+                  <span className="text-zinc-500 font-semibold block">Customer Contact</span>
+                  <p className="font-bold text-white">{selectedEscalation.customer_name || 'N/A'}</p>
+                </div>
+              </div>
+
+              {/* Complaint Summary */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Complaint Summary</h4>
+                <div className="bg-zinc-900/40 p-3.5 rounded-lg border border-zinc-800 text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap">
+                  {selectedEscalation.complaint_summary}
+                </div>
+              </div>
+
+              {/* Update Status & Assigned Admin */}
+              <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-3">
+                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Manage Escalation</h4>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-zinc-400 font-semibold">Change Status</label>
+                    <select
+                      value={selectedEscalation.status}
+                      onChange={(e) => {
+                        const newStatus = e.target.value
+                        updateEscalationMutation.mutate({
+                          id: selectedEscalation.id,
+                          data: { status: newStatus }
+                        })
+                      }}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 cursor-pointer"
+                    >
+                      <option value="OPEN">Open</option>
+                      <option value="IN_PROGRESS">In Progress</option>
+                      <option value="RESOLVED">Resolved</option>
+                      <option value="CLOSED">Closed</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-zinc-400 font-semibold">Assign Admin</label>
+                    <select
+                      value={selectedEscalation.escalation_to?.id || ''}
+                      onChange={(e) => {
+                        updateEscalationMutation.mutate({
+                          id: selectedEscalation.id,
+                          data: { escalation_to_id: e.target.value || null }
+                        })
+                      }}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 cursor-pointer"
+                    >
+                      <option value="">Unassigned</option>
+                      {usersData?.map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.first_name} {u.last_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resolution & Resolution Date */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4" /> Resolution Details
+                </h4>
+                <textarea
+                  rows={3}
+                  placeholder="Record resolution notes..."
+                  defaultValue={selectedEscalation.resolution || ''}
+                  onBlur={(e) => {
+                    if (e.target.value !== (selectedEscalation.resolution || '')) {
+                      updateEscalationMutation.mutate({
+                        id: selectedEscalation.id,
+                        data: { resolution: e.target.value }
+                      })
+                    }
+                  }}
+                  className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-3 text-xs text-zinc-200 placeholder-zinc-600"
+                />
+                {selectedEscalation.resolution_date && (
+                  <p className="text-[11px] text-zinc-500 text-right">
+                    Resolved on: <span className="text-zinc-300 font-medium">{selectedEscalation.resolution_date}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Internal Notes */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Internal Notes</h4>
+                <textarea
+                  rows={2}
+                  placeholder="Add internal notes..."
+                  defaultValue={selectedEscalation.internal || ''}
+                  onBlur={(e) => {
+                    if (e.target.value !== (selectedEscalation.internal || '')) {
+                      updateEscalationMutation.mutate({
+                        id: selectedEscalation.id,
+                        data: { internal: e.target.value }
+                      })
+                    }
+                  }}
+                  className="w-full bg-zinc-900/60 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-3 text-xs text-zinc-200 placeholder-zinc-600"
+                />
+              </div>
+
+              {/* Action Footer */}
+              <div className="pt-4 border-t border-zinc-900 flex justify-between items-center">
+                <button
+                  onClick={() => {
+                    if (confirm('Are you sure you want to delete this escalation record?')) {
+                      deleteEscalationMutation.mutate(selectedEscalation.id)
+                    }
+                  }}
+                  className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete Record
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsEscalationDrawerOpen(false)
+                    setSelectedEscalation(null)
+                  }}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+

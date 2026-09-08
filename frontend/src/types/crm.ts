@@ -457,6 +457,27 @@ export interface Shipment extends BaseEntity {
   recorded_by?: User;
 }
 
+export type EscalationType = 'DELAY' | 'DAMAGED_GOODS' | 'MISSING_ITEM' | 'BILLING_ISSUE' | 'CUSTOMS_HOLD' | 'WRONG_DELIVERY' | 'OTHER';
+export type EscalationPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type EscalationStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+
+export interface ShipmentEscalation extends BaseEntity {
+  date?: string;
+  shipment?: Shipment;
+  customer?: Contact;
+  customer_name?: string;
+  escalation_type: EscalationType;
+  priority: EscalationPriority;
+  complaint_summary: string;
+  status: EscalationStatus;
+  internal?: string;
+  escalation_to?: User;
+  resolution?: string;
+  resolution_date?: string;
+  created_by?: User;
+}
+
+
 
 
 

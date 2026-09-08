@@ -15,7 +15,7 @@ from apps.planning.models import Task, Activity
 from .models import (
     Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
     Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt, Shipment
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt, Shipment, ShipmentEscalation
 )
 from .schemas import (
     CompanySchema, CompanyCreateSchema,
@@ -41,7 +41,8 @@ from .schemas import (
     DocumentSchema, DocumentCreateSchema,
     InvoiceSchema, InvoiceCreateSchema,
     ReceiptSchema, ReceiptCreateSchema,
-    ShipmentSchema, ShipmentCreateSchema
+    ShipmentSchema, ShipmentCreateSchema,
+    ShipmentEscalationSchema, ShipmentEscalationCreateSchema
 )
 
 # Route instances initialized with JWT Auth
@@ -65,6 +66,7 @@ documents_router = Router(auth=JWTAuth())
 invoices_router = Router(auth=JWTAuth())
 receipts_router = Router(auth=JWTAuth())
 shipments_router = Router(auth=JWTAuth())
+shipment_escalations_router = Router(auth=JWTAuth())
 search_router = Router(auth=JWTAuth())
 
 
@@ -2002,6 +2004,164 @@ def delete_shipment(request, id: UUID):
         raise HttpError(404, "Shipment not found.")
     shipment.delete()
     return 204, None
+
+
+# ----------------- SHIPMENT ESCALATIONS API -----------------
+
+@shipment_escalations_router.get("", response=List[ShipmentEscalationSchema])
+def list_shipment_escalations(
+    request,
+    search: Optional[str] = None,
+    shipment_id: Optional[UUID] = None,
+    customer_id: Optional[UUID] = None,
+    escalation_type: Optional[str] = None,
+    priority: Optional[str] = None,
+    status: Optional[str] = None,
+    escalation_to_id: Optional[UUID] = None
+):
+    qs = ShipmentEscalation.objects.filter(organization=request.user.organization).select_related(
+        'shipment', 'customer', 'escalation_to', 'created_by'
+    )
+    if search:
+        qs = qs.filter(
+            Q(customer_name__icontains=search) |
+            Q(complaint_summary__icontains=search) |
+            Q(internal__icontains=search) |
+            Q(resolution__icontains=search) |
+            Q(shipment__tracking_id__icontains=search)
+        )
+    if shipment_id:
+        qs = qs.filter(shipment_id=shipment_id)
+    if customer_id:
+        qs = qs.filter(customer_id=customer_id)
+    if escalation_type:
+        qs = qs.filter(escalation_type=escalation_type)
+    if priority:
+        qs = qs.filter(priority=priority)
+    if status:
+        qs = qs.filter(status=status)
+    if escalation_to_id:
+        qs = qs.filter(escalation_to_id=escalation_to_id)
+
+    return qs.order_by('-created_at')
+
+@shipment_escalations_router.post("", response={201: ShipmentEscalationSchema})
+def create_shipment_escalation(request, data: ShipmentEscalationCreateSchema):
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    shipment_id = parse_uuid(payload.pop('shipment_id', None))
+    customer_id = parse_uuid(payload.pop('customer_id', None))
+    escalation_to_id = parse_uuid(payload.pop('escalation_to_id', None))
+
+    date_val = payload.pop('date', None)
+    if date_val and str(date_val).strip():
+        payload['date'] = str(date_val).strip()
+    else:
+        payload['date'] = timezone.localdate()
+
+    res_date = payload.pop('resolution_date', None)
+    if res_date and str(res_date).strip():
+        payload['resolution_date'] = str(res_date).strip()
+    else:
+        payload['resolution_date'] = None
+
+    shipment = Shipment.objects.filter(id=shipment_id, organization=request.user.organization).first() if shipment_id else None
+    customer = Contact.objects.filter(id=customer_id, organization=request.user.organization).first() if customer_id else None
+    escalation_to = User.objects.filter(id=escalation_to_id, organization=request.user.organization).first() if escalation_to_id else None
+
+    # If customer object exists, set customer_name if not provided
+    if customer and not payload.get('customer_name'):
+        fullName = f"{customer.first_name} {customer.last_name if customer.last_name != '.' else ''}".strip()
+        payload['customer_name'] = fullName
+    elif shipment and not payload.get('customer_name'):
+        payload['customer_name'] = shipment.receiver_name or shipment.sender_name
+
+    escalation = ShipmentEscalation.objects.create(
+        organization=request.user.organization,
+        shipment=shipment,
+        customer=customer,
+        escalation_to=escalation_to,
+        created_by=request.user,
+        **payload
+    )
+    return 201, escalation
+
+@shipment_escalations_router.get("/{id}", response=ShipmentEscalationSchema)
+def get_shipment_escalation(request, id: UUID):
+    escalation = ShipmentEscalation.objects.filter(
+        id=id, organization=request.user.organization
+    ).select_related('shipment', 'customer', 'escalation_to', 'created_by').first()
+    if not escalation:
+        raise HttpError(404, "Shipment escalation not found.")
+    return escalation
+
+@shipment_escalations_router.put("/{id}", response=ShipmentEscalationSchema)
+def update_shipment_escalation(request, id: UUID, data: ShipmentEscalationCreateSchema):
+    escalation = ShipmentEscalation.objects.filter(
+        id=id, organization=request.user.organization
+    ).first()
+    if not escalation:
+        raise HttpError(404, "Shipment escalation not found.")
+
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    if 'shipment_id' in payload:
+        s_id = parse_uuid(payload.pop('shipment_id'))
+        escalation.shipment = Shipment.objects.filter(id=s_id, organization=request.user.organization).first() if s_id else None
+
+    if 'customer_id' in payload:
+        c_id = parse_uuid(payload.pop('customer_id'))
+        escalation.customer = Contact.objects.filter(id=c_id, organization=request.user.organization).first() if c_id else None
+
+    if 'escalation_to_id' in payload:
+        u_id = parse_uuid(payload.pop('escalation_to_id'))
+        escalation.escalation_to = User.objects.filter(id=u_id, organization=request.user.organization).first() if u_id else None
+
+    if 'date' in payload:
+        d = payload.pop('date')
+        escalation.date = str(d).strip() if d and str(d).strip() else None
+
+    if 'resolution_date' in payload:
+        rd = payload.pop('resolution_date')
+        escalation.resolution_date = str(rd).strip() if rd and str(rd).strip() else None
+
+    # Auto-fill resolution date if status changed to RESOLVED or CLOSED and resolution_date is missing
+    new_status = payload.get('status')
+    if new_status in ['RESOLVED', 'CLOSED'] and not escalation.resolution_date:
+        escalation.resolution_date = timezone.localdate()
+
+    for attr, val in payload.items():
+        setattr(escalation, attr, val)
+
+    escalation.save()
+    return escalation
+
+@shipment_escalations_router.delete("/{id}", response={204: None})
+def delete_shipment_escalation(request, id: UUID):
+    escalation = ShipmentEscalation.objects.filter(
+        id=id, organization=request.user.organization
+    ).first()
+    if not escalation:
+        raise HttpError(404, "Shipment escalation not found.")
+    escalation.delete()
+    return 204, None
+
 
 
 
