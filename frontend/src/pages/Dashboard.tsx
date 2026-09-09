@@ -235,7 +235,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100 flex overflow-hidden h-screen">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 flex overflow-hidden h-screen">
       {/* Mobile Drawer Backdrop */}
       {isMobileSidebarOpen && (
         <div
@@ -387,24 +387,24 @@ export default function Dashboard() {
       </aside>
 
       {/* Main content body */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#F8FAFC]">
         {/* Top Navbar Header */}
-        <header className="h-16 border-b border-zinc-900 bg-zinc-950/20 backdrop-blur-md px-4 sm:px-8 flex justify-between items-center text-sm flex-shrink-0">
+        <header className="h-16 border-b border-[#E2E8F0] bg-[#FFFFFF] px-4 sm:px-8 flex justify-between items-center text-sm flex-shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
           {/* Mobile Menu Toggle & Breadcrumbs */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-              className="md:hidden p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white transition-colors"
+              className="md:hidden p-2 rounded-lg bg-slate-100 border border-[#E2E8F0] text-slate-700 hover:text-slate-900 transition-colors"
               aria-label="Toggle Mobile Navigation"
             >
               {isMobileSidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
 
-            <div className="flex items-center gap-2 text-xs font-medium text-zinc-400">
-              <FolderOpen className="h-3.5 w-3.5 text-zinc-500 hidden sm:inline" />
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <FolderOpen className="h-3.5 w-3.5 text-slate-400 hidden sm:inline" />
               <span className="hidden sm:inline">Workspace</span>
-              <span className="text-zinc-600 hidden sm:inline">/</span>
-              <span className="text-indigo-400 font-bold truncate max-w-[140px] sm:max-w-none">
+              <span className="text-slate-400 hidden sm:inline">/</span>
+              <span className="text-indigo-600 font-bold truncate max-w-[140px] sm:max-w-none">
                 {getBreadcrumbTitle()}
               </span>
             </div>
@@ -414,21 +414,21 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             {/* Global Search Bar */}
             <div className="relative hidden md:block" ref={searchRef}>
-              <Search className="absolute left-2.5 top-2 h-4 w-4 text-zinc-550" />
+              <Search className="absolute left-2.5 top-2 h-4 w-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="Global searching..."
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                className="bg-zinc-950 pl-8 pr-3 py-1.5 rounded-lg border border-zinc-900 focus:border-indigo-650 focus:outline-none text-xs text-zinc-305 placeholder-zinc-650 w-52 focus:w-64 transition-all"
+                className="bg-slate-50 pl-8 pr-3 py-1.5 rounded-lg border border-[#E2E8F0] focus:border-indigo-500 focus:outline-none text-xs text-slate-800 placeholder-slate-400 w-52 focus:w-64 transition-all shadow-[0_1px_3px_rgba(0,0,0,0.02)]"
               />
 
               {/* Dropdown Results Overlay */}
               {searchText.trim().length >= 2 && (
-                <div className="absolute right-0 top-11 z-[60] bg-zinc-950/95 border border-zinc-900 rounded-xl p-4 shadow-2xl w-[450px] max-h-[480px] overflow-y-auto backdrop-blur-md space-y-4">
-                  <div className="flex items-center justify-between pb-2 border-b border-zinc-900 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                <div className="absolute right-0 top-11 z-[60] bg-white border border-[#E2E8F0] rounded-xl p-4 shadow-2xl w-[450px] max-h-[480px] overflow-y-auto space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0] text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                     <span>Search Results for "{searchText}"</span>
-                    {isSearching && <Loader2 className="h-3 w-3 text-indigo-400 animate-spin" />}
+                    {isSearching && <Loader2 className="h-3 w-3 text-indigo-600 animate-spin" />}
                   </div>
 
                   {!isSearching && searchResults && Object.values(searchResults).every((arr: any) => arr.length === 0) && (
@@ -592,15 +592,15 @@ export default function Dashboard() {
               )}
             </div>
 
-            <button className="relative p-1.5 rounded-lg border border-zinc-900 bg-zinc-950 hover:bg-zinc-905 text-zinc-450 hover:text-white transition-all cursor-pointer">
-              <Bell className="h-4 w-4" />
+            <button className="relative p-1.5 rounded-lg border border-[#E2E8F0] bg-white hover:bg-slate-50 text-slate-600 transition-all cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+              <Bell className="h-4 w-4 text-slate-600" />
               <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-indigo-500"></span>
             </button>
           </div>
         </header>
 
         {/* Scrollable View Area */}
-        <div className="flex-1 p-4 sm:p-8 overflow-y-auto bg-slate-300/50">
+        <div className="flex-1 p-4 sm:p-8 overflow-y-auto bg-[#F8FAFC]">
           {currentView === 'summary' && <SummaryDashboard />}
           {currentView === 'leads' && <LeadsWorkspace />}
           {currentView === 'partners' && <PartnersWorkspace />}

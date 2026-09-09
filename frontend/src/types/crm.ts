@@ -16,6 +16,7 @@ export interface Organization extends BaseEntity {
   timezone?: string;
   address?: string;
   billing_emails?: string;
+  gbp_to_ngn_rate?: number;
 }
 
 export interface CustomRole extends BaseEntity {
@@ -74,6 +75,7 @@ export interface Contact extends BaseEntity {
   city?: string;
   state?: string;
   country?: string;
+  address?: string;
   job_title?: string;
   status: 'LEAD' | 'CONTACT' | 'CUSTOMER' | 'PARTNER';
   company?: Company;
@@ -432,6 +434,9 @@ export type DashboardMetrics = EmployeeDashboardMetrics | ManagerDashboardMetric
 export interface Shipment extends BaseEntity {
   sender?: Contact;
   sender_name?: string;
+  sender_phone?: string;
+  sender_email?: string;
+  sender_address?: string;
   receiver?: Contact;
   receiver_name?: string;
   receiver_phone?: string;

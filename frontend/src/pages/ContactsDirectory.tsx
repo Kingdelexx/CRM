@@ -64,6 +64,7 @@ export default function ContactsDirectory() {
     email: '',
     phone: '',
     job_title: '',
+    address: '',
     status: 'LEAD',
     company_id: '',
     assigned_to_id: ''
@@ -140,6 +141,7 @@ export default function ContactsDirectory() {
         email: '',
         phone: '',
         job_title: '',
+        address: '',
         status: 'LEAD',
         company_id: '',
         assigned_to_id: ''
@@ -689,6 +691,19 @@ export default function ContactsDirectory() {
                 </div>
               </div>
 
+              {/* Address */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-400 font-semibold">Address</label>
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  placeholder="Street address, City, State..."
+                  className="w-full bg-zinc-905 border border-zinc-800 focus:border-indigo-650 focus:outline-none rounded-lg p-2 text-sm text-zinc-250 placeholder-zinc-650"
+                />
+              </div>
+
               {/* Actions Footer */}
               <div className="pt-4 border-t border-zinc-905 flex justify-end gap-3">
                 <button
@@ -772,6 +787,7 @@ export default function ContactsDirectory() {
                                 email: '',
                                 phone: '',
                                 job_title: '',
+                                address: '',
                                 status: 'LEAD',
                                 company_id: '',
                                 assigned_to_id: ''

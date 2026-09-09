@@ -254,53 +254,41 @@ def update_task(request, id: UUID, data: TaskCreateSchema):
     if not task:
         raise HttpError(404, "Task not found.")
 
-    payload = data.dict()
-    assignee_id = payload.pop('assignee_id', None)
-    task_team_id = payload.pop('task_team_id', None)
-    deal_id = payload.pop('deal_id', None)
-    contact_id = payload.pop('contact_id', None)
-    company_id = payload.pop('company_id', None)
+    payload = data.dict(exclude_unset=True)
 
-    if assignee_id:
-        assignee = User.objects.filter(id=assignee_id, organization=request.user.organization).first()
-        if not assignee:
-            raise HttpError(400, "Invalid Assignee ID.")
-        task.assignee = assignee
-    else:
-        task.assignee = None
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
 
-    if task_team_id:
+    assignee_id = parse_uuid(payload.pop('assignee_id', None))
+    task_team_id = parse_uuid(payload.pop('task_team_id', None))
+    deal_id = parse_uuid(payload.pop('deal_id', None))
+    contact_id = parse_uuid(payload.pop('contact_id', None))
+    partner_id = parse_uuid(payload.pop('partner_id', None))
+    company_id = parse_uuid(payload.pop('company_id', None))
+
+    if 'assignee_id' in data.dict():
+        task.assignee = User.objects.filter(id=assignee_id, organization=request.user.organization).first() if assignee_id else None
+
+    if 'task_team_id' in data.dict():
         from apps.accounts.models import Team
-        task_team = Team.objects.filter(id=task_team_id, organization=request.user.organization).first()
-        if not task_team:
-            raise HttpError(400, "Invalid Team ID.")
-        task.task_team = task_team
-    else:
-        task.task_team = None
+        task.task_team = Team.objects.filter(id=task_team_id, organization=request.user.organization).first() if task_team_id else None
 
-    if deal_id:
-        deal = Deal.objects.filter(id=deal_id, organization=request.user.organization).first()
-        if not deal:
-            raise HttpError(400, "Invalid Deal ID.")
-        task.deal = deal
-    else:
-        task.deal = None
+    if 'deal_id' in data.dict():
+        task.deal = Deal.objects.filter(id=deal_id, organization=request.user.organization).first() if deal_id else None
 
-    if contact_id:
-        contact = Contact.objects.filter(id=contact_id, organization=request.user.organization).first()
-        if not contact:
-            raise HttpError(400, "Invalid Contact ID.")
-        task.contact = contact
-    else:
-        task.contact = None
+    if 'contact_id' in data.dict():
+        task.contact = Contact.objects.filter(id=contact_id, organization=request.user.organization).first() if contact_id else None
 
-    if company_id:
-        company = Company.objects.filter(id=company_id, organization=request.user.organization).first()
-        if not company:
-            raise HttpError(400, "Invalid Company ID.")
-        task.company = company
-    else:
-        task.company = None
+    if 'partner_id' in data.dict():
+        task.partner = Contact.objects.filter(id=partner_id, organization=request.user.organization).first() if partner_id else None
+
+    if 'company_id' in data.dict():
+        task.company = Company.objects.filter(id=company_id, organization=request.user.organization).first() if company_id else None
 
     # Handle status change logging
     old_status = task.status

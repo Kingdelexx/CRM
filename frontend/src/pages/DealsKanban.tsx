@@ -251,32 +251,32 @@ export default function DealsKanban() {
     <div className="space-y-6">
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-zinc-950/40 border border-zinc-900 p-5 rounded-xl flex items-center justify-between">
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-5 rounded-xl flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="space-y-1">
-            <span className="text-xs text-zinc-400 font-medium">Total Pipeline Value</span>
-            <h3 className="text-2xl font-bold text-zinc-100">${totalPipelineValue.toLocaleString()}</h3>
+            <span className="text-xs text-slate-500 font-medium">Total Pipeline Value</span>
+            <h3 className="text-2xl font-bold text-[#1A202C]">${totalPipelineValue.toLocaleString()}</h3>
           </div>
-          <div className="h-10 w-10 bg-indigo-600/15 border border-indigo-600/25 flex items-center justify-center rounded-lg text-indigo-400 font-bold">
+          <div className="h-10 w-10 bg-indigo-50 border border-indigo-200 flex items-center justify-center rounded-lg text-indigo-600 font-bold">
             <DollarSign className="h-5 w-5" />
           </div>
         </div>
 
-        <div className="bg-zinc-950/40 border border-zinc-900 p-5 rounded-xl flex items-center justify-between">
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-5 rounded-xl flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="space-y-1">
-            <span className="text-xs text-zinc-400 font-medium">Open Opportunities</span>
-            <h3 className="text-2xl font-bold text-zinc-100">{openDealsCount}</h3>
+            <span className="text-xs text-slate-500 font-medium">Open Opportunities</span>
+            <h3 className="text-2xl font-bold text-[#1A202C]">{openDealsCount}</h3>
           </div>
-          <div className="h-10 w-10 bg-indigo-600/15 border border-indigo-600/25 flex items-center justify-center rounded-lg text-indigo-400 font-bold">
+          <div className="h-10 w-10 bg-indigo-50 border border-indigo-200 flex items-center justify-center rounded-lg text-indigo-600 font-bold">
             <Briefcase className="h-5 w-5" />
           </div>
         </div>
 
-        <div className="bg-zinc-950/40 border border-zinc-900 p-5 rounded-xl flex items-center justify-between">
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-5 rounded-xl flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="space-y-1">
-            <span className="text-xs text-zinc-400 font-medium">Closed Won Revenue</span>
-            <h3 className="text-2xl font-bold text-emerald-450">${closedWonValue.toLocaleString()}</h3>
+            <span className="text-xs text-slate-500 font-medium">Closed Won Revenue</span>
+            <h3 className="text-2xl font-bold text-emerald-600">${closedWonValue.toLocaleString()}</h3>
           </div>
-          <div className="h-10 w-10 bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center rounded-lg text-emerald-450 font-bold">
+          <div className="h-10 w-10 bg-emerald-50 border border-emerald-200 flex items-center justify-center rounded-lg text-emerald-600 font-bold">
             <TrendingUp className="h-5 w-5" />
           </div>
         </div>
@@ -285,10 +285,10 @@ export default function DealsKanban() {
       {/* Kanban Layout Title & Add */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Layers className="h-5 w-5 text-indigo-400" /> Pipeline Deal Board
+          <h2 className="text-lg font-bold text-[#1A202C] flex items-center gap-2">
+            <Layers className="h-5 w-5 text-indigo-600" /> Pipeline Deal Board
           </h2>
-          <p className="text-xs text-zinc-400 mt-0.5">Drag and drop deal cards to change pipeline stages dynamically</p>
+          <p className="text-xs text-slate-500 mt-0.5">Drag and drop deal cards to change pipeline stages dynamically</p>
         </div>
         <button
           onClick={() => {
@@ -312,16 +312,16 @@ export default function DealsKanban() {
             return (
               <div
                 key={stage.id}
-                className="bg-zinc-950/20 border border-zinc-900 rounded-xl p-4 w-72 flex-shrink-0 flex flex-col max-h-[70vh]"
+                className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-4 w-72 flex-shrink-0 flex flex-col max-h-[70vh] shadow-[0_1px_3px_rgba(0,0,0,0.04)]"
               >
                 {/* Stage Header */}
-                <div className="flex justify-between items-center pb-2 border-b border-zinc-900/60 mb-3">
+                <div className="flex justify-between items-center pb-2.5 border-b border-[#F1F5F9] mb-3 bg-[#FFFFFF]">
                   <div className="flex flex-col">
-                    <span className="text-xs font-bold text-zinc-200">{stage.name}</span>
-                    <span className="text-[10px] text-zinc-500">{stageDeals.length} {stageDeals.length === 1 ? 'deal' : 'deals'}</span>
+                    <span className="text-xs font-bold text-[#1A202C]">{stage.name}</span>
+                    <span className="text-[10px] text-slate-500">{stageDeals.length} {stageDeals.length === 1 ? 'deal' : 'deals'}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] bg-zinc-900 px-2 py-0.5 rounded text-zinc-400 font-bold border border-zinc-900">
+                    <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-bold border border-slate-200">
                       ${sumValue.toLocaleString()}
                     </span>
                     <button
@@ -330,7 +330,7 @@ export default function DealsKanban() {
                         setFormData(prev => ({ ...prev, stage_id: stage.id }))
                         setIsModalOpen(true)
                       }}
-                      className="p-0.5 rounded hover:bg-zinc-900 text-zinc-400 hover:text-white cursor-pointer"
+                      className="p-0.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-900 cursor-pointer"
                       title={`Add deal to ${stage.name}`}
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -344,10 +344,19 @@ export default function DealsKanban() {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`flex-1 overflow-y-auto space-y-3 min-h-[300px] p-0.5 rounded-lg transition-colors ${
-                        snapshot.isDraggingOver ? 'bg-zinc-900/10' : ''
+                      className={`flex-1 overflow-y-auto space-y-3 min-h-[300px] p-1 rounded-lg transition-colors ${
+                        snapshot.isDraggingOver
+                          ? 'bg-[#F8FAFC] border-2 border-dashed border-[#CBD5E1]'
+                          : stageDeals.length === 0
+                          ? 'bg-[#F8FAFC] border border-dashed border-[#CBD5E1] flex flex-col items-center justify-center'
+                          : ''
                       }`}
                     >
+                      {stageDeals.length === 0 && !snapshot.isDraggingOver && (
+                        <div className="text-center p-4 text-slate-400 text-xs font-medium">
+                          No deals in stage
+                        </div>
+                      )}
                       {stageDeals.map((deal, idx) => (
                         <Draggable key={deal.id} draggableId={deal.id} index={idx}>
                           {(prov, snap) => (
@@ -359,20 +368,20 @@ export default function DealsKanban() {
                                 setSelectedDealId(deal.id)
                                 setIsDrawerOpen(true)
                               }}
-                              className={`p-3.5 rounded-lg border bg-zinc-950/80 transition-all hover:border-zinc-808 cursor-pointer ${
+                              className={`p-3.5 rounded-lg border bg-[#FFFFFF] transition-all hover:border-slate-300 cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.04)] ${
                                 snap.isDragging
-                                  ? 'border-indigo-650 shadow-2xl scale-[1.02] rotate-1 bg-zinc-900'
-                                  : 'border-zinc-900'
+                                  ? 'border-indigo-500 shadow-xl scale-[1.02] rotate-1 bg-white'
+                                  : 'border-[#E2E8F0]'
                               }`}
                             >
                               <div className="flex justify-between items-start gap-2">
-                                <h4 className="text-xs font-bold text-zinc-200 line-clamp-1">{deal.title}</h4>
+                                <h4 className="text-xs font-bold text-[#1A202C] line-clamp-1">{deal.title}</h4>
                                 <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase border flex-shrink-0 ${
                                   deal.status === 'WON'
-                                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                                     : deal.status === 'LOST'
-                                    ? 'bg-red-500/10 border-red-500/20 text-red-405'
-                                    : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'
+                                    ? 'bg-red-50 border-red-200 text-red-700'
+                                    : 'bg-indigo-50 border-indigo-200 text-indigo-700'
                                 }`}>
                                   {deal.status}
                                 </span>
@@ -381,19 +390,19 @@ export default function DealsKanban() {
                               {/* Association details */}
                               <div className="mt-2.5 space-y-1 block">
                                 {deal.company && (
-                                  <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
-                                    <Building className="h-3 w-3 text-zinc-550" />
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
+                                    <Building className="h-3 w-3 text-slate-400" />
                                     <span className="line-clamp-1">{deal.company.name}</span>
                                   </div>
                                 )}
                                 {deal.contact && (
-                                  <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
-                                    <UserIcon className="h-3 w-3 text-zinc-550" />
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
+                                    <UserIcon className="h-3 w-3 text-slate-400" />
                                     <span>{deal.contact.first_name} {deal.contact.last_name}</span>
                                   </div>
                                 )}
                                 {deal.expected_close_date && (
-                                  <div className="flex items-center gap-1.5 text-[9px] text-zinc-500">
+                                  <div className="flex items-center gap-1.5 text-[9px] text-slate-500">
                                     <Calendar className="h-3 w-3" />
                                     <span>Close: {new Date(deal.expected_close_date).toLocaleDateString()}</span>
                                   </div>
@@ -401,9 +410,9 @@ export default function DealsKanban() {
                               </div>
 
                               {/* Value footer */}
-                              <div className="mt-3 pt-2.5 border-t border-zinc-900/60 flex justify-between items-center text-[10px]">
-                                <span className="text-zinc-500">Prob: {deal.probability ?? 0}%</span>
-                                <span className="font-bold text-indigo-400 text-xs">${Number(deal.value).toLocaleString()}</span>
+                              <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between items-center text-[10px]">
+                                <span className="text-slate-500">Prob: {deal.probability ?? 0}%</span>
+                                <span className="font-bold text-indigo-600 text-xs">${Number(deal.value).toLocaleString()}</span>
                               </div>
                             </div>
                           )}

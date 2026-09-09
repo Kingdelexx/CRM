@@ -99,6 +99,7 @@ class Contact(TimeStampedModel):
     lead_acquisition_cost = models.DecimalField(max_digits=15, decimal_places=2, default=0.00, null=True, blank=True)
     city = models.CharField(max_length=100, null=True, blank=True)
     state = models.CharField(max_length=100, null=True, blank=True)
+    address = models.TextField(null=True, blank=True)
 
 
     # Lead lifecycle tracking fields
@@ -740,6 +741,9 @@ class Shipment(TimeStampedModel):
         related_name='sent_shipments'
     )
     sender_name = models.CharField(max_length=255, null=True, blank=True)
+    sender_phone = models.CharField(max_length=50, null=True, blank=True)
+    sender_email = models.CharField(max_length=255, null=True, blank=True)
+    sender_address = models.TextField(null=True, blank=True)
     
     receiver = models.ForeignKey(
         Contact,

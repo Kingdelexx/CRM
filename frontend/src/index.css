@@ -75,4 +75,17 @@
     color: rgb(var(--foreground));
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+
+  /* Automatically hide placeholder text when input/textarea receives focus (typing begins) */
+  input:focus::placeholder,
+  textarea:focus::placeholder,
+  input:focus::-webkit-input-placeholder,
+  textarea:focus::-webkit-input-placeholder,
+  input:focus::-moz-placeholder,
+  textarea:focus::-moz-placeholder,
+  input:focus:-ms-input-placeholder,
+  textarea:focus:-ms-input-placeholder {
+    color: transparent !important;
+    opacity: 0 !important;
+  }
 }

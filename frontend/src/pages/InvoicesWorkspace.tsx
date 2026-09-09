@@ -4,7 +4,7 @@ import { apiClient as api } from '../api/client';
 import { MintanaInvoiceReceiptModal } from '../components/MintanaInvoiceReceiptModal';
 import { 
   FileText, Plus, Search, Filter, CheckCircle, Share2, Printer, Download,
-  Trash2, DollarSign, Package, AlertCircle, ArrowUpRight, Check 
+  Trash2, DollarSign, Package, AlertCircle, ArrowUpRight, Check, Edit3, X
 } from 'lucide-react';
 
 export const InvoicesWorkspace: React.FC = () => {
@@ -23,6 +23,8 @@ export const InvoicesWorkspace: React.FC = () => {
 
   // New Invoice Form Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [formData, setFormData] = useState({
     invoice_number: '',
     contact_id: '',
@@ -48,19 +50,60 @@ export const InvoicesWorkspace: React.FC = () => {
     { sn: 2, service_name: 'Doorstep Delivery', price_ngn: '' as any, price_gbp: '' as any }
   ]);
 
+  const [exchangeRate, setExchangeRate] = useState<number>(2000);
+
+  // New Receipt Form Modal State
+  const [isCreateReceiptModalOpen, setIsCreateReceiptModalOpen] = useState(false);
+  const [receiptFormData, setReceiptFormData] = useState({
+    contact_id: '',
+    invoice_id: '',
+    receipt_number: '',
+    amount_paid_ngn: '' as any,
+    amount_paid_gbp: '' as any,
+    payment_method: 'BANK_TRANSFER',
+    reference_number: '',
+    notes: '',
+  });
+
+  const handleReceiptAmountNgnChange = (val: string) => {
+    const valNum = parseFloat(val);
+    const rate = exchangeRate > 0 ? exchangeRate : 2000;
+    const convGbp = !isNaN(valNum) && val !== '' ? (valNum / rate).toFixed(2) : '';
+    setReceiptFormData(prev => ({
+      ...prev,
+      amount_paid_ngn: val,
+      amount_paid_gbp: convGbp,
+    }));
+  };
+
+  const handleReceiptAmountGbpChange = (val: string) => {
+    const valNum = parseFloat(val);
+    const rate = exchangeRate > 0 ? exchangeRate : 2000;
+    const convNgn = !isNaN(valNum) && val !== '' ? (valNum * rate).toFixed(2) : '';
+    setReceiptFormData(prev => ({
+      ...prev,
+      amount_paid_gbp: val,
+      amount_paid_ngn: convNgn,
+    }));
+  };
+
   // Fetch data
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [invRes, rcptRes, contRes] = await Promise.all([
+      const [invRes, rcptRes, contRes, meRes] = await Promise.all([
         api.get('/invoices/'),
         api.get('/receipts/'),
         api.get('/contacts/'),
+        api.get('/accounts/me'),
       ]);
 
       setInvoices(invRes.data?.items || invRes.data || []);
       setReceipts(rcptRes.data?.items || rcptRes.data || []);
       setContacts(contRes.data?.items || contRes.data || []);
+      if (meRes.data?.organization?.gbp_to_ngn_rate) {
+        setExchangeRate(Number(meRes.data.organization.gbp_to_ngn_rate) || 2000);
+      }
     } catch (err) {
       console.error('Failed to load invoices workspace data:', err);
     } finally {
@@ -92,17 +135,75 @@ export const InvoicesWorkspace: React.FC = () => {
   const handleAddItemRow = () => {
     setItemRows(prev => [
       ...prev,
-      { dos: '', nature_of_item: '', weight_kg: 0, price_ngn: 0, price_gbp: 0, total_ngn: 0, total_gbp: 0 }
+      { dos: '', nature_of_item: '', weight_kg: '', price_ngn: '', price_gbp: '', total_ngn: '', total_gbp: '' }
     ]);
   };
 
-  // Update Item Row
+  // Update Item Row with Auto Exchange Rate Conversion
   const handleUpdateItemRow = (index: number, field: string, value: any) => {
     setItemRows(prev => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
+      const valNum = parseFloat(value);
+      const rate = exchangeRate > 0 ? exchangeRate : 2000;
+
+      if (field === 'price_ngn') {
+        const convGbp = !isNaN(valNum) && value !== '' ? (valNum / rate).toFixed(2) : '';
+        updated[index] = {
+          ...updated[index],
+          price_ngn: value,
+          price_gbp: convGbp,
+          total_ngn: value,
+          total_gbp: convGbp
+        };
+      } else if (field === 'price_gbp') {
+        const convNgn = !isNaN(valNum) && value !== '' ? (valNum * rate).toFixed(2) : '';
+        updated[index] = {
+          ...updated[index],
+          price_gbp: value,
+          price_ngn: convNgn,
+          total_gbp: value,
+          total_ngn: convNgn
+        };
+      } else {
+        updated[index] = { ...updated[index], [field]: value };
+      }
       return updated;
     });
+  };
+
+  // Update Service Row with Auto Exchange Rate Conversion
+  const handleUpdateServiceRow = (index: number, field: string, value: any) => {
+    setServiceRows(prev => {
+      const updated = [...prev];
+      const valNum = parseFloat(value);
+      const rate = exchangeRate > 0 ? exchangeRate : 2000;
+
+      if (field === 'price_ngn') {
+        const convGbp = !isNaN(valNum) && value !== '' ? (valNum / rate).toFixed(2) : '';
+        updated[index] = { ...updated[index], price_ngn: value, price_gbp: convGbp };
+      } else if (field === 'price_gbp') {
+        const convNgn = !isNaN(valNum) && value !== '' ? (valNum * rate).toFixed(2) : '';
+        updated[index] = { ...updated[index], price_gbp: value, price_ngn: convNgn };
+      } else {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+      return updated;
+    });
+  };
+
+  const handleRemoveItemRow = (index: number) => {
+    setItemRows(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAddServiceRow = () => {
+    setServiceRows(prev => [
+      ...prev,
+      { sn: prev.length + 1, service_name: '', price_ngn: '', price_gbp: '' }
+    ]);
+  };
+
+  const handleRemoveServiceRow = (index: number) => {
+    setServiceRows(prev => prev.filter((_, idx) => idx !== index));
   };
 
   // Create Invoice Submission
@@ -149,6 +250,123 @@ export const InvoicesWorkspace: React.FC = () => {
     } catch (err) {
       console.error('Failed to create invoice:', err);
       alert('Error creating invoice. Please try again.');
+    }
+  };
+
+  // Open Edit Invoice Modal
+  const handleOpenEditModal = (inv: Invoice) => {
+    setEditingInvoice(inv);
+    setFormData({
+      invoice_number: inv.invoice_number || '',
+      contact_id: inv.contact?.id || '',
+      receiver_name: inv.receiver_name || '',
+      receiver_tel: inv.receiver_tel || '',
+      receiver_email: inv.receiver_email || '',
+      receiver_address: inv.receiver_address || '',
+      expected_parcel_no: inv.expected_parcel_no || '',
+      parcel_handler: inv.parcel_handler || 'Mintana Express',
+      total_value_items: inv.total_value_items ? String(inv.total_value_items) : '',
+      total_ngn: inv.total_ngn ? String(inv.total_ngn) : '',
+      total_gbp: inv.total_gbp ? String(inv.total_gbp) : '',
+      sla_terms_url: inv.sla_terms_url || 'https://www.mintana.co.uk/terms-and-conditions',
+      notes: inv.notes || '',
+    });
+    setItemRows(
+      inv.items && inv.items.length > 0
+        ? inv.items.map(i => ({
+            dos: i.dos || '',
+            nature_of_item: i.nature_of_item || '',
+            weight_kg: i.weight_kg ? String(i.weight_kg) : '',
+            price_ngn: i.price_ngn ? String(i.price_ngn) : '',
+            price_gbp: i.price_gbp ? String(i.price_gbp) : '',
+            total_ngn: i.total_ngn ? String(i.total_ngn) : (i.price_ngn ? String(i.price_ngn) : ''),
+            total_gbp: i.total_gbp ? String(i.total_gbp) : (i.price_gbp ? String(i.price_gbp) : ''),
+          }))
+        : [{ dos: '', nature_of_item: '', weight_kg: '', price_ngn: '', price_gbp: '', total_ngn: '', total_gbp: '' }]
+    );
+    setServiceRows(
+      inv.services && inv.services.length > 0
+        ? inv.services.map((s, idx) => ({
+            sn: idx + 1,
+            service_name: s.service_name || '',
+            price_ngn: s.price_ngn ? String(s.price_ngn) : '',
+            price_gbp: s.price_gbp ? String(s.price_gbp) : '',
+          }))
+        : [{ sn: 1, service_name: '', price_ngn: '', price_gbp: '' }]
+    );
+    setIsEditModalOpen(true);
+  };
+
+  // Edit Invoice Submission
+  const handleEditInvoiceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInvoice) return;
+    try {
+      const calcNgn = itemRows.reduce((acc, row) => acc + (Number(row.total_ngn) || Number(row.price_ngn) || 0), 0) +
+        serviceRows.reduce((acc, row) => acc + (Number(row.price_ngn) || 0), 0);
+
+      const calcGbp = itemRows.reduce((acc, row) => acc + (Number(row.total_gbp) || Number(row.price_gbp) || 0), 0) +
+        serviceRows.reduce((acc, row) => acc + (Number(row.price_gbp) || 0), 0);
+
+      const cleanedItems = itemRows.map(r => ({
+        ...r,
+        weight_kg: Number(r.weight_kg) || 0,
+        price_ngn: Number(r.price_ngn) || 0,
+        price_gbp: Number(r.price_gbp) || 0,
+        total_ngn: Number(r.total_ngn || r.price_ngn) || 0,
+        total_gbp: Number(r.total_gbp || r.price_gbp) || 0,
+      }));
+
+      const cleanedServices = serviceRows.map(s => ({
+        ...s,
+        price_ngn: Number(s.price_ngn) || 0,
+        price_gbp: Number(s.price_gbp) || 0,
+      }));
+
+      const payload = {
+        ...formData,
+        contact_id: formData.contact_id || undefined,
+        total_value_items: Number(formData.total_value_items) || 0,
+        total_ngn: Number(formData.total_ngn) > 0 ? Number(formData.total_ngn) : calcNgn,
+        total_gbp: Number(formData.total_gbp) > 0 ? Number(formData.total_gbp) : calcGbp,
+        items: cleanedItems,
+        services: cleanedServices,
+      };
+
+      await api.put(`/invoices/${editingInvoice.id}`, payload);
+      setIsEditModalOpen(false);
+      setEditingInvoice(null);
+      fetchData();
+    } catch (err) {
+      console.error('Failed to update invoice:', err);
+      alert('Error updating invoice. Please try again.');
+    }
+  };
+
+  // Create Manual Receipt Submission
+  const handleCreateReceiptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...receiptFormData,
+        contact_id: receiptFormData.contact_id || undefined,
+        invoice_id: receiptFormData.invoice_id || undefined,
+        receipt_number: receiptFormData.receipt_number || undefined,
+        amount_paid_ngn: Number(receiptFormData.amount_paid_ngn) || 0,
+        amount_paid_gbp: Number(receiptFormData.amount_paid_gbp) || 0,
+        reference_number: receiptFormData.reference_number || undefined,
+        notes: receiptFormData.notes || undefined,
+      };
+
+      const res = await api.post('/receipts/', payload);
+      setIsCreateReceiptModalOpen(false);
+      fetchData();
+      setSelectedInvoice(null);
+      setSelectedReceipt(res.data);
+      setIsModalOpen(true);
+    } catch (err) {
+      console.error('Failed to create receipt:', err);
+      alert('Error creating receipt. Please try again.');
     }
   };
 
@@ -254,13 +472,22 @@ export const InvoicesWorkspace: React.FC = () => {
             </p>
           </div>
 
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center space-x-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 text-white font-medium px-5 py-2.5 rounded-xl shadow-lg shadow-sky-600/20 transition duration-200"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Create New Invoice</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setIsCreateReceiptModalOpen(true)}
+              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-600/20 transition duration-200"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Create Receipt</span>
+            </button>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="flex items-center space-x-2 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-500 hover:to-blue-600 text-white font-medium px-5 py-2.5 rounded-xl shadow-lg shadow-sky-600/20 transition duration-200"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Create New Invoice</span>
+            </button>
+          </div>
         </div>
 
       {/* KPI Cards Grid */}
@@ -449,6 +676,14 @@ export const InvoicesWorkspace: React.FC = () => {
                             <span>Download PDF</span>
                           </button>
 
+                          <button
+                            onClick={() => handleOpenEditModal(inv)}
+                            title="Edit Invoice"
+                            className="p-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-lg transition"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+
                           {inv.status !== 'PAID' && (
                             <button
                               onClick={() => handleMarkPaid(inv)}
@@ -598,10 +833,15 @@ export const InvoicesWorkspace: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden my-8 border border-slate-200">
             <div className="flex justify-between items-center px-6 py-4 bg-slate-900 text-white">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-sky-400" />
-                <span>Create Mintana Logistics Invoice</span>
-              </h3>
+              <div className="flex items-center space-x-3">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-sky-400" />
+                  <span>Create Mintana Logistics Invoice</span>
+                </h3>
+                <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                  Rate: £1 = ₦{exchangeRate.toLocaleString()}
+                </span>
+              </div>
               <button onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-white">
                 ✕
               </button>
@@ -774,6 +1014,40 @@ export const InvoicesWorkspace: React.FC = () => {
                 </div>
               </div>
 
+              {/* Services Breakdown (Packaging, Doorstep Delivery) */}
+              <div>
+                <h4 className="font-bold text-slate-900 mb-2">Additional Services Fees (Auto-Converts)</h4>
+                <div className="space-y-2">
+                  {serviceRows.map((srv, idx) => (
+                    <div key={idx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs items-center">
+                      <span className="font-semibold text-slate-800">{srv.service_name}</span>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5 sm:hidden">Price (NGN)</label>
+                        <input
+                          type="number"
+                          placeholder="Price (NGN ₦)"
+                          value={srv.price_ngn}
+                          onFocus={e => e.target.select()}
+                          onChange={e => handleUpdateServiceRow(idx, 'price_ngn', e.target.value)}
+                          className="w-full p-1.5 bg-white border rounded"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5 sm:hidden">Price (GBP)</label>
+                        <input
+                          type="number"
+                          placeholder="Price (GBP £)"
+                          value={srv.price_gbp}
+                          onFocus={e => e.target.select()}
+                          onChange={e => handleUpdateServiceRow(idx, 'price_gbp', e.target.value)}
+                          className="w-full p-1.5 bg-white border rounded"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* SLA URL */}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Shipping Terms & SLA Link</label>
@@ -809,6 +1083,443 @@ export const InvoicesWorkspace: React.FC = () => {
                   className="px-6 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-600/20"
                 >
                   Create Invoice
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Invoice Modal Form */}
+      {isEditModalOpen && editingInvoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto my-8 border border-slate-200">
+            <div className="flex justify-between items-center px-6 py-4 bg-amber-700 text-white sticky top-0 z-10">
+              <div className="flex items-center space-x-3">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-amber-300" />
+                  <span>Edit Invoice #{editingInvoice.invoice_number}</span>
+                </h3>
+                <span className="text-xs bg-amber-600 text-amber-100 border border-amber-500 px-2.5 py-0.5 rounded-full font-bold">
+                  Exchange Rate: £1 = ₦{exchangeRate.toLocaleString()}
+                </span>
+              </div>
+              <button onClick={() => { setIsEditModalOpen(false); setEditingInvoice(null); }} className="text-slate-200 hover:text-white">
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleEditInvoiceSubmit} className="p-6 space-y-6 text-sm">
+              {/* Receiver Info & Status */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Select Client / Contact</label>
+                  <select
+                    value={formData.contact_id}
+                    onChange={e => handleContactSelect(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                  >
+                    <option value="">-- Direct Input (No Link) --</option>
+                    {contacts.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.first_name} {c.last_name} ({c.email || c.phone})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Receiver Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.receiver_name}
+                    onChange={e => setFormData({ ...formData, receiver_name: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Receiver Phone Number</label>
+                  <input
+                    type="text"
+                    value={formData.receiver_tel}
+                    onChange={e => setFormData({ ...formData, receiver_tel: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Receiver Email</label>
+                  <input
+                    type="email"
+                    value={formData.receiver_email}
+                    onChange={e => setFormData({ ...formData, receiver_email: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Expected Parcel No</label>
+                  <input
+                    type="text"
+                    value={formData.expected_parcel_no}
+                    onChange={e => setFormData({ ...formData, expected_parcel_no: e.target.value })}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              {/* Items Section */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-sky-600" />
+                    <span>Item Details & Charges</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAddItemRow}
+                    className="text-xs bg-sky-50 text-sky-700 hover:bg-sky-100 font-semibold px-3 py-1.5 rounded-lg border border-sky-200 transition flex items-center space-x-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Item Row</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="p-2.5">Date of Service</th>
+                        <th className="p-2.5">Nature of Item</th>
+                        <th className="p-2.5 w-24">Weight (kg)</th>
+                        <th className="p-2.5 w-32">Price (NGN ₦)</th>
+                        <th className="p-2.5 w-32">Price (GBP £)</th>
+                        <th className="p-2.5 text-center w-12">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {itemRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="p-2">
+                            <input
+                              type="date"
+                              value={row.dos}
+                              onChange={e => handleUpdateItemRow(idx, 'dos', e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-xs"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              placeholder="e.g. Personal Clothing"
+                              value={row.nature_of_item}
+                              onChange={e => handleUpdateItemRow(idx, 'nature_of_item', e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-xs"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              step="0.1"
+                              placeholder="0.0"
+                              value={row.weight_kg}
+                              onChange={e => handleUpdateItemRow(idx, 'weight_kg', e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-xs"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={row.price_ngn}
+                              onFocus={e => e.target.select()}
+                              onChange={e => handleUpdateItemRow(idx, 'price_ngn', e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-xs font-medium"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={row.price_gbp}
+                              onFocus={e => e.target.select()}
+                              onChange={e => handleUpdateItemRow(idx, 'price_gbp', e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-xs font-medium"
+                            />
+                          </td>
+                          <td className="p-2 text-center">
+                            {itemRows.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveItemRow(idx)}
+                                className="text-rose-500 hover:text-rose-700 p-1"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Service Charges Section */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                    <span>Additional Services & Fees</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAddServiceRow}
+                    className="text-xs bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold px-3 py-1.5 rounded-lg border border-emerald-200 transition flex items-center space-x-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Service Fee</span>
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
+                      <tr>
+                        <th className="p-2.5">Service Description</th>
+                        <th className="p-2.5 w-36">Price (NGN ₦)</th>
+                        <th className="p-2.5 w-36">Price (GBP £)</th>
+                        <th className="p-2.5 text-center w-12">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {serviceRows.map((sRow, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="p-2">
+                            <input
+                              type="text"
+                              placeholder="e.g. Doorstep Delivery Fee"
+                              value={sRow.service_name}
+                              onChange={e => handleUpdateServiceRow(idx, 'service_name', e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-xs"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={sRow.price_ngn}
+                              onFocus={e => e.target.select()}
+                              onChange={e => handleUpdateServiceRow(idx, 'price_ngn', e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-xs font-medium"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={sRow.price_gbp}
+                              onFocus={e => e.target.select()}
+                              onChange={e => handleUpdateServiceRow(idx, 'price_gbp', e.target.value)}
+                              className="w-full p-2 border border-slate-200 rounded-lg text-xs font-medium"
+                            />
+                          </td>
+                          <td className="p-2 text-center">
+                            {serviceRows.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveServiceRow(idx)}
+                                className="text-rose-500 hover:text-rose-700 p-1"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Calculated Totals Summary */}
+              <div className="bg-slate-900 text-white p-4 rounded-xl flex justify-between items-center">
+                <div>
+                  <p className="text-xs text-slate-400 font-semibold uppercase">Calculated Total</p>
+                  <p className="text-xs text-slate-300">Sum of items + services</p>
+                </div>
+                <div className="text-right font-bold text-lg">
+                  <span className="text-emerald-400 mr-4">₦{liveCalcNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="text-blue-400">£{liveCalcGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => { setIsEditModalOpen(false); setEditingInvoice(null); }}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-100 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold shadow-lg shadow-amber-600/20"
+                >
+                  Update Invoice
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Receipt Modal Form */}
+      {isCreateReceiptModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden my-8 border border-slate-200">
+            <div className="flex justify-between items-center px-6 py-4 bg-emerald-900 text-white">
+              <div className="flex items-center space-x-3">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-emerald-400" />
+                  <span>Create Official Payment Receipt</span>
+                </h3>
+                <span className="text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                  Rate: £1 = ₦{exchangeRate.toLocaleString()}
+                </span>
+              </div>
+              <button onClick={() => setIsCreateReceiptModalOpen(false)} className="text-slate-400 hover:text-white">
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateReceiptSubmit} className="p-6 space-y-4 text-sm">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Select Client / Contact (Optional)</label>
+                <select
+                  value={receiptFormData.contact_id}
+                  onChange={e => setReceiptFormData({ ...receiptFormData, contact_id: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                >
+                  <option value="">-- Choose Existing Contact --</option>
+                  {contacts.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.first_name} {c.last_name} ({c.email || c.phone})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Link to Invoice (Optional)</label>
+                <select
+                  value={receiptFormData.invoice_id}
+                  onChange={e => setReceiptFormData({ ...receiptFormData, invoice_id: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                >
+                  <option value="">-- Direct Receipt (No Invoice Link) --</option>
+                  {invoices.map(inv => (
+                    <option key={inv.id} value={inv.id}>
+                      #{inv.invoice_number} - {inv.receiver_name} (₦{inv.total_ngn} / £{inv.total_gbp})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Dual-Currency Payment Input Fields with Auto-Conversion */}
+              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200/60 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">Amount Paid (Auto-Converts)</span>
+                  <span className="text-[11px] text-emerald-700 font-medium">Exchange Rate applied automatically</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Amount Paid (NGN ₦)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={receiptFormData.amount_paid_ngn}
+                      onFocus={e => e.target.select()}
+                      onChange={e => handleReceiptAmountNgnChange(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-semibold text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Amount Paid (GBP £)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={receiptFormData.amount_paid_gbp}
+                      onFocus={e => e.target.select()}
+                      onChange={e => handleReceiptAmountGbpChange(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl font-semibold text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Payment Method</label>
+                  <select
+                    value={receiptFormData.payment_method}
+                    onChange={e => setReceiptFormData({ ...receiptFormData, payment_method: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  >
+                    <option value="BANK_TRANSFER">Bank Transfer</option>
+                    <option value="CASH">Cash Payment</option>
+                    <option value="CARD">Card / POS</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Reference / Transaction No.</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. REF-987654"
+                    value={receiptFormData.reference_number}
+                    onChange={e => setReceiptFormData({ ...receiptFormData, reference_number: e.target.value })}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Notes / Description</label>
+                <textarea
+                  rows={2}
+                  placeholder="Payment notes..."
+                  value={receiptFormData.notes}
+                  onChange={e => setReceiptFormData({ ...receiptFormData, notes: e.target.value })}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateReceiptModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-100 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-600/20"
+                >
+                  Generate Receipt
                 </button>
               </div>
             </form>

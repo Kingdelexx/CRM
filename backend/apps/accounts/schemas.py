@@ -14,6 +14,7 @@ class OrganizationSchema(BaseModel):
     business_email: Optional[str] = None
     business_phone: Optional[str] = None
     other_info: Optional[str] = None
+    gbp_to_ngn_rate: Optional[float] = 2000.0
 
     class Config:
         from_attributes = True
@@ -80,6 +81,7 @@ class OrgUpdateSchema(BaseModel):
     business_email: Optional[str] = None
     business_phone: Optional[str] = None
     other_info: Optional[str] = None
+    gbp_to_ngn_rate: Optional[float] = None
 
 class UserCreateSchema(BaseModel):
     email: EmailStr

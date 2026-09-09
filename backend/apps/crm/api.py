@@ -206,7 +206,8 @@ def list_contacts(
             Q(first_name__icontains=search) | 
             Q(last_name__icontains=search) | 
             Q(email__icontains=search) |
-            Q(phone__icontains=search)
+            Q(phone__icontains=search) |
+            Q(address__icontains=search)
         )
     if company_id:
         qs = qs.filter(company_id=company_id)
@@ -1921,6 +1922,8 @@ def list_shipments(
             Q(tracking_id__icontains=search) |
             Q(invoice_number__icontains=search) |
             Q(sender_name__icontains=search) |
+            Q(sender_email__icontains=search) |
+            Q(sender_phone__icontains=search) |
             Q(receiver_name__icontains=search) |
             Q(receiver_email__icontains=search) |
             Q(receiver_phone__icontains=search)
@@ -1955,8 +1958,9 @@ def create_shipment(request, data: ShipmentCreateSchema):
         payload['date'] = None
 
     # Clean up empty strings for optional text fields
-    for field in ['sender_name', 'receiver_name', 'receiver_phone', 'receiver_email',
-                  'receiver_address', 'invoice_number', 'partner_name', 'item_received',
+    for field in ['sender_name', 'sender_phone', 'sender_email', 'sender_address',
+                  'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
+                  'invoice_number', 'partner_name', 'item_received',
                   'items_shipped', 'items_recieved', 'tracking_id', 'note']:
         if field in payload and payload[field] is not None and str(payload[field]).strip() == '':
             payload[field] = None

@@ -66,6 +66,7 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
           lead_acquisition_cost: contact.lead_acquisition_cost || 0,
           city: contact.city || '',
           state: contact.state || '',
+          address: contact.address || '',
           job_title: contact.job_title || '',
           status: contact.status || 'LEAD',
           company_id: contact.company?.id || '',
@@ -629,6 +630,12 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                             </span>
                           </div>
                           <div className="space-y-1">
+                            <span className="text-zinc-500 font-medium block">Address</span>
+                            <span className="text-zinc-200 font-semibold bg-zinc-900/20 p-2 rounded block">
+                              {(itemData as Contact).address || 'No Address Registered'}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
                             <span className="text-zinc-500 font-medium block">CRM Category</span>
                             <span className="text-zinc-200 font-semibold bg-zinc-900/20 p-2 rounded block uppercase">
                               {(itemData as Contact).status}
@@ -755,6 +762,17 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                                 className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-600"
                               />
                             </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-zinc-500 font-bold uppercase">Address</label>
+                            <input
+                              type="text"
+                              value={editFields.address || ''}
+                              onChange={(e) => setEditFields(prev => ({ ...prev, address: e.target.value }))}
+                              placeholder="Street address..."
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-600"
+                            />
                           </div>
 
                           <div className="grid grid-cols-2 gap-4">

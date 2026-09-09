@@ -63,6 +63,7 @@ export default function LeadsWorkspace() {
     lead_acquisition_cost: '',
     city: '',
     state: '',
+    address: '',
     assigned_to_id: '',
     status: 'LEAD'
   })
@@ -140,6 +141,7 @@ export default function LeadsWorkspace() {
         lead_acquisition_cost: '',
         city: '',
         state: '',
+        address: '',
         assigned_to_id: '',
         status: 'LEAD'
       })
@@ -622,7 +624,7 @@ export default function LeadsWorkspace() {
                 </div>
               </div>
 
-              {/* 5. Address (City & State) */}
+              {/* 5. Address (City, State & Street Address) */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
@@ -650,6 +652,20 @@ export default function LeadsWorkspace() {
                     className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5 text-sky-400" /> Street Address
+                </label>
+                <input
+                  type="text"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  placeholder="Street address..."
+                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                />
               </div>
 
               {/* Form Action Buttons */}

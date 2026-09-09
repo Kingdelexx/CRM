@@ -185,11 +185,12 @@ export default function SettingsWorkspace() {
     primary_color: '#4f46e5',
     timezone: 'UTC',
     address: '',
-    billing_emails: ''
+    billing_emails: '',
+    gbp_to_ngn_rate: 2000.00
   })
 
   // Populate Org form when me is loaded
-  const populateOrg = () => {
+  useEffect(() => {
     if (me?.organization) {
       const org = me.organization
       setOrgForm({
@@ -200,10 +201,11 @@ export default function SettingsWorkspace() {
         primary_color: org.primary_color || '#4f46e5',
         timezone: org.timezone || 'UTC',
         address: org.address || '',
-        billing_emails: org.billing_emails || ''
+        billing_emails: org.billing_emails || '',
+        gbp_to_ngn_rate: org.gbp_to_ngn_rate ?? 2000.00
       })
     }
-  }
+  }, [me])
 
   // Load lists
   const { data: users = [], refetch: refetchUsers } = useQuery<User[]>({
@@ -383,7 +385,7 @@ export default function SettingsWorkspace() {
         <span className="text-[10px] text-zinc-550 font-extrabold uppercase tracking-widest block px-2.5 pb-2">Settings Menu</span>
         
         <button
-          onClick={() => { setActiveTab('general'); populateOrg(); }}
+          onClick={() => { setActiveTab('general'); }}
           className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg text-left transition-all ${
             activeTab === 'general'
               ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-600/20'
@@ -496,7 +498,7 @@ export default function SettingsWorkspace() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] text-zinc-555 font-bold uppercase">Vertical / Industry</label>
                   <input
@@ -519,8 +521,22 @@ export default function SettingsWorkspace() {
                     <option value="USD">USD ($)</option>
                     <option value="EUR">EUR (€)</option>
                     <option value="GBP">GBP (£)</option>
+                    <option value="NGN">NGN (₦)</option>
                     <option value="JPY">JPY (¥)</option>
                   </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-amber-400 font-bold uppercase">Exchange Rate (£1 GBP to ₦ NGN)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={!isUserAdmin}
+                    value={orgForm.gbp_to_ngn_rate}
+                    onChange={(e) => setOrgForm(prev => ({ ...prev, gbp_to_ngn_rate: parseFloat(e.target.value) || 0 }))}
+                    placeholder="2000.00"
+                    className="w-full bg-zinc-900 border border-amber-500/40 rounded p-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400"
+                  />
                 </div>
 
                 <div className="space-y-1">

@@ -46,7 +46,7 @@ class ContactSchema(ModelSchema):
         model = Contact
         fields = [
             'id', 'first_name', 'last_name', 'email', 'phone', 'whatsapp_number',
-            'lead_acquisition_cost', 'city', 'state', 'job_title', 'status',
+            'lead_acquisition_cost', 'city', 'state', 'address', 'job_title', 'status',
             'custom_fields', 'lifecycle_started_at', 'lifecycle_extension_days',
             'lifecycle_status', 'is_active_lead', 'country', 'created_at', 'updated_at'
         ]
@@ -60,6 +60,7 @@ class ContactCreateSchema(Schema):
     lead_acquisition_cost: Optional[float] = 0.0
     city: Optional[str] = None
     state: Optional[str] = None
+    address: Optional[str] = None
     job_title: Optional[str] = None
     status: Optional[str] = 'LEAD'
     company_id: Optional[UUID] = None
@@ -375,7 +376,8 @@ class ShipmentSchema(ModelSchema):
     class Meta:
         model = Shipment
         fields = [
-            'id', 'sender_name', 'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
+            'id', 'sender_name', 'sender_phone', 'sender_email', 'sender_address',
+            'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
             'date', 'shipment_status', 'payment_status', 'currency', 'conversion_rate', 'amount',
             'invoice_number', 'number_of_carton', 'partner_name', 'item_received', 'items_shipped',
             'items_recieved', 'weight_kg', 'tracking_id', 'value', 'note', 'created_at', 'updated_at'
@@ -385,6 +387,9 @@ class ShipmentSchema(ModelSchema):
 class ShipmentCreateSchema(Schema):
     sender_id: Optional[str] = None
     sender_name: Optional[str] = None
+    sender_phone: Optional[str] = None
+    sender_email: Optional[str] = None
+    sender_address: Optional[str] = None
     receiver_id: Optional[str] = None
     receiver_name: Optional[str] = None
     receiver_phone: Optional[str] = None

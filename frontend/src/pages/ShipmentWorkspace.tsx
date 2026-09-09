@@ -82,6 +82,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const [formData, setFormData] = useState({
     sender_name: '',
     sender_id: '',
+    sender_phone: '',
+    sender_email: '',
+    sender_address: '',
     receiver_name: '',
     receiver_id: '',
     receiver_phone: '',
@@ -108,6 +111,52 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     recorded_by_id: ''
   })
   const [formError, setFormError] = useState('')
+  const [amountNgn, setAmountNgn] = useState('')
+  const [amountGbp, setAmountGbp] = useState('')
+
+  // Fetch Organization Exchange Rate for Auto Currency Conversion
+  const { data: meData } = useQuery<User>({
+    queryKey: ['shipment-me-org'],
+    queryFn: async () => {
+      const response = await apiClient.get<User>('/accounts/me')
+      return response.data
+    }
+  })
+  const orgExchangeRate = meData?.organization?.gbp_to_ngn_rate || 2000
+
+  const handleAmountNgnChange = (val: string) => {
+    setAmountNgn(val)
+    const valNum = parseFloat(val)
+    if (!isNaN(valNum) && val !== '') {
+      const convGbp = (valNum / orgExchangeRate).toFixed(2)
+      setAmountGbp(convGbp)
+      if (formData.currency === 'GBP') {
+        setFormData(prev => ({ ...prev, amount: convGbp, conversion_rate: String(orgExchangeRate) }))
+      } else {
+        setFormData(prev => ({ ...prev, amount: val, conversion_rate: '1.0000' }))
+      }
+    } else {
+      setAmountGbp('')
+      setFormData(prev => ({ ...prev, amount: '' }))
+    }
+  }
+
+  const handleAmountGbpChange = (val: string) => {
+    setAmountGbp(val)
+    const valNum = parseFloat(val)
+    if (!isNaN(valNum) && val !== '') {
+      const convNgn = (valNum * orgExchangeRate).toFixed(2)
+      setAmountNgn(convNgn)
+      if (formData.currency === 'GBP') {
+        setFormData(prev => ({ ...prev, amount: val, conversion_rate: String(orgExchangeRate) }))
+      } else {
+        setFormData(prev => ({ ...prev, amount: convNgn, conversion_rate: '1.0000' }))
+      }
+    } else {
+      setAmountNgn('')
+      setFormData(prev => ({ ...prev, amount: '' }))
+    }
+  }
 
   // Escalation Form State
   const [escalationFormData, setEscalationFormData] = useState({
@@ -211,8 +260,152 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       if (res.data) {
         setSelectedEscalation(res.data)
       }
+      setIsEditEscalationModalOpen(false)
+      setEditingEscalation(null)
     }
   })
+
+  // Edit Shipment State & Mutation
+  const [editingShipment, setEditingShipment] = useState<Shipment | null>(null)
+  const [isEditShipmentModalOpen, setIsEditShipmentModalOpen] = useState(false)
+  const [editingEscalation, setEditingEscalation] = useState<ShipmentEscalation | null>(null)
+  const [isEditEscalationModalOpen, setIsEditEscalationModalOpen] = useState(false)
+
+  const updateShipmentMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: typeof formData }) => {
+      const formatted = {
+        sender_id: payload.sender_id || null,
+        sender_name: payload.sender_name || null,
+        sender_phone: payload.sender_phone || null,
+        sender_email: payload.sender_email || null,
+        sender_address: payload.sender_address || null,
+        receiver_id: payload.receiver_id || null,
+        receiver_name: payload.receiver_name,
+        receiver_phone: payload.receiver_phone || null,
+        receiver_email: payload.receiver_email || null,
+        receiver_address: payload.receiver_address || null,
+        date: payload.date || null,
+        shipment_status: payload.shipment_status,
+        payment_status: payload.payment_status,
+        currency: payload.currency,
+        conversion_rate: parseFloat(payload.conversion_rate) || 1.0,
+        amount: parseFloat(payload.amount) || 0.0,
+        invoice_number: payload.invoice_number || null,
+        number_of_carton: parseInt(payload.number_of_carton) || 1,
+        partner_id: payload.partner_id || null,
+        partner_name: payload.partner_name || null,
+        item_received: payload.item_received || null,
+        items_shipped: payload.items_shipped || null,
+        items_recieved: payload.items_recieved || null,
+        weight_kg: parseFloat(payload.weight_kg) || 0.0,
+        tracking_id: payload.tracking_id || null,
+        value: parseFloat(payload.value) || 0.0,
+        note: payload.note || null,
+        recorded_by_id: payload.recorded_by_id || null
+      }
+      return apiClient.put(`/shipments/${id}`, formatted)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      setIsEditShipmentModalOpen(false)
+      setEditingShipment(null)
+      setFormError('')
+      resetForm()
+    },
+    onError: (err: any) => {
+      const detail = err?.response?.data?.detail
+      let errMsg = 'Failed to update shipment'
+      if (typeof detail === 'string') errMsg = detail
+      else if (err?.message) errMsg = err.message
+      setFormError(errMsg)
+    }
+  })
+
+  const handleOpenEditShipmentModal = (shipment: Shipment) => {
+    setEditingShipment(shipment)
+    setFormData({
+      sender_name: shipment.sender_name || '',
+      sender_id: shipment.sender?.id || '',
+      sender_phone: shipment.sender_phone || '',
+      sender_email: shipment.sender_email || '',
+      sender_address: shipment.sender_address || '',
+      receiver_name: shipment.receiver_name || '',
+      receiver_id: shipment.receiver?.id || '',
+      receiver_phone: shipment.receiver_phone || '',
+      receiver_email: shipment.receiver_email || '',
+      receiver_address: shipment.receiver_address || '',
+      date: shipment.date ? new Date(shipment.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      shipment_status: shipment.shipment_status || 'PENDING',
+      payment_status: shipment.payment_status || 'UNPAID',
+      currency: shipment.currency || 'NGN',
+      conversion_rate: shipment.conversion_rate ? String(shipment.conversion_rate) : '1.0000',
+      amount: shipment.amount ? String(shipment.amount) : '',
+      invoice_number: shipment.invoice_number || '',
+      number_of_carton: shipment.number_of_carton ? String(shipment.number_of_carton) : '1',
+      partner_id: shipment.partner?.id || '',
+      partner_name: shipment.partner_name || '',
+      item_received: shipment.item_received || '',
+      items_shipped: shipment.items_shipped || '',
+      items_recieved: shipment.items_recieved || '',
+      weight_kg: shipment.weight_kg ? String(shipment.weight_kg) : '',
+      tracking_id: shipment.tracking_id || '',
+      value: shipment.value ? String(shipment.value) : '',
+      note: shipment.note || '',
+      recorded_by_id: shipment.recorded_by?.id || ''
+    })
+    const amt = shipment.amount ? Number(shipment.amount) : 0
+    if (shipment.currency === 'GBP') {
+      setAmountGbp(amt > 0 ? String(amt) : '')
+      setAmountNgn(amt > 0 ? (amt * orgExchangeRate).toFixed(2) : '')
+    } else {
+      setAmountNgn(amt > 0 ? String(amt) : '')
+      setAmountGbp(amt > 0 ? (amt / orgExchangeRate).toFixed(2) : '')
+    }
+    setActiveTab('shipment')
+    setIsEditShipmentModalOpen(true)
+  }
+
+  const handleOpenEditEscalationModal = (escalation: ShipmentEscalation) => {
+    setEditingEscalation(escalation)
+    setEscalationFormData({
+      date: escalation.date ? new Date(escalation.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      shipment_id: escalation.shipment?.id || '',
+      customer_id: escalation.customer?.id || '',
+      customer_name: escalation.customer_name || '',
+      escalation_type: escalation.escalation_type || 'DELAY',
+      priority: escalation.priority || 'MEDIUM',
+      complaint_summary: escalation.complaint_summary || '',
+      status: escalation.status || 'OPEN',
+      internal: escalation.internal || '',
+      escalation_to_id: escalation.escalation_to?.id || '',
+      resolution: escalation.resolution || '',
+      resolution_date: escalation.resolution_date ? new Date(escalation.resolution_date).toISOString().split('T')[0] : ''
+    })
+    setIsEditEscalationModalOpen(true)
+  }
+
+  const handleEditEscalationSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingEscalation) return
+    if (!escalationFormData.complaint_summary.trim()) {
+      setEscalationFormError('Complaint Summary is required.')
+      return
+    }
+    updateEscalationMutation.mutate({
+      id: editingEscalation.id,
+      data: {
+        ...escalationFormData,
+        date: escalationFormData.date || null,
+        shipment_id: escalationFormData.shipment_id || null,
+        customer_id: escalationFormData.customer_id || null,
+        customer_name: escalationFormData.customer_name || null,
+        internal: escalationFormData.internal || null,
+        escalation_to_id: escalationFormData.escalation_to_id || null,
+        resolution: escalationFormData.resolution || null,
+        resolution_date: escalationFormData.resolution_date || null
+      }
+    })
+  }
 
   // Delete Escalation Mutation
   const deleteEscalationMutation = useMutation({
@@ -302,6 +495,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       const formatted = {
         sender_id: payload.sender_id || null,
         sender_name: payload.sender_name || null,
+        sender_phone: payload.sender_phone || null,
+        sender_email: payload.sender_email || null,
+        sender_address: payload.sender_address || null,
         receiver_id: payload.receiver_id || null,
         receiver_name: payload.receiver_name,
         receiver_phone: payload.receiver_phone || null,
@@ -359,6 +555,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     setFormData({
       sender_name: '',
       sender_id: '',
+      sender_phone: '',
+      sender_email: '',
+      sender_address: '',
       receiver_name: '',
       receiver_id: '',
       receiver_phone: '',
@@ -383,6 +582,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       note: '',
       recorded_by_id: ''
     })
+    setAmountNgn('')
+    setAmountGbp('')
     setActiveTab('shipment')
   }
 
@@ -394,9 +595,20 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const contact = contactsData?.find(c => c.id === contactId)
     if (contact) {
       const fullName = [contact.first_name, contact.last_name === '.' ? '' : contact.last_name].filter(Boolean).join(' ')
-      setFormData(prev => ({ ...prev, sender_id: contactId, sender_name: fullName }))
+      const contactPhone = contact.phone || contact.whatsapp_number || ''
+      const contactEmail = contact.email || ''
+      const contactAddress = [contact.city, contact.state, contact.country].filter(Boolean).join(', ')
+
+      setFormData(prev => ({
+        ...prev,
+        sender_id: contactId,
+        sender_name: fullName,
+        sender_phone: contactPhone,
+        sender_email: contactEmail,
+        sender_address: contactAddress
+      }))
     } else {
-      setFormData(prev => ({ ...prev, sender_id: '', sender_name: '' }))
+      setFormData(prev => ({ ...prev, sender_id: '' }))
     }
   }
 
@@ -404,13 +616,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const contact = contactsData?.find(c => c.id === contactId)
     if (contact) {
       const fullName = [contact.first_name, contact.last_name === '.' ? '' : contact.last_name].filter(Boolean).join(' ')
+      const contactPhone = contact.phone || contact.whatsapp_number || ''
+      const contactEmail = contact.email || ''
+      const contactAddress = [contact.city, contact.state, contact.country].filter(Boolean).join(', ')
+
       setFormData(prev => ({
         ...prev,
         receiver_id: contactId,
         receiver_name: fullName,
-        receiver_phone: contact.phone || prev.receiver_phone,
-        receiver_email: contact.email || prev.receiver_email,
-        receiver_address: [contact.city, contact.state, contact.country].filter(Boolean).join(', ') || prev.receiver_address
+        receiver_phone: contactPhone,
+        receiver_email: contactEmail,
+        receiver_address: contactAddress
       }))
     } else {
       setFormData(prev => ({ ...prev, receiver_id: '' }))
@@ -421,7 +637,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const partner = partnersList.find(p => p.id === partnerId)
     if (partner) {
       const fullName = [partner.first_name, partner.last_name === '.' ? '' : partner.last_name].filter(Boolean).join(' ')
-      setFormData(prev => ({ ...prev, partner_id: partnerId, partner_name: fullName }))
+      setFormData(prev => ({
+        ...prev,
+        partner_id: partnerId,
+        partner_name: fullName
+      }))
     } else {
       setFormData(prev => ({ ...prev, partner_id: '', partner_name: '' }))
     }
@@ -526,13 +746,20 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       )
     },
     {
-      id: 'receiver',
-      header: 'Receiver Information',
+      id: 'parties',
+      header: 'Receiver & Sender',
       cell: (info: any) => (
         <div className="space-y-1">
-          <div className="font-semibold text-zinc-100 text-xs truncate">
-            {info.row.original.receiver_name || 'N/A'}
+          <div className="font-semibold text-zinc-100 text-xs truncate flex items-center gap-1">
+            <span className="text-emerald-400 font-bold">To:</span>
+            <span>{info.row.original.receiver_name || 'N/A'}</span>
           </div>
+          {info.row.original.sender_name && (
+            <div className="text-[11px] text-zinc-400 font-medium truncate flex items-center gap-1">
+              <span className="text-zinc-500">From:</span>
+              <span>{info.row.original.sender_name}</span>
+            </div>
+          )}
           {info.row.original.receiver_phone && (
             <div className="text-[11px] text-zinc-400 flex items-center gap-1">
               <Phone className="h-3 w-3 text-zinc-500" />
@@ -611,6 +838,24 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           </span>
         )
       }
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: (info: any) => (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleOpenEditShipmentModal(info.row.original)
+            }}
+            title="Edit Shipment"
+            className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 rounded transition-colors cursor-pointer"
+          >
+            <Edit3 className="h-4 w-4" />
+          </button>
+        </div>
+      )
     }
   ], [])
 
@@ -707,6 +952,24 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           </div>
         )
       }
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: (info: any) => (
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleOpenEditEscalationModal(info.row.original)
+            }}
+            title="Edit Escalation"
+            className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 rounded transition-colors cursor-pointer"
+          >
+            <Edit3 className="h-4 w-4" />
+          </button>
+        </div>
+      )
     }
   ], [])
 
@@ -1196,22 +1459,25 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
               {/* TAB 1: SHIPMENT DETAILS */}
               {activeTab === 'shipment' && (
-                <div className="space-y-4">
-                  {/* Sender & Receiver Selectors */}
-                  <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-5">
+                  {/* SENDER SECTION */}
+                  <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-3">
+                    <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <UserIcon className="h-4 w-4 text-emerald-400" /> Sender Information (Origin)
+                    </h4>
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <UserIcon className="h-3.5 w-3.5 text-zinc-400" /> Sender Name / Contact
+                      <label className="text-xs text-zinc-400 font-semibold">
+                        Sender Contact / Select
                       </label>
                       <select
                         value={formData.sender_id}
                         onChange={(e) => handleSenderSelect(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer mb-1"
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer mb-1"
                       >
                         <option value="" className="bg-zinc-950">Select existing contact as sender...</option>
                         {contactsData?.map(c => (
                           <option key={c.id} value={c.id} className="bg-zinc-950">
-                            {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email})
+                            {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email || c.phone || 'Contact'})
                           </option>
                         ))}
                       </select>
@@ -1220,24 +1486,73 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         name="sender_name"
                         value={formData.sender_name}
                         onChange={handleInputChange}
-                        placeholder="Or enter custom sender name..."
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                        placeholder="Sender Full Name *"
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                       />
                     </div>
 
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold flex items-center gap-1">
+                          <Phone className="h-3.5 w-3.5 text-zinc-500" /> Sender Phone
+                        </label>
+                        <input
+                          type="text"
+                          name="sender_phone"
+                          value={formData.sender_phone}
+                          onChange={handleInputChange}
+                          placeholder="+234 801 234 5678"
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold flex items-center gap-1">
+                          <Mail className="h-3.5 w-3.5 text-zinc-500" /> Sender Email
+                        </label>
+                        <input
+                          type="email"
+                          name="sender_email"
+                          value={formData.sender_email}
+                          onChange={handleInputChange}
+                          placeholder="sender@email.com"
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                        />
+                      </div>
+                    </div>
+
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <UserIcon className="h-3.5 w-3.5 text-emerald-400" /> Receiver Name / Contact *
+                      <label className="text-xs text-zinc-400 font-semibold flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5 text-zinc-500" /> Sender Address
+                      </label>
+                      <textarea
+                        name="sender_address"
+                        value={formData.sender_address}
+                        onChange={handleInputChange}
+                        rows={2}
+                        placeholder="Sender street address, City, State, Country..."
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* RECEIVER SECTION */}
+                  <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-3">
+                    <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <UserIcon className="h-4 w-4 text-emerald-400" /> Receiver Information (Destination)
+                    </h4>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-semibold">
+                        Receiver Contact / Select
                       </label>
                       <select
                         value={formData.receiver_id}
                         onChange={(e) => handleReceiverSelect(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer mb-1"
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer mb-1"
                       >
                         <option value="" className="bg-zinc-950">Select existing contact as receiver...</option>
                         {contactsData?.map(c => (
                           <option key={c.id} value={c.id} className="bg-zinc-950">
-                            {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email})
+                            {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email || c.phone || 'Contact'})
                           </option>
                         ))}
                       </select>
@@ -1246,56 +1561,54 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         name="receiver_name"
                         value={formData.receiver_name}
                         onChange={handleInputChange}
-                        placeholder="Enter Receiver Full Name *"
+                        placeholder="Receiver Full Name *"
                         required
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                       />
                     </div>
-                  </div>
 
-                  {/* Receiver Contact Info */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Phone className="h-3.5 w-3.5 text-zinc-400" /> Receiver Phone
-                      </label>
-                      <input
-                        type="text"
-                        name="receiver_phone"
-                        value={formData.receiver_phone}
-                        onChange={handleInputChange}
-                        placeholder="+234 801 234 5678"
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
-                      />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold flex items-center gap-1">
+                          <Phone className="h-3.5 w-3.5 text-zinc-500" /> Receiver Phone
+                        </label>
+                        <input
+                          type="text"
+                          name="receiver_phone"
+                          value={formData.receiver_phone}
+                          onChange={handleInputChange}
+                          placeholder="+234 801 234 5678"
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold flex items-center gap-1">
+                          <Mail className="h-3.5 w-3.5 text-zinc-500" /> Receiver Email
+                        </label>
+                        <input
+                          type="email"
+                          name="receiver_email"
+                          value={formData.receiver_email}
+                          onChange={handleInputChange}
+                          placeholder="receiver@email.com"
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Mail className="h-3.5 w-3.5 text-zinc-400" /> Receiver Email
-                      </label>
-                      <input
-                        type="email"
-                        name="receiver_email"
-                        value={formData.receiver_email}
-                        onChange={handleInputChange}
-                        placeholder="receiver@email.com"
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
-                      />
-                    </div>
-                  </div>
 
-                  {/* Receiver Address */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                      <MapPin className="h-3.5 w-3.5 text-emerald-400" /> Receiver Address
-                    </label>
-                    <textarea
-                      name="receiver_address"
-                      value={formData.receiver_address}
-                      onChange={handleInputChange}
-                      rows={2}
-                      placeholder="Street address, City, State, Country..."
-                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
-                    />
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-semibold flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5 text-emerald-400" /> Receiver Address
+                      </label>
+                      <textarea
+                        name="receiver_address"
+                        value={formData.receiver_address}
+                        onChange={handleInputChange}
+                        rows={2}
+                        placeholder="Receiver street address, City, State, Country..."
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                      />
+                    </div>
                   </div>
 
                   {/* Date & Shipment Status */}
@@ -1332,46 +1645,63 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* Currency, Conversion Rate & Amount */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold">Currency</label>
-                      <select
-                        name="currency"
-                        value={formData.currency}
-                        onChange={handleInputChange}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
-                      >
-                        <option value="NGN" className="bg-zinc-950">NGN (₦)</option>
-                        <option value="USD" className="bg-zinc-950">USD ($)</option>
-                        <option value="GBP" className="bg-zinc-950">GBP (£)</option>
-                      </select>
+                  {/* Currency, Conversion Rate & Auto Currency Conversion Fields */}
+                  <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Currency & Exchange Rate Conversion</span>
+                      <span className="text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                        Configured Rate: £1 = ₦{orgExchangeRate.toLocaleString()}
+                      </span>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold">Conversion Rate</label>
-                      <input
-                        type="number"
-                        step="0.0001"
-                        name="conversion_rate"
-                        value={formData.conversion_rate}
-                        onChange={handleInputChange}
-                        placeholder="1.0000"
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Primary Currency</label>
+                        <select
+                          name="currency"
+                          value={formData.currency}
+                          onChange={(e) => {
+                            handleInputChange(e)
+                            if (e.target.value === 'GBP' && amountGbp) {
+                              setFormData(prev => ({ ...prev, amount: amountGbp, conversion_rate: String(orgExchangeRate) }))
+                            } else if (e.target.value === 'NGN' && amountNgn) {
+                              setFormData(prev => ({ ...prev, amount: amountNgn, conversion_rate: '1.0000' }))
+                            }
+                          }}
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs font-bold cursor-pointer"
+                        >
+                          <option value="NGN" className="bg-[#f7f5f5] text-[#0f0000]">NGN (₦)</option>
+                          <option value="GBP" className="bg-[#f7f5f5] text-[#0f0000]">GBP (£)</option>
+                          <option value="USD" className="bg-[#f7f5f5] text-[#0f0000]">USD ($)</option>
+                        </select>
+                      </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold">Shipment Amount</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        name="amount"
-                        value={formData.amount}
-                        onChange={handleInputChange}
-                        placeholder="0.00"
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
-                      />
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (NGN ₦)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={amountNgn}
+                          onChange={(e) => handleAmountNgnChange(e.target.value)}
+                          placeholder="0.00"
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (GBP £)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={amountGbp}
+                          onChange={(e) => handleAmountGbpChange(e.target.value)}
+                          placeholder="0.00"
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-blue-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
+                        />
+                      </div>
                     </div>
                   </div>
 
@@ -1614,15 +1944,26 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 <Truck className="h-5 w-5 text-emerald-400" />
                 <h3 className="font-bold text-lg text-white">Shipment Details</h3>
               </div>
-              <button
-                onClick={() => {
-                  setIsDetailDrawerOpen(false)
-                  setSelectedShipment(null)
-                }}
-                className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setIsDetailDrawerOpen(false)
+                    handleOpenEditShipmentModal(selectedShipment)
+                  }}
+                  className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Edit3 className="h-3.5 w-3.5" /> Edit
+                </button>
+                <button
+                  onClick={() => {
+                    setIsDetailDrawerOpen(false)
+                    setSelectedShipment(null)
+                  }}
+                  className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4 flex-1 text-sm text-zinc-300">
@@ -1656,13 +1997,24 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               </div>
 
               {/* Receiver & Sender */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Receiver Info</h4>
-                <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/80 space-y-1 text-xs">
-                  <p className="font-semibold text-white">{selectedShipment.receiver_name || 'N/A'}</p>
-                  <p className="text-zinc-400">{selectedShipment.receiver_phone || 'No phone'}</p>
-                  <p className="text-zinc-400">{selectedShipment.receiver_email || 'No email'}</p>
-                  <p className="text-zinc-400 italic pt-1">{selectedShipment.receiver_address || 'No address'}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Sender Info (Origin)</h4>
+                  <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/80 space-y-1 text-xs">
+                    <p className="font-semibold text-white">{selectedShipment.sender_name || 'N/A'}</p>
+                    <p className="text-zinc-400">{selectedShipment.sender_phone || 'No phone'}</p>
+                    <p className="text-zinc-400">{selectedShipment.sender_email || 'No email'}</p>
+                    <p className="text-zinc-400 italic pt-1">{selectedShipment.sender_address || 'No address'}</p>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Receiver Info (Destination)</h4>
+                  <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/80 space-y-1 text-xs">
+                    <p className="font-semibold text-white">{selectedShipment.receiver_name || 'N/A'}</p>
+                    <p className="text-zinc-400">{selectedShipment.receiver_phone || 'No phone'}</p>
+                    <p className="text-zinc-400">{selectedShipment.receiver_email || 'No email'}</p>
+                    <p className="text-zinc-400 italic pt-1">{selectedShipment.receiver_address || 'No address'}</p>
+                  </div>
                 </div>
               </div>
 
@@ -1993,15 +2345,26 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 <ShieldAlert className="h-5 w-5 text-red-400" />
                 <h3 className="font-bold text-lg text-white">Escalation Details</h3>
               </div>
-              <button
-                onClick={() => {
-                  setIsEscalationDrawerOpen(false)
-                  setSelectedEscalation(null)
-                }}
-                className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setIsEscalationDrawerOpen(false)
+                    handleOpenEditEscalationModal(selectedEscalation)
+                  }}
+                  className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Edit3 className="h-3.5 w-3.5" /> Edit
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEscalationDrawerOpen(false)
+                    setSelectedEscalation(null)
+                  }}
+                  className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-5 flex-1 text-sm text-zinc-300">
@@ -2173,6 +2536,560 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* EDIT SHIPMENT MODAL */}
+      {isEditShipmentModalOpen && editingShipment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/75 p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="px-6 py-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/40">
+              <div className="flex items-center gap-2">
+                <Edit3 className="h-5 w-5 text-amber-400" />
+                <h3 className="text-md font-bold text-white">Edit Shipment ({editingShipment.tracking_id})</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setIsEditShipmentModalOpen(false)
+                  setEditingShipment(null)
+                }}
+                className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!formData.receiver_name.trim()) {
+                  setFormError('Receiver Name is required.')
+                  setActiveTab('shipment')
+                  return
+                }
+                updateShipmentMutation.mutate({ id: editingShipment.id, payload: formData })
+              }}
+              className="p-6 space-y-4 flex-1 overflow-y-auto max-h-[75vh]"
+            >
+              {formError && (
+                <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="h-4.5 w-4.5 flex-shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
+
+              {/* Form Navigation Tabs */}
+              <div className="flex gap-2 border-b border-zinc-900 pb-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('shipment')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === 'shipment'
+                      ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  1. Shipment & Contacts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('package')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === 'package'
+                      ? 'bg-amber-600/20 text-amber-400 border border-amber-500/30'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  2. Package & Note Details
+                </button>
+              </div>
+
+              {/* TAB 1: SHIPMENT DETAILS */}
+              {activeTab === 'shipment' && (
+                <div className="space-y-4">
+                  {/* SENDER INPUTS */}
+                  <div className="p-3.5 bg-zinc-900/40 rounded-xl border border-zinc-800 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Sender Info (Origin)</span>
+                      <span className="text-[11px] text-zinc-500">Sender / Origin Contact</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold">Select Sender Contact</label>
+                        <select
+                          value={formData.sender_id}
+                          onChange={(e) => handleSenderSelect(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                        >
+                          <option value="" className="bg-zinc-950">-- Direct Input (No Link) --</option>
+                          {contactsData?.map(c => (
+                            <option key={c.id} value={c.id} className="bg-zinc-950">
+                              {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email || c.phone || 'No Contact Info'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold">Sender Name</label>
+                        <input
+                          type="text"
+                          name="sender_name"
+                          value={formData.sender_name}
+                          onChange={handleInputChange}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold">Sender Phone</label>
+                        <input
+                          type="text"
+                          name="sender_phone"
+                          value={formData.sender_phone}
+                          onChange={handleInputChange}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold">Sender Email</label>
+                        <input
+                          type="email"
+                          name="sender_email"
+                          value={formData.sender_email}
+                          onChange={handleInputChange}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-semibold">Sender Address</label>
+                      <textarea
+                        name="sender_address"
+                        value={formData.sender_address}
+                        onChange={handleInputChange}
+                        rows={2}
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                      />
+                    </div>
+                  </div>
+
+                  {/* RECEIVER INPUTS */}
+                  <div className="p-3.5 bg-zinc-900/40 rounded-xl border border-zinc-800 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Receiver Info (Destination) *</span>
+                      <span className="text-[11px] text-zinc-500">Receiver / Client Contact</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold">Select Receiver Contact</label>
+                        <select
+                          value={formData.receiver_id}
+                          onChange={(e) => handleReceiverSelect(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                        >
+                          <option value="" className="bg-zinc-950">-- Direct Input (No Link) --</option>
+                          {contactsData?.map(c => (
+                            <option key={c.id} value={c.id} className="bg-zinc-950">
+                              {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email || c.phone || 'No Contact Info'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold">Receiver Name *</label>
+                        <input
+                          type="text"
+                          name="receiver_name"
+                          value={formData.receiver_name}
+                          onChange={handleInputChange}
+                          required
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold">Receiver Phone</label>
+                        <input
+                          type="text"
+                          name="receiver_phone"
+                          value={formData.receiver_phone}
+                          onChange={handleInputChange}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-zinc-400 font-semibold">Receiver Email</label>
+                        <input
+                          type="email"
+                          name="receiver_email"
+                          value={formData.receiver_email}
+                          onChange={handleInputChange}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-semibold">Receiver Address</label>
+                      <textarea
+                        name="receiver_address"
+                        value={formData.receiver_address}
+                        onChange={handleInputChange}
+                        rows={2}
+                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Date & Shipment Status */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Date</label>
+                      <input
+                        type="date"
+                        name="date"
+                        value={formData.date}
+                        onChange={handleInputChange}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Shipment Status</label>
+                      <select
+                        name="shipment_status"
+                        value={formData.shipment_status}
+                        onChange={handleInputChange}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                      >
+                        <option value="PENDING" className="bg-zinc-950">Pending</option>
+                        <option value="IN_TRANSIT" className="bg-zinc-950">In Transit</option>
+                        <option value="DELIVERED" className="bg-zinc-950">Delivered</option>
+                        <option value="CUSTOMS_HOLD" className="bg-zinc-950">Customs Hold</option>
+                        <option value="CANCELLED" className="bg-zinc-950">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Payment & Currency */}
+                  <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-zinc-300">Payment Status</label>
+                        <select
+                          name="payment_status"
+                          value={formData.payment_status}
+                          onChange={handleInputChange}
+                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs text-zinc-200 cursor-pointer"
+                        >
+                          <option value="UNPAID" className="bg-zinc-950">Unpaid</option>
+                          <option value="PARTIALLY_PAID" className="bg-zinc-950">Partially Paid</option>
+                          <option value="PAID" className="bg-zinc-950">Paid</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (NGN ₦)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={amountNgn}
+                          onFocus={e => e.target.select()}
+                          onChange={e => handleAmountNgnChange(e.target.value)}
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs font-bold"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (GBP £)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={amountGbp}
+                          onFocus={e => e.target.select()}
+                          onChange={e => handleAmountGbpChange(e.target.value)}
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs font-bold"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: PACKAGE DETAILS */}
+              {activeTab === 'package' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Item Received</label>
+                      <textarea
+                        name="item_received"
+                        value={formData.item_received}
+                        onChange={handleInputChange}
+                        rows={2}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Items Shipped</label>
+                      <textarea
+                        name="items_shipped"
+                        value={formData.items_shipped}
+                        onChange={handleInputChange}
+                        rows={2}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Weight (kg)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        name="weight_kg"
+                        value={formData.weight_kg}
+                        onChange={handleInputChange}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Carton Count</label>
+                      <input
+                        type="number"
+                        name="number_of_carton"
+                        value={formData.number_of_carton}
+                        onChange={handleInputChange}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-zinc-300 font-semibold">Special Note</label>
+                    <textarea
+                      name="note"
+                      value={formData.note}
+                      onChange={handleInputChange}
+                      rows={2}
+                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className="pt-4 border-t border-zinc-900 flex justify-between items-center">
+                {activeTab === 'shipment' ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('package')}
+                    className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer"
+                  >
+                    Next: Package Details
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('shipment')}
+                    className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer"
+                  >
+                    Back to Shipment Details
+                  </button>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditShipmentModalOpen(false)
+                      setEditingShipment(null)
+                    }}
+                    className="px-4 py-2 rounded-lg border border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updateShipmentMutation.isPending}
+                    className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-lg shadow-amber-600/20 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {updateShipmentMutation.isPending && (
+                      <span className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin"></span>
+                    )}
+                    Update Shipment
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT ESCALATION MODAL */}
+      {isEditEscalationModalOpen && editingEscalation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/75 p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="px-6 py-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/40">
+              <div className="flex items-center gap-2">
+                <Edit3 className="h-5 w-5 text-amber-400" />
+                <h3 className="text-md font-bold text-white">Edit Escalation</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setIsEditEscalationModalOpen(false)
+                  setEditingEscalation(null)
+                }}
+                className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleEditEscalationSubmit}
+              className="p-6 space-y-4 flex-1 overflow-y-auto max-h-[75vh]"
+            >
+              {escalationFormError && (
+                <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="h-4.5 w-4.5 flex-shrink-0" />
+                  <span>{escalationFormError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold">Date</label>
+                  <input
+                    type="date"
+                    value={escalationFormData.date}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold">Customer / Contact Name</label>
+                  <input
+                    type="text"
+                    value={escalationFormData.customer_name}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, customer_name: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold">Escalation Type</label>
+                  <select
+                    value={escalationFormData.escalation_type}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, escalation_type: e.target.value as any }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                  >
+                    <option value="DELAY">Delay in Delivery</option>
+                    <option value="DAMAGED_GOODS">Damaged Goods</option>
+                    <option value="MISSING_ITEM">Missing Item</option>
+                    <option value="BILLING_ISSUE">Billing Issue</option>
+                    <option value="CUSTOMS_HOLD">Customs Hold</option>
+                    <option value="WRONG_DELIVERY">Wrong Delivery</option>
+                    <option value="OTHER">Other Issue</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold">Priority Level</label>
+                  <select
+                    value={escalationFormData.priority}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, priority: e.target.value as any }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-bold"
+                  >
+                    <option value="LOW">LOW</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="URGENT">URGENT</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs text-zinc-300 font-semibold">Complaint Summary *</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={escalationFormData.complaint_summary}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, complaint_summary: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold">Status</label>
+                  <select
+                    value={escalationFormData.status}
+                    onChange={(e) => setEscalationFormData(prev => ({ ...prev, status: e.target.value as any }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-bold"
+                  >
+                    <option value="OPEN">OPEN</option>
+                    <option value="IN_PROGRESS">IN_PROGRESS</option>
+                    <option value="RESOLVED">RESOLVED</option>
+                    <option value="CLOSED">CLOSED</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2 border-t border-zinc-900 pt-3">
+                  <label className="text-xs text-zinc-300 font-semibold">Resolution Details & Resolution Date</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <textarea
+                      rows={2}
+                      value={escalationFormData.resolution}
+                      onChange={(e) => setEscalationFormData(prev => ({ ...prev, resolution: e.target.value }))}
+                      className="sm:col-span-2 bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                    />
+                    <input
+                      type="date"
+                      value={escalationFormData.resolution_date}
+                      onChange={(e) => setEscalationFormData(prev => ({ ...prev, resolution_date: e.target.value }))}
+                      className="bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-zinc-900 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditEscalationModalOpen(false)
+                    setEditingEscalation(null)
+                  }}
+                  className="px-4 py-2 rounded-lg border border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateEscalationMutation.isPending}
+                  className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-lg shadow-amber-600/20 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                >
+                  {updateEscalationMutation.isPending && (
+                    <span className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin"></span>
+                  )}
+                  Update Escalation
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

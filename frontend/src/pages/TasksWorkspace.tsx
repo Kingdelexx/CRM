@@ -18,7 +18,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Edit3
 } from 'lucide-react'
 
 // Component
@@ -40,6 +41,24 @@ export default function TasksWorkspace() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [newTaskForm, setNewTaskForm] = useState({
+    title: '',
+    description: '',
+    start_date: '',
+    due_date: '',
+    priority: 'MEDIUM' as 'LOW' | 'MEDIUM' | 'HIGH',
+    status: 'TODO' as 'TODO' | 'IN_PROGRESS' | 'DONE',
+    assignee_id: '',
+    task_team_id: '',
+    deal_id: '',
+    contact_id: '',
+    partner_id: '',
+    company_id: ''
+  })
+
+  // Edit Task State
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editTaskForm, setEditTaskForm] = useState({
     title: '',
     description: '',
     start_date: '',
@@ -184,26 +203,25 @@ export default function TasksWorkspace() {
   })
 
   const updateTaskMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: Partial<Task> & { assignee_id?: string | null; task_team_id?: string | null } }) => {
-      // Find full models or convert keys
+    mutationFn: async ({ id, body }: { id: string; body: any }) => {
       const existing = tasks.find(t => t.id === id)
-      if (!existing) throw new Error("Task not found locally")
       
       const payload = {
-        title: body.title !== undefined ? body.title : existing.title,
-        description: body.description !== undefined ? body.description : (existing.description || ''),
-        start_date: body.start_date !== undefined ? body.start_date : (existing.start_date || null),
-        due_date: body.due_date !== undefined ? body.due_date : (existing.due_date || null),
-        priority: body.priority !== undefined ? body.priority : existing.priority,
-        status: body.status !== undefined ? body.status : existing.status,
-        assignee_id: body.assignee_id !== undefined ? body.assignee_id : (existing.assignee?.id || null),
-        task_team_id: body.task_team_id !== undefined ? body.task_team_id : (existing.task_team?.id || null),
-        deal_id: existing.deal?.id || null,
-        contact_id: existing.contact?.id || null,
-        company_id: existing.company?.id || null,
-        attachments: body.attachments !== undefined ? body.attachments : (existing.attachments || []),
-        checklist: body.checklist !== undefined ? body.checklist : (existing.checklist || []),
-        comments: body.comments !== undefined ? body.comments : (existing.comments || [])
+        title: body.title !== undefined ? body.title : existing?.title,
+        description: body.description !== undefined ? body.description : (existing?.description || null),
+        start_date: body.start_date !== undefined ? (body.start_date ? new Date(body.start_date).toISOString() : null) : (existing?.start_date || null),
+        due_date: body.due_date !== undefined ? (body.due_date ? new Date(body.due_date).toISOString() : null) : (existing?.due_date || null),
+        priority: body.priority !== undefined ? body.priority : existing?.priority,
+        status: body.status !== undefined ? body.status : existing?.status,
+        assignee_id: body.assignee_id !== undefined ? (body.assignee_id || null) : (existing?.assignee?.id || null),
+        task_team_id: body.task_team_id !== undefined ? (body.task_team_id || null) : (existing?.task_team?.id || null),
+        deal_id: body.deal_id !== undefined ? (body.deal_id || null) : (existing?.deal?.id || null),
+        contact_id: body.contact_id !== undefined ? (body.contact_id || null) : (existing?.contact?.id || null),
+        partner_id: body.partner_id !== undefined ? (body.partner_id || null) : (existing?.partner?.id || null),
+        company_id: body.company_id !== undefined ? (body.company_id || null) : (existing?.company?.id || null),
+        attachments: body.attachments !== undefined ? body.attachments : (existing?.attachments || []),
+        checklist: body.checklist !== undefined ? body.checklist : (existing?.checklist || []),
+        comments: body.comments !== undefined ? body.comments : (existing?.comments || [])
       }
 
       return apiClient.put(`/tasks/${id}`, payload)
@@ -213,8 +231,48 @@ export default function TasksWorkspace() {
       if (selectedTaskId) {
         refetchTaskDetails()
       }
+      setIsEditModalOpen(false)
+      setEditingTask(null)
+      setErrorMessage(null)
+    },
+    onError: (err: any) => {
+      console.error("Task update failed:", err)
+      if (err.response?.data?.detail) {
+        const detail = err.response.data.detail
+        if (Array.isArray(detail)) {
+          setErrorMessage(detail.map((e: any) => `${e.loc?.join(' -> ')}: ${e.msg}`).join(', '))
+        } else if (typeof detail === 'string') {
+          setErrorMessage(detail)
+        } else {
+          setErrorMessage(JSON.stringify(detail))
+        }
+      } else if (err.response?.data?.message) {
+        setErrorMessage(err.response.data.message)
+      } else {
+        setErrorMessage(err.message || "Failed to update task. Please check input data.")
+      }
     }
   })
+
+  const handleOpenEditTaskModal = (task: Task) => {
+    setEditingTask(task)
+    setEditTaskForm({
+      title: task.title || '',
+      description: task.description || '',
+      start_date: task.start_date ? new Date(task.start_date).toISOString().slice(0, 10) : '',
+      due_date: task.due_date ? new Date(task.due_date).toISOString().slice(0, 10) : '',
+      priority: task.priority || 'MEDIUM',
+      status: task.status || 'TODO',
+      assignee_id: task.assignee?.id || '',
+      task_team_id: task.task_team?.id || '',
+      deal_id: task.deal?.id || '',
+      contact_id: task.contact?.id || '',
+      partner_id: task.partner?.id || '',
+      company_id: task.company?.id || ''
+    })
+    setErrorMessage(null)
+    setIsEditModalOpen(true)
+  }
 
   const deleteTaskMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -549,12 +607,25 @@ export default function TasksWorkspace() {
                               )}
                             </td>
                             <td className="py-3.5 px-4 text-center">
-                              <button
-                                onClick={() => deleteTaskMutation.mutate(task.id)}
-                                className="p-1 hover:bg-red-500/10 text-zinc-550 hover:text-red-400 rounded transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleOpenEditTaskModal(task)
+                                  }}
+                                  className="p-1 hover:bg-zinc-800 text-zinc-500 hover:text-amber-400 rounded transition-colors cursor-pointer"
+                                  title="Edit Task"
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => deleteTaskMutation.mutate(task.id)}
+                                  className="p-1 hover:bg-red-500/10 text-zinc-550 hover:text-red-400 rounded transition-colors cursor-pointer"
+                                  title="Delete Task"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         )
@@ -945,6 +1016,219 @@ export default function TasksWorkspace() {
         </div>
       )}
 
+      {/* =================== EDIT TASK DIALOG =================== */}
+      {isEditModalOpen && editingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setIsEditModalOpen(false); setEditingTask(null) }} />
+          <div className="relative bg-zinc-950 border border-zinc-900 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl z-10 animate-scale-in">
+            <div className="px-6 py-4.5 border-b border-zinc-900 flex justify-between items-center text-sm">
+              <div className="flex items-center gap-2">
+                <Edit3 className="h-4.5 w-4.5 text-amber-400" />
+                <h3 className="font-bold text-white text-md">Edit Workspace Task</h3>
+              </div>
+              <button
+                onClick={() => { setIsEditModalOpen(false); setEditingTask(null) }}
+                className="p-1 text-zinc-450 hover:text-white rounded hover:bg-zinc-905 cursor-pointer"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!editTaskForm.title.trim()) {
+                  setErrorMessage("Task Subject/Title is required.")
+                  return
+                }
+                updateTaskMutation.mutate({ id: editingTask.id, body: editTaskForm })
+              }}
+              className="p-6 space-y-4 max-h-[80vh] overflow-y-auto"
+            >
+              {errorMessage && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs p-3 rounded-lg leading-relaxed">
+                  {errorMessage}
+                </div>
+              )}
+
+              {/* Title */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase">Task Subject / Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={editTaskForm.title}
+                  onChange={(e) => setEditTaskForm(prev => ({ ...prev, title: e.target.value }))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Start Date</label>
+                  <input
+                    type="date"
+                    value={editTaskForm.start_date}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, start_date: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Due Date</label>
+                  <input
+                    type="date"
+                    value={editTaskForm.due_date}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, due_date: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Assignee & Team */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Assignee (Staff)</label>
+                  <select
+                    value={editTaskForm.assignee_id}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, assignee_id: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="">Unassigned</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.first_name} {u.last_name} ({u.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Team Unit</label>
+                  <select
+                    value={editTaskForm.task_team_id}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, task_team_id: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="">No Team</option>
+                    {teams.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Deal & Contact */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Related Deal</label>
+                  <select
+                    value={editTaskForm.deal_id}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, deal_id: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="">No Related Deal</option>
+                    {deals.map(d => (
+                      <option key={d.id} value={d.id}>{d.title}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Related Contact</label>
+                  <select
+                    value={editTaskForm.contact_id}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, contact_id: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="">No Contact</option>
+                    {contacts.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.first_name} {c.last_name || ''} ({c.phone || c.email || 'No info'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Partner & Priority */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Partner</label>
+                  <select
+                    value={editTaskForm.partner_id}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, partner_id: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="">No Partner</option>
+                    {partners.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : (p.company?.name || 'Partner')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Priority</label>
+                  <select
+                    value={editTaskForm.priority}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, priority: e.target.value as any }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase">Status</label>
+                <select
+                  value={editTaskForm.status}
+                  onChange={(e) => setEditTaskForm(prev => ({ ...prev, status: e.target.value as any }))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="TODO">To Do</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="DONE">Completed</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1">
+                <label className="text-[10px] text-zinc-500 font-bold uppercase">Description</label>
+                <textarea
+                  placeholder="Task description details..."
+                  value={editTaskForm.description}
+                  onChange={(e) => setEditTaskForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 h-20 resize-none focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex gap-2.5 justify-end pt-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setIsEditModalOpen(false); setEditingTask(null) }}
+                  className="px-4 py-2 border border-zinc-900 hover:bg-zinc-900 rounded text-zinc-400 hover:text-white font-bold transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateTaskMutation.isPending}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded text-white font-bold transition-all shadow-md shadow-amber-600/10 cursor-pointer flex items-center gap-1.5"
+                >
+                  {updateTaskMutation.isPending && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  )}
+                  Update Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* =================== TASK DETAILED OVERLAY =================== */}
       {selectedTaskId && taskDetails && (
         <div className="fixed inset-0 z-50 flex justify-end">
@@ -953,9 +1237,19 @@ export default function TasksWorkspace() {
           <div className="relative w-full max-w-xl bg-zinc-950 border-l border-zinc-900 flex flex-col h-full z-10 shadow-2xl animate-slide-in-right overflow-hidden">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-zinc-900 flex justify-between items-center text-sm">
-              <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-extrabold uppercase px-2 py-0.5 rounded border border-indigo-500/15">
-                Task Workspace details
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-extrabold uppercase px-2 py-0.5 rounded border border-indigo-500/15">
+                  Task Workspace details
+                </span>
+                <button
+                  onClick={() => {
+                    handleOpenEditTaskModal(taskDetails)
+                  }}
+                  className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Edit3 className="h-3.5 w-3.5" /> Edit
+                </button>
+              </div>
               <button
                 onClick={() => setSelectedTaskId(null)}
                 className="p-1 text-zinc-405 hover:text-white rounded hover:bg-zinc-900 border border-transparent transition-colors cursor-pointer"
