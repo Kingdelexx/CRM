@@ -2,7 +2,7 @@ from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
-from apps.crm.models import Deal, Contact, WhatsAppMessage
+from apps.crm.models import Deal, Contact, WhatsAppMessage, Shipment, Invoice
 from apps.planning.models import Activity
 from apps.crm.notifications import (
     send_deal_closed_won_notifications,
@@ -206,4 +206,117 @@ def whatsapp_msg_post_save(sender, instance, created, **kwargs):
     if created and instance.sender_type == 'CUSTOMER':
         org = instance.conversation.whatsapp_account.organization
         run_automation_rules(org, 'WHATSAPP_RECEIVED', instance)
+
+
+@receiver(post_save, sender=Shipment)
+def shipment_post_save(sender, instance, created, **kwargs):
+    if not instance.invoice_number:
+        return
+
+    org = instance.organization
+    rate = float(getattr(org, 'gbp_to_ngn_rate', 2000.0) or 2000.0)
+    amount_val = float(instance.amount or 0.0)
+
+    if instance.currency == 'GBP':
+        total_gbp = round(amount_val, 2)
+        total_ngn = round(amount_val * rate, 2)
+    else:
+        total_ngn = round(amount_val, 2)
+        total_gbp = round(amount_val / rate, 2) if rate > 0 else 0.0
+
+    # Calculate doorstep delivery service fee
+    ds_gbp = 0.0
+    ds_ngn = 0.0
+    if instance.has_doorstep_delivery:
+        doorstep_rate_gbp = float(getattr(org, 'doorstep_rate', 0.0) or 0.0)
+        ds_parcels = instance.number_of_carton if instance.number_of_carton else 1
+        ds_gbp = round(ds_parcels * doorstep_rate_gbp, 2)
+        ds_ngn = round(ds_gbp * rate, 2)
+
+    # Calculate packaging service fee
+    pkg_ngn = 0.0
+    pkg_gbp = 0.0
+    parcel_rate_ngn = float(getattr(org, 'parcel_rate', 0.0) or 0.0)
+    if instance.number_of_carton and parcel_rate_ngn > 0:
+        pkg_ngn = round(instance.number_of_carton * parcel_rate_ngn, 2)
+        pkg_gbp = round(pkg_ngn / rate, 2) if rate > 0 else 0.0
+
+
+    services = [
+        {"sn": 1, "service_name": "Packaging", "price_ngn": pkg_ngn, "price_gbp": pkg_gbp},
+        {"sn": 2, "service_name": "Doorstep Delivery", "price_ngn": ds_ngn, "price_gbp": ds_gbp}
+    ]
+
+    items_ngn = max(0.0, round(total_ngn - (pkg_ngn + ds_ngn), 2))
+    items_gbp = max(0.0, round(total_gbp - (pkg_gbp + ds_gbp), 2))
+
+    issue_date_val = instance.shipment_date or instance.date or timezone.now().date()
+    item_nature = instance.item_received or instance.items_shipped or "CLOTHES AND BEADS"
+
+    items = [{
+        "dos": str(issue_date_val),
+        "nature_of_item": item_nature,
+        "weight_kg": float(instance.weight_kg or 0.0),
+        "price_ngn": items_ngn,
+        "price_gbp": items_gbp,
+        "total_ngn": items_ngn,
+        "total_gbp": items_gbp
+    }]
+
+    contact = instance.receiver or instance.sender
+    
+    r_name = instance.receiver_name
+    if not r_name and contact:
+        r_name = f"{contact.first_name} {contact.last_name or ''}".strip()
+    if not r_name:
+        r_name = "Valued Client"
+
+    r_tel = instance.receiver_phone
+    if not r_tel and contact:
+        r_tel = contact.phone
+
+    r_email = instance.receiver_email
+    if not r_email and contact:
+        r_email = contact.email
+
+    r_address = instance.receiver_address
+    if not r_address and contact:
+        r_address = contact.address
+
+    if instance.payment_status == 'PAID':
+        inv_status = Invoice.PAID
+        amt_paid = total_ngn if instance.currency == 'NGN' else total_gbp
+    elif instance.payment_status == 'PARTIALLY_PAID':
+        inv_status = Invoice.PARTIALLY_PAID
+        amt_paid = 0.00
+    else:
+        inv_status = Invoice.SENT
+        amt_paid = 0.00
+
+    Invoice.objects.update_or_create(
+        organization=org,
+        invoice_number=instance.invoice_number,
+        defaults={
+            'contact': contact,
+            'issue_date': issue_date_val,
+            'due_date': issue_date_val,
+            'status': inv_status,
+            'receiver_name': r_name,
+            'receiver_tel': r_tel,
+            'receiver_email': r_email,
+            'receiver_address': r_address,
+            'total_value_items': instance.value or 0.00,
+            'expected_parcel_no': str(instance.number_of_carton) if instance.number_of_carton else "1",
+            'parcel_handler': instance.partner_name or "Mintana Express",
+            'items': items,
+            'services': services,
+            'total_ngn': total_ngn,
+            'total_gbp': total_gbp,
+            'amount_paid': amt_paid,
+            'currency': instance.currency or 'NGN',
+            'notes': instance.note or f"Auto-generated invoice for shipment {instance.invoice_number}",
+            'sla_terms_url': 'https://www.mintana.co.uk/terms-and-conditions',
+        }
+    )
+
 

@@ -51,6 +51,7 @@ export const InvoicesWorkspace: React.FC = () => {
   ]);
 
   const [exchangeRate, setExchangeRate] = useState<number>(2000);
+  const [perKgPrice, setPerKgPrice] = useState<number>(0);
 
   // New Receipt Form Modal State
   const [isCreateReceiptModalOpen, setIsCreateReceiptModalOpen] = useState(false);
@@ -91,18 +92,30 @@ export const InvoicesWorkspace: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [invRes, rcptRes, contRes, meRes] = await Promise.all([
+      const [invRes, rcptRes, contRes, meRes] = await Promise.allSettled([
         api.get('/invoices/'),
         api.get('/receipts/'),
-        api.get('/contacts/'),
+        api.get('/contacts/?limit=500'),
         api.get('/accounts/me'),
       ]);
 
-      setInvoices(invRes.data?.items || invRes.data || []);
-      setReceipts(rcptRes.data?.items || rcptRes.data || []);
-      setContacts(contRes.data?.items || contRes.data || []);
-      if (meRes.data?.organization?.gbp_to_ngn_rate) {
-        setExchangeRate(Number(meRes.data.organization.gbp_to_ngn_rate) || 2000);
+      if (invRes.status === 'fulfilled') {
+        setInvoices(invRes.value.data?.items || invRes.value.data || []);
+      }
+      if (rcptRes.status === 'fulfilled') {
+        setReceipts(rcptRes.value.data?.items || rcptRes.value.data || []);
+      }
+      if (contRes.status === 'fulfilled') {
+        const raw = contRes.value.data?.items || contRes.value.data || [];
+        setContacts(Array.isArray(raw) ? raw : []);
+      }
+      if (meRes.status === 'fulfilled') {
+        if (meRes.value.data?.organization?.gbp_to_ngn_rate) {
+          setExchangeRate(Number(meRes.value.data.organization.gbp_to_ngn_rate) || 2000);
+        }
+        if (meRes.value.data?.organization?.per_kg_price !== undefined) {
+          setPerKgPrice(Number(meRes.value.data.organization.per_kg_price) || 0);
+        }
       }
     } catch (err) {
       console.error('Failed to load invoices workspace data:', err);
@@ -119,11 +132,12 @@ export const InvoicesWorkspace: React.FC = () => {
   const handleContactSelect = (contactId: string) => {
     const found = contacts.find(c => c.id === contactId);
     if (found) {
+      const contactName = [found.first_name, found.last_name && found.last_name !== '.' ? found.last_name : ''].filter(Boolean).join(' ');
       setFormData(prev => ({
         ...prev,
         contact_id: contactId,
-        receiver_name: `${found.first_name} ${found.last_name || ''}`.trim(),
-        receiver_tel: found.phone || prev.receiver_tel,
+        receiver_name: contactName || prev.receiver_name,
+        receiver_tel: found.phone || found.whatsapp_number || prev.receiver_tel,
         receiver_email: found.email || prev.receiver_email,
       }));
     } else {
@@ -146,7 +160,23 @@ export const InvoicesWorkspace: React.FC = () => {
       const valNum = parseFloat(value);
       const rate = exchangeRate > 0 ? exchangeRate : 2000;
 
-      if (field === 'price_ngn') {
+      if (field === 'weight_kg') {
+        const weightVal = parseFloat(value);
+        if (!isNaN(weightVal) && weightVal > 0 && perKgPrice > 0) {
+          const computedGbp = (weightVal * perKgPrice).toFixed(2);
+          const computedNgn = (weightVal * perKgPrice * rate).toFixed(2);
+          updated[index] = {
+            ...updated[index],
+            weight_kg: value,
+            price_ngn: computedNgn,
+            price_gbp: computedGbp,
+            total_ngn: computedNgn,
+            total_gbp: computedGbp
+          };
+        } else {
+          updated[index] = { ...updated[index], weight_kg: value };
+        }
+      } else if (field === 'price_ngn') {
         const convGbp = !isNaN(valNum) && value !== '' ? (valNum / rate).toFixed(2) : '';
         updated[index] = {
           ...updated[index],
@@ -429,20 +459,45 @@ export const InvoicesWorkspace: React.FC = () => {
 
   // Filters
   const filteredInvoices = invoices.filter(inv => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return statusFilter === 'ALL' || inv.status === statusFilter;
+
+    const formattedIssueDate = inv.issue_date ? new Date(inv.issue_date).toLocaleDateString().toLowerCase() : '';
+    const formattedCreatedAt = inv.created_at ? new Date(inv.created_at).toLocaleDateString().toLowerCase() : '';
+    const contactFullName = inv.contact ? `${inv.contact.first_name || ''} ${inv.contact.last_name || ''}`.toLowerCase() : '';
+
     const matchesSearch = 
-      inv.invoice_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (inv.receiver_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (inv.expected_parcel_no || '').toLowerCase().includes(searchQuery.toLowerCase());
+      inv.invoice_number.toLowerCase().includes(query) ||
+      (inv.receiver_name || '').toLowerCase().includes(query) ||
+      (inv.receiver_tel || '').toLowerCase().includes(query) ||
+      (inv.receiver_email || '').toLowerCase().includes(query) ||
+      (inv.expected_parcel_no || '').toLowerCase().includes(query) ||
+      contactFullName.includes(query) ||
+      (inv.issue_date || '').toLowerCase().includes(query) ||
+      formattedIssueDate.includes(query) ||
+      formattedCreatedAt.includes(query);
     
     const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const filteredReceipts = receipts.filter(rcpt => {
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return true;
+
+    const formattedPaymentDate = rcpt.payment_date ? new Date(rcpt.payment_date).toLocaleDateString().toLowerCase() : '';
+    const formattedCreatedAt = rcpt.created_at ? new Date(rcpt.created_at).toLocaleDateString().toLowerCase() : '';
+    const contactFullName = rcpt.contact ? `${rcpt.contact.first_name || ''} ${rcpt.contact.last_name || ''}`.toLowerCase() : '';
+
     return (
-      rcpt.receipt_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rcpt.reference_number || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (rcpt.invoice?.receiver_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+      rcpt.receipt_number.toLowerCase().includes(query) ||
+      (rcpt.reference_number || '').toLowerCase().includes(query) ||
+      (rcpt.invoice?.receiver_name || '').toLowerCase().includes(query) ||
+      (rcpt.invoice?.invoice_number || '').toLowerCase().includes(query) ||
+      contactFullName.includes(query) ||
+      (rcpt.payment_date || '').toLowerCase().includes(query) ||
+      formattedPaymentDate.includes(query) ||
+      formattedCreatedAt.includes(query)
     );
   });
 
@@ -576,7 +631,7 @@ export const InvoicesWorkspace: React.FC = () => {
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
                 type="text"
-                placeholder="Search parcel #, client..."
+                placeholder="Search by name, date, invoice #, parcel #..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
@@ -859,11 +914,15 @@ export const InvoicesWorkspace: React.FC = () => {
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                   >
                     <option value="">-- Choose Existing Contact --</option>
-                    {contacts.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.first_name} {c.last_name} ({c.email || c.phone})
-                      </option>
-                    ))}
+                    {contacts.map(c => {
+                      const name = [c.first_name, c.last_name && c.last_name !== '.' ? c.last_name : ''].filter(Boolean).join(' ') || 'Unnamed Contact';
+                      const details = [c.email, c.phone, c.whatsapp_number].filter(Boolean).join(' | ');
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {name} {details ? `(${details})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -967,7 +1026,7 @@ export const InvoicesWorkspace: React.FC = () => {
                   {itemRows.map((row, idx) => (
                     <div key={idx} className="grid grid-cols-1 sm:grid-cols-6 gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs">
                       <div className="sm:col-span-2">
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5 sm:hidden">Nature of Item</label>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">Nature of Item</label>
                         <input
                           type="text"
                           placeholder="Nature of Item (e.g. Clothes)"
@@ -977,10 +1036,10 @@ export const InvoicesWorkspace: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5 sm:hidden">Weight (kg)</label>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">Weight (kg)</label>
                         <input
                           type="number"
-                          placeholder="0"
+                          placeholder="Weight (kg)"
                           value={row.weight_kg}
                           onFocus={e => e.target.select()}
                           onChange={e => handleUpdateItemRow(idx, 'weight_kg', e.target.value)}
@@ -988,10 +1047,10 @@ export const InvoicesWorkspace: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5 sm:hidden">Price (NGN)</label>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">Price (NGN)</label>
                         <input
                           type="number"
-                          placeholder="0.00"
+                          placeholder="Price (NGN ₦)"
                           value={row.price_ngn}
                           onFocus={e => e.target.select()}
                           onChange={e => handleUpdateItemRow(idx, 'price_ngn', e.target.value)}
@@ -999,15 +1058,27 @@ export const InvoicesWorkspace: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5 sm:hidden">Price (GBP)</label>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">Price (GBP)</label>
                         <input
                           type="number"
-                          placeholder="0.00"
+                          placeholder="Price (GBP £)"
                           value={row.price_gbp}
                           onFocus={e => e.target.select()}
                           onChange={e => handleUpdateItemRow(idx, 'price_gbp', e.target.value)}
                           className="w-full p-1.5 bg-white border rounded"
                         />
+                      </div>
+                      <div className="flex items-center justify-center pt-2 sm:pt-4">
+                        {itemRows.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItemRow(idx)}
+                            className="text-rose-500 hover:text-rose-700 p-1"
+                            title="Remove Item Row"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1120,11 +1191,15 @@ export const InvoicesWorkspace: React.FC = () => {
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
                   >
                     <option value="">-- Direct Input (No Link) --</option>
-                    {contacts.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.first_name} {c.last_name} ({c.email || c.phone})
-                      </option>
-                    ))}
+                    {contacts.map(c => {
+                      const name = [c.first_name, c.last_name && c.last_name !== '.' ? c.last_name : ''].filter(Boolean).join(' ') || 'Unnamed Contact';
+                      const details = [c.email, c.phone, c.whatsapp_number].filter(Boolean).join(' | ');
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {name} {details ? `(${details})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1411,11 +1486,15 @@ export const InvoicesWorkspace: React.FC = () => {
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                 >
                   <option value="">-- Choose Existing Contact --</option>
-                  {contacts.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.first_name} {c.last_name} ({c.email || c.phone})
-                    </option>
-                  ))}
+                  {contacts.map(c => {
+                    const name = [c.first_name, c.last_name && c.last_name !== '.' ? c.last_name : ''].filter(Boolean).join(' ') || 'Unnamed Contact';
+                    const details = [c.email, c.phone, c.whatsapp_number].filter(Boolean).join(' | ');
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {name} {details ? `(${details})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

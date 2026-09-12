@@ -186,7 +186,10 @@ export default function SettingsWorkspace() {
     timezone: 'UTC',
     address: '',
     billing_emails: '',
-    gbp_to_ngn_rate: 2000.00
+    gbp_to_ngn_rate: 2000.00,
+    parcel_rate: 0.00,
+    doorstep_rate: 0.00,
+    per_kg_price: 0.00
   })
 
   // Populate Org form when me is loaded
@@ -202,7 +205,10 @@ export default function SettingsWorkspace() {
         timezone: org.timezone || 'UTC',
         address: org.address || '',
         billing_emails: org.billing_emails || '',
-        gbp_to_ngn_rate: org.gbp_to_ngn_rate ?? 2000.00
+        gbp_to_ngn_rate: org.gbp_to_ngn_rate ?? 2000.00,
+        parcel_rate: org.parcel_rate ?? 0.00,
+        doorstep_rate: org.doorstep_rate ?? 0.00,
+        per_kg_price: org.per_kg_price ?? 0.00
       })
     }
   }, [me])
@@ -498,7 +504,7 @@ export default function SettingsWorkspace() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] text-zinc-555 font-bold uppercase">Vertical / Industry</label>
                   <input
@@ -527,7 +533,7 @@ export default function SettingsWorkspace() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-amber-400 font-bold uppercase">Exchange Rate (£1 GBP to ₦ NGN)</label>
+                  <label className="text-[10px] text-amber-400 font-bold uppercase">Exchange Rate (£1 to ₦ NGN)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -536,6 +542,45 @@ export default function SettingsWorkspace() {
                     onChange={(e) => setOrgForm(prev => ({ ...prev, gbp_to_ngn_rate: parseFloat(e.target.value) || 0 }))}
                     placeholder="2000.00"
                     className="w-full bg-zinc-900 border border-amber-500/40 rounded p-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-emerald-400 font-bold uppercase">Default Parcel Rate</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={!isUserAdmin}
+                    value={orgForm.parcel_rate}
+                    onChange={(e) => setOrgForm(prev => ({ ...prev, parcel_rate: parseFloat(e.target.value) || 0 }))}
+                    placeholder="0.00"
+                    className="w-full bg-zinc-900 border border-emerald-500/40 rounded p-2 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-sky-400 font-bold uppercase">Default Doorstep Rate (£ GBP)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={!isUserAdmin}
+                    value={orgForm.doorstep_rate}
+                    onChange={(e) => setOrgForm(prev => ({ ...prev, doorstep_rate: parseFloat(e.target.value) || 0 }))}
+                    placeholder="0.00"
+                    className="w-full bg-zinc-900 border border-sky-500/40 rounded p-2 text-xs text-sky-300 font-bold focus:outline-none focus:border-sky-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-purple-400 font-bold uppercase">Default Per KG Price (£ GBP)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={!isUserAdmin}
+                    value={orgForm.per_kg_price}
+                    onChange={(e) => setOrgForm(prev => ({ ...prev, per_kg_price: parseFloat(e.target.value) || 0 }))}
+                    placeholder="0.00"
+                    className="w-full bg-zinc-900 border border-purple-500/40 rounded p-2 text-xs text-purple-300 font-bold focus:outline-none focus:border-purple-400"
                   />
                 </div>
 

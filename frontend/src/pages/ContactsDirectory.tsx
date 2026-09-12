@@ -19,9 +19,151 @@ import {
   Building,
   Mail,
   Phone,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  FileText,
+  CheckSquare,
+  Square,
+  Check,
+  FileUp
 } from 'lucide-react'
 import DetailDrawer from '@/components/DetailDrawer'
+
+export interface VCardImportItem {
+  id: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  job_title: string
+  company_name: string
+  address: string
+  selected: boolean
+}
+
+function decodeQuotedPrintable(str: string): string {
+  try {
+    return decodeURIComponent(
+      str.replace(/=/g, '%').replace(/%([0-9A-F]{2})/gi, (match, hex) => `%${hex}`)
+    )
+  } catch (e) {
+    return str
+  }
+}
+
+export function parseVCF(vcfText: string): VCardImportItem[] {
+  // 1. Strip UTF-8 BOM
+  let cleaned = vcfText.replace(/^\uFEFF/, '')
+  
+  // 2. Unfold lines (CRLF or LF followed by space/tab)
+  const unfolded = cleaned.replace(/\r?\n[ \t]/g, '')
+  const lines = unfolded.split(/\r?\n/)
+
+  const cards: VCardImportItem[] = []
+  let currentCard: Partial<VCardImportItem> | null = null
+  let rawFN: string | null = null
+  let rawN: string | null = null
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim()
+    if (!line) continue
+
+    // Support BEGIN:VCARD with potential trailing semicolons or parameters
+    if (line.toUpperCase().includes('BEGIN:VCARD')) {
+      currentCard = {
+        id: `vcard-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        job_title: '',
+        company_name: '',
+        address: '',
+        selected: true
+      }
+      rawFN = null
+      rawN = null
+      continue
+    }
+
+    if (line.toUpperCase().includes('END:VCARD')) {
+      if (currentCard) {
+        if (rawFN) {
+          const parts = rawFN.trim().split(/\s+/)
+          currentCard.first_name = parts[0] || ''
+          currentCard.last_name = parts.slice(1).join(' ') || '.'
+        } else if (rawN) {
+          const parts = rawN.split(';')
+          const surname = (parts[0] || '').trim()
+          const givenName = (parts[1] || '').trim()
+          currentCard.first_name = givenName || surname || ''
+          currentCard.last_name = givenName ? (surname || '.') : '.'
+        }
+
+        if (!currentCard.first_name && !currentCard.last_name) {
+          if (currentCard.company_name) {
+            currentCard.first_name = currentCard.company_name
+            currentCard.last_name = '.'
+          } else if (currentCard.phone) {
+            currentCard.first_name = currentCard.phone
+            currentCard.last_name = '.'
+          } else if (currentCard.email) {
+            currentCard.first_name = currentCard.email.split('@')[0]
+            currentCard.last_name = '.'
+          } else {
+            currentCard.first_name = 'Unknown'
+            currentCard.last_name = 'Contact'
+          }
+        } else if (!currentCard.first_name) {
+          currentCard.first_name = currentCard.last_name || 'Contact'
+          currentCard.last_name = '.'
+        } else if (!currentCard.last_name) {
+          currentCard.last_name = '.'
+        }
+
+        cards.push(currentCard as VCardImportItem)
+      }
+      currentCard = null
+      continue
+    }
+
+    if (!currentCard || !line.includes(':')) continue
+
+    const colonIndex = line.indexOf(':')
+    const keyPart = line.substring(0, colonIndex).toUpperCase()
+    let valPart = line.substring(colonIndex + 1).trim()
+
+    // Handle Quoted-Printable encoding decoding
+    if (keyPart.includes('ENCODING=QUOTED-PRINTABLE') || keyPart.includes('ENCODING=B')) {
+      valPart = decodeQuotedPrintable(valPart)
+    }
+
+    // Strip property specifiers and item prefixes e.g. ITEM1.TEL -> TEL, ITEM2.EMAIL -> EMAIL
+    const primaryKeySpec = keyPart.split(';')[0]
+    const keyName = primaryKeySpec.includes('.')
+      ? primaryKeySpec.split('.').pop() || primaryKeySpec
+      : primaryKeySpec
+
+    if (keyName === 'FN') {
+      rawFN = valPart
+    } else if (keyName === 'N') {
+      rawN = valPart
+    } else if ((keyName === 'EMAIL' || keyName.includes('EMAIL')) && !currentCard.email) {
+      currentCard.email = valPart
+    } else if ((keyName === 'TEL' || keyName.includes('TEL')) && !currentCard.phone) {
+      currentCard.phone = valPart
+    } else if (keyName === 'TITLE' && !currentCard.job_title) {
+      currentCard.job_title = valPart
+    } else if (keyName === 'ORG' && !currentCard.company_name) {
+      currentCard.company_name = valPart.split(';')[0].trim()
+    } else if (keyName === 'ADR' && !currentCard.address) {
+      const adrParts = valPart.split(';').map(p => p.trim()).filter(Boolean)
+      currentCard.address = adrParts.join(', ')
+    }
+  }
+
+  return cards
+}
 
 export default function ContactsDirectory() {
   const queryClient = useQueryClient()
@@ -76,6 +218,103 @@ export default function ContactsDirectory() {
   const [duplicateMessage, setDuplicateMessage] = useState('')
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false)
   const [isMerging, setIsMerging] = useState(false)
+
+  // VCF Import Modal State
+  const [isVcfModalOpen, setIsVcfModalOpen] = useState(false)
+  const [vcfFile, setVcfFile] = useState<File | null>(null)
+  const [vcfFileName, setVcfFileName] = useState('')
+  const [parsedVCardItems, setParsedVCardItems] = useState<VCardImportItem[]>([])
+  const [vcfDefaultStatus, setVcfDefaultStatus] = useState('LEAD')
+  const [vcfDefaultAssignee, setVcfDefaultAssignee] = useState('')
+  const [vcfBypassDuplicates, setVcfBypassDuplicates] = useState(true)
+  const [vcfImportError, setVcfImportError] = useState('')
+  const [vcfImportSuccess, setVcfImportSuccess] = useState('')
+  const [isImportingVcf, setIsImportingVcf] = useState(false)
+  const [vcfPreviewSearch, setVcfPreviewSearch] = useState('')
+
+  const handleVcfFileChange = (file: File | null) => {
+    if (!file) return
+    setVcfFile(file)
+    setVcfFileName(file.name)
+    setVcfImportError('')
+    setVcfImportSuccess('')
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      if (text) {
+        const parsed = parseVCF(text)
+        if (parsed.length === 0) {
+          setVcfImportError('No valid vCard contacts found in the selected file.')
+        } else {
+          setParsedVCardItems(parsed)
+        }
+      }
+    }
+    reader.onerror = () => {
+      setVcfImportError('Failed to read the VCF file.')
+    }
+    reader.readAsText(file)
+  }
+
+  const toggleSelectAllVCardItems = (select: boolean) => {
+    setParsedVCardItems(prev => prev.map(item => ({ ...item, selected: select })))
+  }
+
+  const toggleVCardItemSelect = (id: string) => {
+    setParsedVCardItems(prev => prev.map(item => item.id === id ? { ...item, selected: !item.selected } : item))
+  }
+
+  const updateVCardItemField = (id: string, field: keyof VCardImportItem, value: any) => {
+    setParsedVCardItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item))
+  }
+
+  const handleVcfImportSubmit = async () => {
+    const selectedItems = parsedVCardItems.filter(item => item.selected)
+    if (selectedItems.length === 0) {
+      setVcfImportError('Please select at least one contact to import.')
+      return
+    }
+
+    setIsImportingVcf(true)
+    setVcfImportError('')
+
+    try {
+      const payload = {
+        contacts: selectedItems.map(item => ({
+          first_name: item.first_name || 'Contact',
+          last_name: item.last_name || '.',
+          email: item.email || '',
+          phone: item.phone || null,
+          job_title: item.job_title || null,
+          address: item.address || null,
+          company_name: item.company_name || null,
+          status: vcfDefaultStatus,
+          assigned_to_id: vcfDefaultAssignee || null,
+        })),
+        status: vcfDefaultStatus,
+        assigned_to_id: vcfDefaultAssignee || null,
+        bypass_duplicates: vcfBypassDuplicates
+      }
+
+      const response = await apiClient.post('/contacts/import', payload)
+      const { created_count, skipped_count } = response.data
+
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+      setVcfImportSuccess(`Successfully imported ${created_count} contact(s)!${skipped_count ? ` (${skipped_count} skipped)` : ''}`)
+      setTimeout(() => {
+        setIsVcfModalOpen(false)
+        setVcfFile(null)
+        setParsedVCardItems([])
+        setVcfImportSuccess('')
+      }, 1600)
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to import VCF contacts.'
+      setVcfImportError(msg)
+    } finally {
+      setIsImportingVcf(false)
+    }
+  }
 
   // 1. Fetch contacts
   const limit = pagination.pageSize
@@ -322,15 +561,27 @@ export default function ContactsDirectory() {
           <h1 className="text-2xl font-bold tracking-tight text-white">Contacts Directory</h1>
           <p className="text-zinc-400 text-sm mt-1">Manage and assign leads, contacts, and customer directories</p>
         </div>
-        <button
-          onClick={() => {
-            setFormError('')
-            setIsModalOpen(true)
-          }}
-          className="flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-indigo-600/10 cursor-pointer w-full sm:w-auto"
-        >
-          <Plus className="h-4 w-4" /> New Contact
-        </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={() => {
+              setVcfImportError('')
+              setVcfImportSuccess('')
+              setIsVcfModalOpen(true)
+            }}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-emerald-600/10 cursor-pointer w-full sm:w-auto"
+          >
+            <Upload className="h-4 w-4" /> Import VCF
+          </button>
+          <button
+            onClick={() => {
+              setFormError('')
+              setIsModalOpen(true)
+            }}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-indigo-600/10 cursor-pointer w-full sm:w-auto"
+          >
+            <Plus className="h-4 w-4" /> New Contact
+          </button>
+        </div>
       </div>
 
       {/* SAVED VIEWS PRESET TABS */}
@@ -830,6 +1081,304 @@ export default function ContactsDirectory() {
                 </div>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VCF IMPORT MODAL OVERLAY */}
+      {isVcfModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/60 p-4">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4.5 border-b border-zinc-900 flex justify-between items-center bg-zinc-950">
+              <div className="flex items-center gap-2">
+                <FileUp className="h-5 w-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-md font-bold text-white">Import Contacts from VCF File</h3>
+                  <p className="text-xs text-zinc-400">Upload vCard (.vcf) files to bulk import contacts into your workspace</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsVcfModalOpen(false)
+                  setVcfFile(null)
+                  setParsedVCardItems([])
+                }}
+                className="text-zinc-450 hover:text-zinc-200 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              {vcfImportError && (
+                <div className="bg-red-500/10 border border-red-500/25 p-3 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="h-4.5 w-4.5 flex-shrink-0" />
+                  <span>{vcfImportError}</span>
+                </div>
+              )}
+
+              {vcfImportSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/25 p-3 rounded-lg text-emerald-400 text-xs flex items-center gap-2">
+                  <Check className="h-4.5 w-4.5 flex-shrink-0" />
+                  <span>{vcfImportSuccess}</span>
+                </div>
+              )}
+
+              {parsedVCardItems.length === 0 ? (
+                /* Step 1: Upload File Area */
+                <div className="border-2 border-dashed border-zinc-800 hover:border-emerald-500/50 rounded-xl p-10 text-center transition-all bg-zinc-900/20 flex flex-col items-center justify-center space-y-3">
+                  <div className="h-12 w-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <FileText className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-zinc-200">Select or drop a .vcf / .vcard file</h4>
+                    <p className="text-xs text-zinc-400 mt-1">Supports vCard 2.1, 3.0, and 4.0 contact format files</p>
+                  </div>
+                  <label className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition-all shadow-md shadow-emerald-600/10 inline-flex items-center gap-2">
+                    <Upload className="h-4 w-4" /> Browse VCF File
+                    <input
+                      type="file"
+                      accept=".vcf,.vcard,text/vcard,text/x-vcard"
+                      onChange={(e) => {
+                        const files = e.target.files
+                        if (files && files[0]) {
+                          handleVcfFileChange(files[0])
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              ) : (
+                /* Step 2: Interactive Preview & Batch Configuration */
+                <div className="space-y-4">
+                  {/* File Info & Global Config Bar */}
+                  <div className="p-4 bg-zinc-900/50 border border-zinc-900 rounded-xl space-y-3">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-zinc-800/60">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-emerald-400" />
+                        <span className="text-xs font-bold text-zinc-200">{vcfFileName}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold">
+                          {parsedVCardItems.length} Contacts Found
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVcfFile(null)
+                          setParsedVCardItems([])
+                          setVcfImportError('')
+                        }}
+                        className="text-xs text-zinc-400 hover:text-white underline cursor-pointer"
+                      >
+                        Choose Different File
+                      </button>
+                    </div>
+
+                    {/* Batch import defaults */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-zinc-400">Default CRM Status</label>
+                        <select
+                          value={vcfDefaultStatus}
+                          onChange={(e) => setVcfDefaultStatus(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 cursor-pointer focus:border-emerald-500 focus:outline-none"
+                        >
+                          <option value="LEAD">Lead</option>
+                          <option value="CONTACT">Contact</option>
+                          <option value="CUSTOMER">Customer</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-zinc-400">Assign To Sales Rep</label>
+                        <select
+                          value={vcfDefaultAssignee}
+                          onChange={(e) => setVcfDefaultAssignee(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 cursor-pointer focus:border-emerald-500 focus:outline-none"
+                        >
+                          <option value="">Unassigned</option>
+                          {usersData?.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.first_name} {user.last_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-zinc-400">Duplicates Handling</label>
+                        <select
+                          value={vcfBypassDuplicates ? 'bypass' : 'skip'}
+                          onChange={(e) => setVcfBypassDuplicates(e.target.value === 'bypass')}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 cursor-pointer focus:border-emerald-500 focus:outline-none"
+                        >
+                          <option value="bypass">Import All (Create Duplicates if needed)</option>
+                          <option value="skip">Skip Existing Duplicates</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter / Search inside preview */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectAllVCardItems(true)}
+                        className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition-colors text-[11px] cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleSelectAllVCardItems(false)}
+                        className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition-colors text-[11px] cursor-pointer"
+                      >
+                        Deselect All
+                      </button>
+                      <span className="text-zinc-400 text-xs ml-2">
+                        Selected: <strong className="text-emerald-400">{parsedVCardItems.filter(i => i.selected).length}</strong> of {parsedVCardItems.length}
+                      </span>
+                    </div>
+
+                    <div className="relative w-48 sm:w-64">
+                      <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-500" />
+                      <input
+                        type="text"
+                        placeholder="Search parsed cards..."
+                        value={vcfPreviewSearch}
+                        onChange={(e) => setVcfPreviewSearch(e.target.value)}
+                        className="w-full bg-zinc-950 pl-8 pr-3 py-1.5 rounded-lg border border-zinc-800 text-xs text-zinc-200 focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Parsed Contacts Preview Table */}
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-zinc-900/80 border-b border-zinc-800 text-zinc-400 font-semibold uppercase tracking-wider text-[10px]">
+                          <th className="p-3 w-10 text-center">Select</th>
+                          <th className="p-3">First Name</th>
+                          <th className="p-3">Last Name</th>
+                          <th className="p-3">Email</th>
+                          <th className="p-3">Phone</th>
+                          <th className="p-3">Organization</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900">
+                        {parsedVCardItems
+                          .filter(item => {
+                            if (!vcfPreviewSearch.trim()) return true
+                            const q = vcfPreviewSearch.toLowerCase()
+                            return (
+                              item.first_name.toLowerCase().includes(q) ||
+                              item.last_name.toLowerCase().includes(q) ||
+                              item.email.toLowerCase().includes(q) ||
+                              item.phone.toLowerCase().includes(q) ||
+                              item.company_name.toLowerCase().includes(q)
+                            )
+                          })
+                          .map(item => (
+                            <tr key={item.id} className={`hover:bg-zinc-900/30 transition-colors ${!item.selected ? 'opacity-40' : ''}`}>
+                              <td className="p-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={item.selected}
+                                  onChange={() => toggleVCardItemSelect(item.id)}
+                                  className="rounded border-zinc-700 bg-zinc-900 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="text"
+                                  value={item.first_name}
+                                  onChange={(e) => updateVCardItemField(item.id, 'first_name', e.target.value)}
+                                  className="bg-transparent border-b border-transparent focus:border-emerald-500 focus:outline-none text-zinc-200 w-full"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="text"
+                                  value={item.last_name}
+                                  onChange={(e) => updateVCardItemField(item.id, 'last_name', e.target.value)}
+                                  className="bg-transparent border-b border-transparent focus:border-emerald-500 focus:outline-none text-zinc-200 w-full"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="text"
+                                  value={item.email}
+                                  onChange={(e) => updateVCardItemField(item.id, 'email', e.target.value)}
+                                  placeholder="No email"
+                                  className="bg-transparent border-b border-transparent focus:border-emerald-500 focus:outline-none text-zinc-300 w-full text-xs"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="text"
+                                  value={item.phone}
+                                  onChange={(e) => updateVCardItemField(item.id, 'phone', e.target.value)}
+                                  placeholder="No phone"
+                                  className="bg-transparent border-b border-transparent focus:border-emerald-500 focus:outline-none text-zinc-300 w-full text-xs"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="text"
+                                  value={item.company_name}
+                                  onChange={(e) => updateVCardItemField(item.id, 'company_name', e.target.value)}
+                                  placeholder="None"
+                                  className="bg-transparent border-b border-transparent focus:border-emerald-500 focus:outline-none text-zinc-400 w-full text-xs"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="px-6 py-4 border-t border-zinc-900 flex justify-end gap-3 bg-zinc-950">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVcfModalOpen(false)
+                  setVcfFile(null)
+                  setParsedVCardItems([])
+                }}
+                className="px-4 py-2 rounded-lg border border-zinc-900 text-zinc-300 hover:bg-zinc-900 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              {parsedVCardItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleVcfImportSubmit}
+                  disabled={isImportingVcf || parsedVCardItems.filter(i => i.selected).length === 0}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/10 cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isImportingVcf ? (
+                    <>
+                      <span className="h-3 w-3 rounded-full border border-white border-t-transparent animate-spin"></span>
+                      Importing Contacts...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-3.5 w-3.5" />
+                      Import {parsedVCardItems.filter(i => i.selected).length} Contacts
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -726,6 +726,11 @@ class Shipment(TimeStampedModel):
         ('PAID', 'Paid'),
     ]
 
+    SHIPPING_TYPE_CHOICES = [
+        ('AIR', 'Air Freight'),
+        ('SEA', 'Sea Shipping'),
+    ]
+
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
@@ -759,17 +764,21 @@ class Shipment(TimeStampedModel):
     
     # Dates & Statuses
     date = models.DateField(null=True, blank=True)
+    shipment_date = models.DateField(null=True, blank=True)
     shipment_status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING', db_index=True)
     payment_status = models.CharField(max_length=50, choices=PAYMENT_STATUS_CHOICES, default='UNPAID')
+    shipping_type = models.CharField(max_length=20, choices=SHIPPING_TYPE_CHOICES, default='AIR', null=True, blank=True)
     
     # Financials & Currency
     currency = models.CharField(max_length=10, choices=CURRENCY_CHOICES, default='NGN')
     conversion_rate = models.DecimalField(max_digits=10, decimal_places=4, default=1.0000)
     amount = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     invoice_number = models.CharField(max_length=100, null=True, blank=True)
     
-    # Cartons & Partner
+    # Cartons & Delivery & Partner
     number_of_carton = models.IntegerField(default=1)
+    has_doorstep_delivery = models.BooleanField(default=False)
     partner = models.ForeignKey(
         Contact,
         on_delete=models.SET_NULL,
@@ -784,7 +793,7 @@ class Shipment(TimeStampedModel):
     items_shipped = models.TextField(null=True, blank=True)
     items_recieved = models.TextField(null=True, blank=True)
     weight_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    tracking_id = models.CharField(max_length=100, db_index=True)
+    tracking_id = models.CharField(max_length=100, db_index=True, null=True, blank=True)
     value = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     note = models.TextField(null=True, blank=True)
     recorded_by = models.ForeignKey(
@@ -796,7 +805,7 @@ class Shipment(TimeStampedModel):
     )
 
     def __str__(self):
-        return f"Shipment {self.tracking_id} - {self.receiver_name or 'Receiver'}"
+        return f"Shipment {self.invoice_number or self.tracking_id} - {self.receiver_name or 'Receiver'}"
 
 
 class ShipmentEscalation(TimeStampedModel):
@@ -931,10 +940,16 @@ class CSRReport(TimeStampedModel):
     suggestion_for_improvement = models.TextField(null=True, blank=True)
 
     # Monthly Report Specific & Qualitative Details
+    month_name = models.CharField(max_length=100, null=True, blank=True)
     social_media_follows_encouraged = models.IntegerField(default=0)
     video_testimonial_received = models.IntegerField(default=0)
     biggest_challenge_month = models.TextField(null=True, blank=True)
     biggest_achievement_month = models.TextField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.month_name and self.date:
+            self.month_name = self.date.strftime("%B %Y")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.get_report_type_display()} - {self.staff.first_name if self.staff else 'Staff'} ({self.date})"

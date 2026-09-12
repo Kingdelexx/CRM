@@ -15,6 +15,9 @@ class OrganizationSchema(BaseModel):
     business_phone: Optional[str] = None
     other_info: Optional[str] = None
     gbp_to_ngn_rate: Optional[float] = 2000.0
+    parcel_rate: Optional[float] = 0.0
+    doorstep_rate: Optional[float] = 0.0
+    per_kg_price: Optional[float] = 0.0
 
     class Config:
         from_attributes = True
@@ -82,6 +85,9 @@ class OrgUpdateSchema(BaseModel):
     business_phone: Optional[str] = None
     other_info: Optional[str] = None
     gbp_to_ngn_rate: Optional[float] = None
+    parcel_rate: Optional[float] = None
+    doorstep_rate: Optional[float] = None
+    per_kg_price: Optional[float] = None
 
 class UserCreateSchema(BaseModel):
     email: EmailStr

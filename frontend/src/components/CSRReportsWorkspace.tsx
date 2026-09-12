@@ -36,6 +36,7 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
     report_type: 'DAILY' as CSRReportType,
     reported_to_id: '',
     staff_id: currentUser?.id || '',
+    month_name: '',
 
     // 12 Daily Metrics
     new_enquiries: 0,
@@ -108,6 +109,50 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
     fetchReports();
   };
 
+  const fetchSuggestedPeriodAndAggregate = async (targetType: CSRReportType, staffId?: string) => {
+    if (targetType === 'DAILY') return;
+    try {
+      setIsAggregating(true);
+      const sid = staffId || formData.staff_id || currentUser?.id;
+      let suggestUrl = `/csr-reports/suggested-period?report_type=${targetType}`;
+      if (sid) suggestUrl += `&staff_id=${sid}`;
+
+      const periodRes = await api.get(suggestUrl);
+      const { start_date, end_date, month_name } = periodRes.data;
+
+      setAggDateRange({ start_date, end_date });
+
+      const sourceReportType = targetType === 'MONTHLY' ? 'WEEKLY' : 'DAILY';
+      let aggUrl = `/csr-reports/aggregate?start_date=${start_date}&end_date=${end_date}&report_type=${sourceReportType}`;
+      if (sid) aggUrl += `&staff_id=${sid}`;
+
+      const aggRes = await api.get(aggUrl);
+      const data = aggRes.data;
+
+      setFormData(prev => ({
+        ...prev,
+        report_type: targetType,
+        month_name: targetType === 'MONTHLY' ? (month_name || prev.month_name) : prev.month_name,
+        new_enquiries: data.new_enquiries || 0,
+        packages_expected: data.packages_expected || 0,
+        quotation_sent: data.quotation_sent || 0,
+        shipment_booked: data.shipment_booked || 0,
+        outstanding_follow_up: data.outstanding_follow_up || 0,
+        customer_complaint_resolved: data.customer_complaint_resolved || 0,
+        returning_customers: data.returning_customers || 0,
+        packages_received: data.packages_received || 0,
+        customer_converted_paid: data.customer_converted_paid || 0,
+        follow_up_completed: data.follow_up_completed || 0,
+        customer_complaint_received: data.customer_complaint_received || 0,
+        customer_escalated_to_manager: data.customer_escalated_to_manager || 0
+      }));
+    } catch (err) {
+      console.error('Failed to fetch suggested period or aggregate reports:', err);
+    } finally {
+      setIsAggregating(false);
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setEditingReportId(null);
     setFormData({
@@ -115,6 +160,7 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
       report_type: 'DAILY',
       reported_to_id: '',
       staff_id: currentUser?.id || '',
+      month_name: '',
       new_enquiries: 0,
       packages_expected: 0,
       quotation_sent: 0,
@@ -147,6 +193,7 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
       report_type: report.report_type,
       reported_to_id: report.reported_to?.id || '',
       staff_id: report.staff?.id || currentUser?.id || '',
+      month_name: report.month_name || '',
       new_enquiries: report.new_enquiries || 0,
       packages_expected: report.packages_expected || 0,
       quotation_sent: report.quotation_sent || 0,
@@ -174,16 +221,23 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'number' ? parseInt(value) || 0 : value
-    }));
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        [name]: type === 'number' ? parseInt(value) || 0 : value
+      };
+      if (name === 'report_type' && (value === 'WEEKLY' || value === 'MONTHLY')) {
+        fetchSuggestedPeriodAndAggregate(value as CSRReportType, updated.staff_id);
+      }
+      return updated;
+    });
   };
 
   const handleAutoAggregate = async () => {
     try {
       setIsAggregating(true);
-      let url = `/csr-reports/aggregate?start_date=${aggDateRange.start_date}&end_date=${aggDateRange.end_date}`;
+      const sourceReportType = formData.report_type === 'MONTHLY' ? 'WEEKLY' : 'DAILY';
+      let url = `/csr-reports/aggregate?start_date=${aggDateRange.start_date}&end_date=${aggDateRange.end_date}&report_type=${sourceReportType}`;
       if (formData.staff_id) {
         url += `&staff_id=${formData.staff_id}`;
       }
@@ -207,9 +261,11 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
         customer_escalated_to_manager: data.customer_escalated_to_manager || 0
       }));
 
-      alert(`Successfully aggregated metrics from ${data.count_daily_reports} daily reports!`);
+      const count = data.count_reports ?? data.count_daily_reports ?? 0;
+      const reportTypeLabel = sourceReportType.toLowerCase();
+      alert(`Successfully aggregated metrics from ${count} ${reportTypeLabel} report${count === 1 ? '' : 's'}!`);
     } catch (err) {
-      console.error('Failed to aggregate daily reports:', err);
+      console.error('Failed to aggregate reports:', err);
       alert('Error fetching aggregated metrics for the date range.');
     } finally {
       setIsAggregating(false);
@@ -511,7 +567,7 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
                     {selectedReportForView.report_type} REPORT
                   </span>
                   <h3 className="text-lg font-bold text-slate-800">
-                    {selectedReportForView.date || 'CSR Report Details'}
+                    {selectedReportForView.month_name ? `${selectedReportForView.month_name} (${selectedReportForView.date})` : (selectedReportForView.date || 'CSR Report Details')}
                   </h3>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
@@ -538,7 +594,7 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
                   {[
                     { label: 'New Enquiries', val: selectedReportForView.new_enquiries },
                     { label: 'Packages Expected', val: selectedReportForView.packages_expected },
-                    { label: 'Quotation Sent', val: selectedReportForView.quotation_sent },
+                    { label: 'Invoice Sent', val: selectedReportForView.quotation_sent },
                     { label: 'Shipment Booked', val: selectedReportForView.shipment_booked },
                     { label: 'Outstanding Follow-up', val: selectedReportForView.outstanding_follow_up },
                     { label: 'Follow-up Completed', val: selectedReportForView.follow_up_completed },
@@ -719,10 +775,12 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-indigo-900 font-semibold text-sm">
                       <Zap className="w-4 h-4 text-indigo-600" />
-                      Auto-Aggregate Daily Numbers
+                      Auto-Aggregate {formData.report_type === 'MONTHLY' ? 'Weekly' : 'Daily'} Numbers
                     </div>
                     <span className="text-xs text-indigo-600">
-                      Calculates exact sum from daily entries
+                      {formData.report_type === 'MONTHLY'
+                        ? 'Calculates exact sum from weekly report entries'
+                        : 'Calculates exact sum from daily report entries'}
                     </span>
                   </div>
 
@@ -754,7 +812,9 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
                       className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-3 py-1.5 rounded-lg text-xs transition-all shadow-sm"
                     >
                       <Zap className="w-3.5 h-3.5" />
-                      {isAggregating ? 'Calculating Sums...' : `Auto-fill Totals for ${formData.report_type}`}
+                      {isAggregating
+                        ? 'Calculating Sums...'
+                        : `Auto-fill Totals from ${formData.report_type === 'MONTHLY' ? 'Weekly Reports' : 'Daily Reports'}`}
                     </button>
                   </div>
                 </div>
@@ -769,7 +829,7 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
                   {[
                     { key: 'new_enquiries', label: 'New Enquiries' },
                     { key: 'packages_expected', label: 'Packages Expected' },
-                    { key: 'quotation_sent', label: 'Quotation Sent' },
+                    { key: 'quotation_sent', label: 'Invoice Sent' },
                     { key: 'shipment_booked', label: 'Shipment Booked' },
                     { key: 'outstanding_follow_up', label: 'Outstanding Follow-Up' },
                     { key: 'follow_up_completed', label: 'Follow-Up Completed' },
@@ -880,6 +940,20 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
                   <h4 className="text-sm font-semibold text-emerald-700">
                     Monthly Report Details & Reviews
                   </h4>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Month Name
+                    </label>
+                    <input
+                      type="text"
+                      name="month_name"
+                      value={formData.month_name}
+                      onChange={handleFormChange}
+                      placeholder="e.g. September 2026"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+                    />
+                  </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>

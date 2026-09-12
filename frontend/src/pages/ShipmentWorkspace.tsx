@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { Shipment, Contact, User, ShipmentEscalation, EscalationType, EscalationPriority, EscalationStatus } from '@/types/crm'
+import type { Shipment, Invoice, Contact, User, ShipmentEscalation, EscalationType, EscalationPriority, EscalationStatus } from '@/types/crm'
+import { MintanaInvoiceReceiptModal } from '../components/MintanaInvoiceReceiptModal'
 import {
   useLegacyTable as useReactTable,
   getCoreRowModel
@@ -36,7 +37,10 @@ import {
   Edit3,
   ExternalLink,
   RefreshCw,
-  Check
+  Check,
+  Plane,
+  Anchor,
+  Percent
 } from 'lucide-react'
 
 interface ShipmentWorkspaceProps {
@@ -77,6 +81,25 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const [selectedEscalation, setSelectedEscalation] = useState<ShipmentEscalation | null>(null)
   const [isEscalationDrawerOpen, setIsEscalationDrawerOpen] = useState(false)
 
+  // Invoice Preview Modal State
+  const [selectedInvoiceForModal, setSelectedInvoiceForModal] = useState<Invoice | null>(null)
+  const [isInvoiceReceiptModalOpen, setIsInvoiceReceiptModalOpen] = useState(false)
+
+  const handleViewShipmentInvoice = async (shipment: Shipment) => {
+    if (!shipment.invoice_number) return
+    try {
+      const invRes = await apiClient.get<any>(`/invoices/?search=${encodeURIComponent(shipment.invoice_number)}`)
+      const items = invRes.data?.items || (Array.isArray(invRes.data) ? invRes.data : [])
+      const matched = items.find((i: any) => i.invoice_number === shipment.invoice_number) || items[0]
+      if (matched) {
+        setSelectedInvoiceForModal(matched)
+        setIsInvoiceReceiptModalOpen(true)
+      }
+    } catch (err) {
+      console.error("Failed to fetch invoice for shipment:", err)
+    }
+  }
+
 
   // Form State
   const [formData, setFormData] = useState({
@@ -91,11 +114,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     receiver_email: '',
     receiver_address: '',
     date: new Date().toISOString().split('T')[0],
+    shipment_date: new Date().toISOString().split('T')[0],
     shipment_status: 'PENDING',
     payment_status: 'UNPAID',
+    shipping_type: 'AIR',
     currency: 'NGN',
     conversion_rate: '1.0000',
     amount: '',
+    discount_percentage: '',
     invoice_number: '',
     number_of_carton: '1',
     partner_id: '',
@@ -123,6 +149,55 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   })
   const orgExchangeRate = meData?.organization?.gbp_to_ngn_rate || 2000
+  const orgParcelRate = meData?.organization?.parcel_rate || 0
+  const orgDoorstepRate = meData?.organization?.doorstep_rate || 0
+  const orgPerKgPrice = meData?.organization?.per_kg_price || 0
+
+  const [hasPackaging, setHasPackaging] = useState<'NO' | 'YES'>('NO')
+  const [hasDoorstepDelivery, setHasDoorstepDelivery] = useState<'NO' | 'YES'>('NO')
+
+  const recalculateTotalAmount = (
+    currentHasPackaging: 'YES' | 'NO',
+    parcelCountStr: string,
+    currentHasDoorstep: 'YES' | 'NO',
+    weightKgStr?: string,
+    discountStr?: string
+  ) => {
+    const numParcels = parseInt(parcelCountStr) || 0
+    const parcelFee = currentHasPackaging === 'YES' ? (numParcels * orgParcelRate) : 0
+
+    let doorstepFee = 0
+    if (currentHasDoorstep === 'YES') {
+      const parcelsForDoorstep = numParcels > 0 ? numParcels : 1
+      doorstepFee = parcelsForDoorstep * orgDoorstepRate * orgExchangeRate
+    }
+
+    const weightKg = parseFloat(weightKgStr !== undefined ? weightKgStr : formData.weight_kg) || 0
+    const weightFee = weightKg * orgPerKgPrice * orgExchangeRate
+
+    const subtotalNgn = parcelFee + doorstepFee + weightFee
+
+    const discountPct = parseFloat(discountStr !== undefined ? discountStr : formData.discount_percentage) || 0
+    const discountNgn = subtotalNgn * (discountPct / 100)
+
+    const finalTotalNgn = Math.max(0, subtotalNgn - discountNgn).toFixed(2)
+    handleAmountNgnChange(finalTotalNgn)
+  }
+
+  const handleHasPackagingToggle = (val: 'YES' | 'NO') => {
+    setHasPackaging(val)
+    recalculateTotalAmount(val, formData.number_of_carton, hasDoorstepDelivery)
+  }
+
+  const handleParcelCountChange = (count: string) => {
+    setFormData(prev => ({ ...prev, number_of_carton: count }))
+    recalculateTotalAmount(hasPackaging, count, hasDoorstepDelivery)
+  }
+
+  const handleHasDoorstepToggle = (val: 'YES' | 'NO') => {
+    setHasDoorstepDelivery(val)
+    recalculateTotalAmount(hasPackaging, formData.number_of_carton, val)
+  }
 
   const handleAmountNgnChange = (val: string) => {
     setAmountNgn(val)
@@ -284,14 +359,18 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         receiver_phone: payload.receiver_phone || null,
         receiver_email: payload.receiver_email || null,
         receiver_address: payload.receiver_address || null,
-        date: payload.date || null,
+        date: payload.shipment_date || payload.date || null,
+        shipment_date: payload.shipment_date || payload.date || null,
         shipment_status: payload.shipment_status,
         payment_status: payload.payment_status,
+        shipping_type: payload.shipping_type || 'AIR',
         currency: payload.currency,
         conversion_rate: parseFloat(payload.conversion_rate) || 1.0,
         amount: parseFloat(payload.amount) || 0.0,
+        discount_percentage: parseFloat(payload.discount_percentage) || 0.0,
         invoice_number: payload.invoice_number || null,
         number_of_carton: parseInt(payload.number_of_carton) || 1,
+        has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
         item_received: payload.item_received || null,
@@ -334,12 +413,15 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       receiver_phone: shipment.receiver_phone || '',
       receiver_email: shipment.receiver_email || '',
       receiver_address: shipment.receiver_address || '',
-      date: shipment.date ? new Date(shipment.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      date: shipment.shipment_date || shipment.date ? new Date(shipment.shipment_date || shipment.date || '').toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      shipment_date: shipment.shipment_date || shipment.date ? new Date(shipment.shipment_date || shipment.date || '').toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       shipment_status: shipment.shipment_status || 'PENDING',
       payment_status: shipment.payment_status || 'UNPAID',
+      shipping_type: shipment.shipping_type || 'AIR',
       currency: shipment.currency || 'NGN',
       conversion_rate: shipment.conversion_rate ? String(shipment.conversion_rate) : '1.0000',
       amount: shipment.amount ? String(shipment.amount) : '',
+      discount_percentage: shipment.discount_percentage ? String(shipment.discount_percentage) : '',
       invoice_number: shipment.invoice_number || '',
       number_of_carton: shipment.number_of_carton ? String(shipment.number_of_carton) : '1',
       partner_id: shipment.partner?.id || '',
@@ -354,6 +436,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       recorded_by_id: shipment.recorded_by?.id || ''
     })
     const amt = shipment.amount ? Number(shipment.amount) : 0
+    const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
+    setHasPackaging('NO')
+    setHasDoorstepDelivery(shipment.has_doorstep_delivery ? 'YES' : 'NO')
     if (shipment.currency === 'GBP') {
       setAmountGbp(amt > 0 ? String(amt) : '')
       setAmountNgn(amt > 0 ? (amt * orgExchangeRate).toFixed(2) : '')
@@ -460,8 +545,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const { data: contactsData } = useQuery({
     queryKey: ['contacts-select'],
     queryFn: async () => {
-      const response = await apiClient.get<{ items: Contact[] }>('/contacts/?limit=100')
-      return response.data?.items || []
+      const response = await apiClient.get<any>('/contacts/?limit=500')
+      return response.data?.items || (Array.isArray(response.data) ? response.data : [])
     }
   })
 
@@ -503,14 +588,18 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         receiver_phone: payload.receiver_phone || null,
         receiver_email: payload.receiver_email || null,
         receiver_address: payload.receiver_address || null,
-        date: payload.date || null,
+        date: payload.shipment_date || payload.date || null,
+        shipment_date: payload.shipment_date || payload.date || null,
         shipment_status: payload.shipment_status,
         payment_status: payload.payment_status,
+        shipping_type: payload.shipping_type || 'AIR',
         currency: payload.currency,
         conversion_rate: parseFloat(payload.conversion_rate) || 1.0,
         amount: parseFloat(payload.amount) || 0.0,
+        discount_percentage: parseFloat(payload.discount_percentage) || 0.0,
         invoice_number: payload.invoice_number || null,
         number_of_carton: parseInt(payload.number_of_carton) || 1,
+        has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
         item_received: payload.item_received || null,
@@ -524,11 +613,27 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       }
       return apiClient.post('/shipments/', formatted)
     },
-    onSuccess: () => {
+    onSuccess: async (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
       setIsModalOpen(false)
       setFormError('')
       resetForm()
+
+      const invNumber = res?.data?.invoice_number || formData.invoice_number
+      if (invNumber) {
+        try {
+          const invRes = await apiClient.get<any>(`/invoices/?search=${encodeURIComponent(invNumber)}`)
+          const items = invRes.data?.items || (Array.isArray(invRes.data) ? invRes.data : [])
+          const matched = items.find((i: any) => i.invoice_number === invNumber) || items[0]
+          if (matched) {
+            setSelectedInvoiceForModal(matched)
+            setIsInvoiceReceiptModalOpen(true)
+          }
+        } catch (err) {
+          console.error("Error fetching invoice modal after shipment creation:", err)
+        }
+      }
     },
     onError: (err: any) => {
       const detail = err?.response?.data?.detail
@@ -564,11 +669,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       receiver_email: '',
       receiver_address: '',
       date: new Date().toISOString().split('T')[0],
+      shipment_date: new Date().toISOString().split('T')[0],
       shipment_status: 'PENDING',
       payment_status: 'UNPAID',
+      shipping_type: 'AIR',
       currency: 'NGN',
       conversion_rate: '1.0000',
       amount: '',
+      discount_percentage: '',
       invoice_number: '',
       number_of_carton: '1',
       partner_id: '',
@@ -584,11 +692,34 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     })
     setAmountNgn('')
     setAmountGbp('')
+    setHasPackaging('NO')
+    setHasDoorstepDelivery('NO')
     setActiveTab('shipment')
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+    if (name === 'weight_kg') {
+      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, value)
+    } else if (name === 'discount_percentage') {
+      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, value)
+    }
+  }
+
+  const formatContactAddress = (contact: Contact) => {
+    const parts: string[] = []
+    if (contact.address) parts.push(contact.address)
+    if (contact.city && !contact.address?.toLowerCase().includes(contact.city.toLowerCase())) {
+      parts.push(contact.city)
+    }
+    if (contact.state && !contact.address?.toLowerCase().includes(contact.state.toLowerCase())) {
+      parts.push(contact.state)
+    }
+    if (contact.country && !contact.address?.toLowerCase().includes(contact.country.toLowerCase())) {
+      parts.push(contact.country)
+    }
+    return parts.filter(Boolean).join(', ')
   }
 
   const handleSenderSelect = (contactId: string) => {
@@ -597,7 +728,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       const fullName = [contact.first_name, contact.last_name === '.' ? '' : contact.last_name].filter(Boolean).join(' ')
       const contactPhone = contact.phone || contact.whatsapp_number || ''
       const contactEmail = contact.email || ''
-      const contactAddress = [contact.city, contact.state, contact.country].filter(Boolean).join(', ')
+      const contactAddress = formatContactAddress(contact)
 
       setFormData(prev => ({
         ...prev,
@@ -618,7 +749,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       const fullName = [contact.first_name, contact.last_name === '.' ? '' : contact.last_name].filter(Boolean).join(' ')
       const contactPhone = contact.phone || contact.whatsapp_number || ''
       const contactEmail = contact.email || ''
-      const contactAddress = [contact.city, contact.state, contact.country].filter(Boolean).join(', ')
+      const contactAddress = formatContactAddress(contact)
 
       setFormData(prev => ({
         ...prev,
@@ -725,23 +856,30 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   }
 
+  const getShippingTypeBadge = (type?: string) => {
+    if (type === 'SEA') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+          <Anchor className="h-3 w-3" /> Sea Shipping
+        </span>
+      )
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+        <Plane className="h-3 w-3" /> Air Freight
+      </span>
+    )
+  }
+
   // Table Columns Setup
   const columns = useMemo(() => [
     {
-      accessorKey: 'tracking_id',
-      header: 'Tracking ID / Invoice',
+      accessorKey: 'invoice_number',
+      header: 'Invoice Number',
       cell: (info: any) => (
-        <div className="space-y-1">
-          <div className="flex items-center gap-1.5 font-bold text-emerald-400 text-xs">
-            <Package className="h-3.5 w-3.5 flex-shrink-0" />
-            <span>{info.getValue() || 'TRK-PENDING'}</span>
-          </div>
-          {info.row.original.invoice_number && (
-            <div className="text-[11px] text-zinc-500 flex items-center gap-1">
-              <FileText className="h-3 w-3" />
-              <span>{info.row.original.invoice_number}</span>
-            </div>
-          )}
+        <div className="flex items-center gap-1.5 font-bold text-emerald-400 text-xs font-mono">
+          <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+          <span>{info.getValue() || 'MINT-PENDING'}</span>
         </div>
       )
     },
@@ -777,8 +915,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     },
     {
       accessorKey: 'shipment_status',
-      header: 'Status',
-      cell: (info: any) => getStatusBadge(info.getValue())
+      header: 'Status & Method',
+      cell: (info: any) => (
+        <div className="space-y-1">
+          {getStatusBadge(info.getValue())}
+          <div>{getShippingTypeBadge(info.row.original.shipping_type)}</div>
+        </div>
+      )
     },
     {
       id: 'amount',
@@ -786,10 +929,16 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       cell: (info: any) => {
         const amt = Number(info.row.original.amount) || 0
         const curr = info.row.original.currency || 'NGN'
+        const discount = Number(info.row.original.discount_percentage) || 0
         return (
           <div className="space-y-1">
-            <div className="font-bold text-zinc-200 text-xs">
-              {curr} {amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            <div className="font-bold text-zinc-200 text-xs flex items-center gap-1.5">
+              <span>{curr} {amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              {discount > 0 && (
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-bold">
+                  -{discount}%
+                </span>
+              )}
             </div>
             <div>{getPaymentBadge(info.row.original.payment_status)}</div>
           </div>
@@ -798,12 +947,19 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     },
     {
       id: 'packageDetails',
-      header: 'Cartons & Weight',
+      header: 'Parcels & Weight',
       cell: (info: any) => (
         <div className="space-y-1 text-xs text-zinc-300">
-          <div className="flex items-center gap-1">
-            <Tag className="h-3.5 w-3.5 text-emerald-400" />
-            <span>{info.row.original.number_of_carton || 1} Carton(s)</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1">
+              <Tag className="h-3.5 w-3.5 text-emerald-400" />
+              <span>{info.row.original.number_of_carton || 1} Parcel(s)</span>
+            </div>
+            {info.row.original.has_doorstep_delivery && (
+              <span className="text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/40 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
+                <Truck className="h-2.5 w-2.5" /> Doorstep
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-zinc-500">
             Weight: <span className="text-zinc-300 font-medium">{info.row.original.weight_kg || 0} kg</span>
@@ -826,16 +982,24 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       }
     },
     {
-      accessorKey: 'date',
-      header: 'Date',
+      id: 'dates',
+      header: 'Dates (Created / Shipped)',
       cell: (info: any) => {
-        const val = info.getValue()
-        if (!val) return <span className="text-xs text-zinc-400">-</span>
-        const d = new Date(val)
+        const row = info.row.original
+        const createdDate = row.created_at ? new Date(row.created_at).toLocaleDateString() : '-'
+        const rawShipDate = row.shipment_date || row.date
+        const shippedDate = rawShipDate ? (isNaN(new Date(rawShipDate).getTime()) ? rawShipDate : new Date(rawShipDate).toLocaleDateString()) : '-'
         return (
-          <span className="text-xs text-zinc-400">
-            {isNaN(d.getTime()) ? '-' : d.toLocaleDateString()}
-          </span>
+          <div className="space-y-0.5 text-xs">
+            <div className="text-zinc-300 font-medium flex items-center gap-1">
+              <span className="text-[10px] text-zinc-500 uppercase font-semibold">Created:</span>
+              <span className="text-zinc-300 font-medium">{createdDate}</span>
+            </div>
+            <div className="text-emerald-400 font-medium flex items-center gap-1">
+              <span className="text-[10px] text-zinc-500 uppercase font-semibold">Shipped:</span>
+              <span className="text-emerald-300 font-bold">{shippedDate}</span>
+            </div>
+          </div>
         )
       }
     },
@@ -844,6 +1008,16 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       header: 'Actions',
       cell: (info: any) => (
         <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleViewShipmentInvoice(info.row.original)
+            }}
+            title="View Invoice"
+            className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 rounded transition-colors cursor-pointer"
+          >
+            <FileText className="h-4 w-4" />
+          </button>
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -886,9 +1060,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         if (!sh) return <span className="text-xs text-zinc-500 italic">Unlinked Shipment</span>
         return (
           <div className="space-y-0.5">
-            <div className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-              <Package className="h-3.5 w-3.5" />
-              <span>{sh.tracking_id}</span>
+            <div className="text-xs font-bold text-emerald-400 flex items-center gap-1 font-mono">
+              <FileText className="h-3.5 w-3.5" />
+              <span>{sh.invoice_number || sh.tracking_id}</span>
             </div>
             {sh.receiver_name && <div className="text-[11px] text-zinc-400">To: {sh.receiver_name}</div>}
           </div>
@@ -1288,7 +1462,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-zinc-500" />
               <input
                 type="text"
-                placeholder="Search by Tracking ID, Receiver, Invoice..."
+                placeholder="Search by name, date, invoice #, tracking ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-zinc-950 pl-10 pr-4 py-2 rounded-lg border border-zinc-900 focus:border-emerald-600 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
@@ -1611,19 +1785,37 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* Date & Shipment Status */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Date, Shipping Type & Shipment Status */}
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5 text-zinc-400" /> Date
+                        <Calendar className="h-3.5 w-3.5 text-emerald-400" /> Shipment Date
                       </label>
                       <input
                         type="date"
-                        name="date"
-                        value={formData.date}
-                        onChange={handleInputChange}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                        name="shipment_date"
+                        value={formData.shipment_date || formData.date}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setFormData(prev => ({ ...prev, shipment_date: val, date: val }))
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
                       />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        {formData.shipping_type === 'SEA' ? <Anchor className="h-3.5 w-3.5 text-cyan-400" /> : <Plane className="h-3.5 w-3.5 text-purple-400" />} Shipping Method
+                      </label>
+                      <select
+                        name="shipping_type"
+                        value={formData.shipping_type}
+                        onChange={handleInputChange}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
+                      >
+                        <option value="AIR" className="bg-zinc-950 text-purple-300">✈️ Air Freight</option>
+                        <option value="SEA" className="bg-zinc-950 text-cyan-300">🚢 Sea Shipping</option>
+                      </select>
                     </div>
 
                     <div className="space-y-1.5">
@@ -1645,79 +1837,49 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* Currency, Conversion Rate & Auto Currency Conversion Fields */}
-                  <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Currency & Exchange Rate Conversion</span>
-                      <span className="text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold">
-                        Configured Rate: £1 = ₦{orgExchangeRate.toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Primary Currency</label>
-                        <select
-                          name="currency"
-                          value={formData.currency}
-                          onChange={(e) => {
-                            handleInputChange(e)
-                            if (e.target.value === 'GBP' && amountGbp) {
-                              setFormData(prev => ({ ...prev, amount: amountGbp, conversion_rate: String(orgExchangeRate) }))
-                            } else if (e.target.value === 'NGN' && amountNgn) {
-                              setFormData(prev => ({ ...prev, amount: amountNgn, conversion_rate: '1.0000' }))
-                            }
-                          }}
-                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
-                          className="w-full border border-zinc-300 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs font-bold cursor-pointer"
-                        >
-                          <option value="NGN" className="bg-[#f7f5f5] text-[#0f0000]">NGN (₦)</option>
-                          <option value="GBP" className="bg-[#f7f5f5] text-[#0f0000]">GBP (£)</option>
-                          <option value="USD" className="bg-[#f7f5f5] text-[#0f0000]">USD ($)</option>
-                        </select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (NGN ₦)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={amountNgn}
-                          onChange={(e) => handleAmountNgnChange(e.target.value)}
-                          placeholder="0.00"
-                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
-                          className="w-full border border-zinc-300 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (GBP £)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={amountGbp}
-                          onChange={(e) => handleAmountGbpChange(e.target.value)}
-                          placeholder="0.00"
-                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
-                          className="w-full border border-zinc-300 focus:border-blue-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Cartons, Payment Status, Invoice # & Partner */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Parcel (number input), Packaging (dropdown), Doorstep Delivery & Payment Status */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold">Number of Cartons</label>
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Package className="h-3.5 w-3.5 text-emerald-400" /> Parcel
+                      </label>
                       <input
                         type="number"
                         name="number_of_carton"
                         value={formData.number_of_carton}
-                        onChange={handleInputChange}
+                        onChange={(e) => handleParcelCountChange(e.target.value)}
                         placeholder="1"
                         min="1"
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 font-medium"
                       />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Package className="h-3.5 w-3.5 text-purple-400" /> Packaging
+                      </label>
+                      <select
+                        value={hasPackaging}
+                        onChange={(e) => handleHasPackagingToggle(e.target.value as 'YES' | 'NO')}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-purple-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
+                      >
+                        <option value="NO" className="bg-zinc-950">No</option>
+                        <option value="YES" className="bg-zinc-950">Yes</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Truck className="h-3.5 w-3.5 text-sky-400" /> Doorstep Delivery?
+                      </label>
+                      <select
+                        value={hasDoorstepDelivery}
+                        onChange={(e) => handleHasDoorstepToggle(e.target.value as 'YES' | 'NO')}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-sky-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
+                      >
+                        <option value="NO" className="bg-zinc-950">No</option>
+                        <option value="YES" className="bg-zinc-950">Yes</option>
+                      </select>
                     </div>
 
                     <div className="space-y-1.5">
@@ -1735,6 +1897,48 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
+                  {(hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || (parseFloat(formData.weight_kg) || 0) > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
+                    <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
+                      <div className="text-xs text-zinc-300 space-y-1 pt-1">
+                        {hasPackaging === 'YES' && orgParcelRate > 0 && (
+                          <div className="flex justify-between text-purple-400 font-medium">
+                            <span>Packaging Fee ({(parseInt(formData.number_of_carton) || 0)} × ₦{orgParcelRate.toLocaleString()}):</span>
+                            <span>₦{((parseInt(formData.number_of_carton) || 0) * orgParcelRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        {hasDoorstepDelivery === 'YES' && orgDoorstepRate > 0 && (
+                          <div className="flex justify-between text-sky-400 font-medium">
+                            <span>Doorstep Delivery Fee ({(parseInt(formData.number_of_carton) || 1)} parcel(s) × £{orgDoorstepRate.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                            <span>₦{((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        {(parseFloat(formData.weight_kg) || 0) > 0 && orgPerKgPrice > 0 && (
+                          <div className="flex justify-between text-emerald-400 font-medium">
+                            <span>Weight Fee ({formData.weight_kg} kg × £{orgPerKgPrice.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                            <span>₦{((parseFloat(formData.weight_kg) || 0) * orgPerKgPrice * orgExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        {(parseFloat(formData.discount_percentage) || 0) > 0 && (
+                          <div className="flex justify-between text-rose-400 font-medium border-t border-zinc-800/80 pt-1">
+                            <span>Discount ({formData.discount_percentage}%):</span>
+                            <span>
+                              -₦{(
+                                (((hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0) +
+                                  (hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0) +
+                                  ((parseFloat(formData.weight_kg) || 0) * orgPerKgPrice * orgExchangeRate)) *
+                                  (parseFloat(formData.discount_percentage) || 0)) / 100
+                              ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-amber-300 font-bold pt-1 border-t border-zinc-800 text-xs uppercase tracking-wider">
+                          <span>Total Calculation:</span>
+                          <span>₦{amountNgn} NGN</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Invoice Number</label>
@@ -1743,8 +1947,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         name="invoice_number"
                         value={formData.invoice_number}
                         onChange={handleInputChange}
-                        placeholder="e.g. INV-SHIP-1001 (Auto if blank)"
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                        placeholder="e.g. MINT/SEP/FRI/1001 (Auto if blank)"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>
 
@@ -1812,19 +2016,6 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Package className="h-3.5 w-3.5 text-emerald-400" /> Tracking ID
-                      </label>
-                      <input
-                        type="text"
-                        name="tracking_id"
-                        value={formData.tracking_id}
-                        onChange={handleInputChange}
-                        placeholder="e.g. TRK-20260905-1001 (Auto if blank)"
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
-                      />
-                    </div>
                   </div>
 
                   {/* Weight (kg), Declared Value & Recorded By */}
@@ -1886,6 +2077,82 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       placeholder="Add any special handling instructions or notes..."
                       className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                     />
+                  </div>
+
+                  {/* Currency, Conversion Rate, Discount & Auto Currency Conversion Fields (Last Card on Package Details) */}
+                  <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3 mt-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Currency, Discount & Exchange Conversion</span>
+                      <span className="text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                        Configured Rate: £1 = ₦{orgExchangeRate.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Primary Currency</label>
+                        <select
+                          name="currency"
+                          value={formData.currency}
+                          onChange={(e) => {
+                            handleInputChange(e)
+                            if (e.target.value === 'GBP' && amountGbp) {
+                              setFormData(prev => ({ ...prev, amount: amountGbp, conversion_rate: String(orgExchangeRate) }))
+                            } else if (e.target.value === 'NGN' && amountNgn) {
+                              setFormData(prev => ({ ...prev, amount: amountNgn, conversion_rate: '1.0000' }))
+                            }
+                          }}
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs font-bold cursor-pointer"
+                        >
+                          <option value="NGN" className="bg-[#f7f5f5] text-[#0f0000]">NGN (₦)</option>
+                          <option value="GBP" className="bg-[#f7f5f5] text-[#0f0000]">GBP (£)</option>
+                          <option value="USD" className="bg-[#f7f5f5] text-[#0f0000]">USD ($)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (NGN ₦)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={amountNgn}
+                          onChange={(e) => handleAmountNgnChange(e.target.value)}
+                          placeholder="0.00"
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (GBP £)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={amountGbp}
+                          onChange={(e) => handleAmountGbpChange(e.target.value)}
+                          placeholder="0.00"
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-blue-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Discount (%)</label>
+                        <input
+                          type="number"
+                          name="discount_percentage"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={formData.discount_percentage}
+                          onChange={handleInputChange}
+                          placeholder="e.g. 10"
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1969,12 +2236,16 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             <div className="space-y-4 flex-1 text-sm text-zinc-300">
               <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Tracking ID</span>
-                  <span className="font-bold text-emerald-400 text-sm">{selectedShipment.tracking_id}</span>
-                </div>
-                <div className="flex justify-between items-center">
                   <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Invoice Number</span>
-                  <span className="font-mono text-zinc-200 text-xs">{selectedShipment.invoice_number || '-'}</span>
+                  <span className="font-mono font-bold text-emerald-400 text-sm">{selectedShipment.invoice_number || '-'}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
+                  <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Date Created</span>
+                  <span className="text-xs text-amber-300 font-bold font-mono">{selectedShipment.created_at ? new Date(selectedShipment.created_at).toLocaleString() : '-'}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
+                  <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Shipment Date</span>
+                  <span className="text-xs text-emerald-400 font-bold font-mono">{selectedShipment.shipment_date || selectedShipment.date || '-'}</span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
                   <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Shipment Status</span>
@@ -2024,17 +2295,34 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/80 space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Amount:</span>
-                    <span className="font-bold text-white">
-                      {selectedShipment.currency} {Number(selectedShipment.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <span className="font-bold text-white flex items-center gap-1.5">
+                      <span>{selectedShipment.currency} {Number(selectedShipment.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      {Number(selectedShipment.discount_percentage) > 0 && (
+                        <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-bold">
+                          -{selectedShipment.discount_percentage}%
+                        </span>
+                      )}
                     </span>
                   </div>
+                  {Number(selectedShipment.discount_percentage) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-zinc-500">Discount:</span>
+                      <span className="text-amber-400 font-bold">{selectedShipment.discount_percentage}%</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Conversion Rate:</span>
                     <span className="text-zinc-300 font-mono">{selectedShipment.conversion_rate}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Cartons & Weight:</span>
-                    <span className="text-zinc-300">{selectedShipment.number_of_carton} Carton(s) / {selectedShipment.weight_kg} kg</span>
+                    <span className="text-zinc-500">Parcels & Weight:</span>
+                    <span className="text-zinc-300">{selectedShipment.number_of_carton} Parcel(s) / {selectedShipment.weight_kg} kg</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Doorstep Delivery:</span>
+                    <span className={selectedShipment.has_doorstep_delivery ? "text-sky-400 font-bold flex items-center gap-1" : "text-zinc-400"}>
+                      {selectedShipment.has_doorstep_delivery ? 'Yes (Included)' : 'No'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Declared Value:</span>
@@ -2142,10 +2430,10 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     }}
                     className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
                   >
-                    <option value="" className="bg-zinc-950">Select Shipment (Tracking ID)</option>
+                    <option value="" className="bg-zinc-950">Select Shipment (Invoice Number)</option>
                     {shipmentsData?.map(s => (
                       <option key={s.id} value={s.id} className="bg-zinc-950">
-                        {s.tracking_id} - {s.receiver_name || 'No Receiver'}
+                        {s.invoice_number || s.tracking_id} - {s.receiver_name || 'No Receiver'}
                       </option>
                     ))}
                   </select>
@@ -2397,7 +2685,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   <span className="text-zinc-500 font-semibold block">Escalating For</span>
                   {selectedEscalation.shipment ? (
                     <div>
-                      <p className="font-bold text-emerald-400">{selectedEscalation.shipment.tracking_id}</p>
+                      <p className="font-bold text-emerald-400 font-mono">{selectedEscalation.shipment.invoice_number || selectedEscalation.shipment.tracking_id}</p>
                       <p className="text-zinc-400">{selectedEscalation.shipment.receiver_name || 'Receiver N/A'}</p>
                     </div>
                   ) : (
@@ -2546,7 +2834,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             <div className="px-6 py-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/40">
               <div className="flex items-center gap-2">
                 <Edit3 className="h-5 w-5 text-amber-400" />
-                <h3 className="text-md font-bold text-white">Edit Shipment ({editingShipment.tracking_id})</h3>
+                <h3 className="text-md font-bold text-white">Edit Shipment ({editingShipment.invoice_number || ''})</h3>
               </div>
               <button
                 onClick={() => {
@@ -2750,8 +3038,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* Date & Shipment Status */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Date, Shipping Method & Shipment Status */}
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Date</label>
                       <input
@@ -2761,6 +3049,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         onChange={handleInputChange}
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
                       />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        {formData.shipping_type === 'SEA' ? <Anchor className="h-3.5 w-3.5 text-cyan-400" /> : <Plane className="h-3.5 w-3.5 text-purple-400" />} Shipping Method
+                      </label>
+                      <select
+                        name="shipping_type"
+                        value={formData.shipping_type}
+                        onChange={handleInputChange}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
+                      >
+                        <option value="AIR" className="bg-zinc-950 text-purple-300">✈️ Air Freight</option>
+                        <option value="SEA" className="bg-zinc-950 text-cyan-300">🚢 Sea Shipping</option>
+                      </select>
                     </div>
 
                     <div className="space-y-1.5">
@@ -2780,50 +3083,137 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* Payment & Currency */}
-                  <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold text-zinc-300">Payment Status</label>
-                        <select
-                          name="payment_status"
-                          value={formData.payment_status}
-                          onChange={handleInputChange}
-                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs text-zinc-200 cursor-pointer"
-                        >
-                          <option value="UNPAID" className="bg-zinc-950">Unpaid</option>
-                          <option value="PARTIALLY_PAID" className="bg-zinc-950">Partially Paid</option>
-                          <option value="PAID" className="bg-zinc-950">Paid</option>
-                        </select>
-                      </div>
+                  {/* Parcel (number input), Packaging (dropdown), Doorstep Delivery & Payment Status */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Package className="h-3.5 w-3.5 text-emerald-400" /> Parcel
+                      </label>
+                      <input
+                        type="number"
+                        name="number_of_carton"
+                        value={formData.number_of_carton}
+                        onChange={(e) => handleParcelCountChange(e.target.value)}
+                        placeholder="1"
+                        min="1"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 font-medium"
+                      />
+                    </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (NGN ₦)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={amountNgn}
-                          onFocus={e => e.target.select()}
-                          onChange={e => handleAmountNgnChange(e.target.value)}
-                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
-                          className="w-full border border-zinc-300 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs font-bold"
-                        />
-                      </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Package className="h-3.5 w-3.5 text-purple-400" /> Packaging
+                      </label>
+                      <select
+                        value={hasPackaging}
+                        onChange={(e) => handleHasPackagingToggle(e.target.value as 'YES' | 'NO')}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-purple-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
+                      >
+                        <option value="NO" className="bg-zinc-950">No</option>
+                        <option value="YES" className="bg-zinc-950">Yes</option>
+                      </select>
+                    </div>
 
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (GBP £)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder="0.00"
-                          value={amountGbp}
-                          onFocus={e => e.target.select()}
-                          onChange={e => handleAmountGbpChange(e.target.value)}
-                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
-                          className="w-full border border-zinc-300 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs font-bold"
-                        />
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Truck className="h-3.5 w-3.5 text-sky-400" /> Doorstep Delivery?
+                      </label>
+                      <select
+                        value={hasDoorstepDelivery}
+                        onChange={(e) => handleHasDoorstepToggle(e.target.value as 'YES' | 'NO')}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-sky-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
+                      >
+                        <option value="NO" className="bg-zinc-950">No</option>
+                        <option value="YES" className="bg-zinc-950">Yes</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Payment Status</label>
+                      <select
+                        name="payment_status"
+                        value={formData.payment_status}
+                        onChange={handleInputChange}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                      >
+                        <option value="UNPAID" className="bg-zinc-950">Unpaid</option>
+                        <option value="PARTIALLY_PAID" className="bg-zinc-950">Partially Paid</option>
+                        <option value="PAID" className="bg-zinc-950">Paid</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {(hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || (parseFloat(formData.weight_kg) || 0) > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
+                    <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
+                      <div className="text-xs text-zinc-300 space-y-1 pt-1">
+                        {hasPackaging === 'YES' && orgParcelRate > 0 && (
+                          <div className="flex justify-between text-purple-400 font-medium">
+                            <span>Packaging Fee ({(parseInt(formData.number_of_carton) || 0)} × ₦{orgParcelRate.toLocaleString()}):</span>
+                            <span>₦{((parseInt(formData.number_of_carton) || 0) * orgParcelRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        {hasDoorstepDelivery === 'YES' && orgDoorstepRate > 0 && (
+                          <div className="flex justify-between text-sky-400 font-medium">
+                            <span>Doorstep Delivery Fee ({(parseInt(formData.number_of_carton) || 1)} parcel(s) × £{orgDoorstepRate.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                            <span>₦{((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        {(parseFloat(formData.weight_kg) || 0) > 0 && orgPerKgPrice > 0 && (
+                          <div className="flex justify-between text-emerald-400 font-medium">
+                            <span>Weight Fee ({formData.weight_kg} kg × £{orgPerKgPrice.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                            <span>₦{((parseFloat(formData.weight_kg) || 0) * orgPerKgPrice * orgExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                        {(parseFloat(formData.discount_percentage) || 0) > 0 && (
+                          <div className="flex justify-between text-rose-400 font-medium border-t border-zinc-800/80 pt-1">
+                            <span>Discount ({formData.discount_percentage}%):</span>
+                            <span>
+                              -₦{(
+                                (((hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0) +
+                                  (hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0) +
+                                  ((parseFloat(formData.weight_kg) || 0) * orgPerKgPrice * orgExchangeRate)) *
+                                  (parseFloat(formData.discount_percentage) || 0)) / 100
+                              ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-amber-300 font-bold pt-1 border-t border-zinc-800 text-xs uppercase tracking-wider">
+                          <span>Total Calculation:</span>
+                          <span>₦{amountNgn} NGN</span>
+                        </div>
                       </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Invoice Number</label>
+                      <input
+                        type="text"
+                        name="invoice_number"
+                        value={formData.invoice_number}
+                        onChange={handleInputChange}
+                        placeholder="e.g. MINT/SEP/FRI/1001 (Auto if blank)"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Handshake className="h-3.5 w-3.5 text-indigo-400" /> Partner Assignment
+                      </label>
+                      <select
+                        value={formData.partner_id}
+                        onChange={(e) => handlePartnerSelect(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                      >
+                        <option value="" className="bg-zinc-950">Select Partner (Optional)</option>
+                        {partnersList.map(p => (
+                          <option key={p.id} value={p.id} className="bg-zinc-950">
+                            {p.first_name} {p.last_name === '.' ? '' : p.last_name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -2832,6 +3222,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               {/* TAB 2: PACKAGE DETAILS */}
               {activeTab === 'package' && (
                 <div className="space-y-4">
+                  {/* Items Received & Items Shipped */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Item Received</label>
@@ -2840,7 +3231,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         value={formData.item_received}
                         onChange={handleInputChange}
                         rows={2}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        placeholder="List items received at warehouse..."
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -2850,12 +3242,29 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         value={formData.items_shipped}
                         onChange={handleInputChange}
                         rows={2}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        placeholder="List items shipped in transit..."
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                       />
                     </div>
                   </div>
 
+                  {/* Items Received at Destination & Tracking ID */}
                   <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold">Items Recieved (At Destination)</label>
+                      <textarea
+                        name="items_recieved"
+                        value={formData.items_recieved}
+                        onChange={handleInputChange}
+                        rows={2}
+                        placeholder="List items verified upon arrival..."
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Weight (kg), Declared Value & Recorded By */}
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Weight (kg)</label>
                       <input
@@ -2864,21 +3273,45 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         name="weight_kg"
                         value={formData.weight_kg}
                         onChange={handleInputChange}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        placeholder="0.00"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                       />
                     </div>
+
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold">Carton Count</label>
+                      <label className="text-xs text-zinc-300 font-semibold">Declared Value</label>
                       <input
                         type="number"
-                        name="number_of_carton"
-                        value={formData.number_of_carton}
+                        step="0.01"
+                        name="value"
+                        value={formData.value}
                         onChange={handleInputChange}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                        placeholder="0.00"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                       />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <UserIcon className="h-3.5 w-3.5 text-zinc-400" /> Recorded By (Staff)
+                      </label>
+                      <select
+                        name="recorded_by_id"
+                        value={formData.recorded_by_id}
+                        onChange={handleInputChange}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                      >
+                        <option value="" className="bg-zinc-950">Select Staff Member</option>
+                        {usersData?.map(u => (
+                          <option key={u.id} value={u.id} className="bg-zinc-950">
+                            {u.first_name} {u.last_name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
+                  {/* Special Note */}
                   <div className="space-y-1.5">
                     <label className="text-xs text-zinc-300 font-semibold">Special Note</label>
                     <textarea
@@ -2886,8 +3319,85 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       value={formData.note}
                       onChange={handleInputChange}
                       rows={2}
-                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200"
+                      placeholder="Add any special handling instructions or notes..."
+                      className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                     />
+                  </div>
+
+                  {/* Currency, Conversion Rate, Discount & Auto Currency Conversion Fields (Last Card on Package Details) */}
+                  <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3 mt-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Currency, Discount & Exchange Conversion</span>
+                      <span className="text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                        Configured Rate: £1 = ₦{orgExchangeRate.toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Primary Currency</label>
+                        <select
+                          name="currency"
+                          value={formData.currency}
+                          onChange={(e) => {
+                            handleInputChange(e)
+                            if (e.target.value === 'GBP' && amountGbp) {
+                              setFormData(prev => ({ ...prev, amount: amountGbp, conversion_rate: String(orgExchangeRate) }))
+                            } else if (e.target.value === 'NGN' && amountNgn) {
+                              setFormData(prev => ({ ...prev, amount: amountNgn, conversion_rate: '1.0000' }))
+                            }
+                          }}
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-600 focus:outline-none rounded-lg p-2 text-xs font-bold cursor-pointer"
+                        >
+                          <option value="NGN" className="bg-[#f7f5f5] text-[#0f0000]">NGN (₦)</option>
+                          <option value="GBP" className="bg-[#f7f5f5] text-[#0f0000]">GBP (£)</option>
+                          <option value="USD" className="bg-[#f7f5f5] text-[#0f0000]">USD ($)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (NGN ₦)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={amountNgn}
+                          onChange={(e) => handleAmountNgnChange(e.target.value)}
+                          placeholder="0.00"
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Amount (GBP £)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={amountGbp}
+                          onChange={(e) => handleAmountGbpChange(e.target.value)}
+                          placeholder="0.00"
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-blue-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold" style={{ color: '#0f0000' }}>Discount (%)</label>
+                        <input
+                          type="number"
+                          name="discount_percentage"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                          value={formData.discount_percentage}
+                          onChange={handleInputChange}
+                          placeholder="e.g. 10"
+                          style={{ backgroundColor: '#f7f5f5', color: '#0f0000' }}
+                          className="w-full border border-zinc-300 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs font-bold placeholder-zinc-500"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3093,6 +3603,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           </div>
         </div>
       )}
+
+      {/* Mintana Printable Invoice / Receipt Modal */}
+      <MintanaInvoiceReceiptModal
+        invoice={selectedInvoiceForModal}
+        isOpen={isInvoiceReceiptModalOpen}
+        onClose={() => setIsInvoiceReceiptModalOpen(false)}
+      />
     </div>
   )
 }

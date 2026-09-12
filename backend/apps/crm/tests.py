@@ -319,3 +319,34 @@ class CRMAPITests(TestCase):
         
         self.assertTrue(Task.objects.filter(contact=self.contact_a1, title="Day 3 Callback").exists())
         self.assertTrue(Activity.objects.filter(contact=self.contact_a1, content__icontains="Day 3 Callback").exists())
+
+    def test_shipment_auto_generates_invoice(self):
+        from apps.crm.models import Shipment, Invoice
+        response = self.client.post(
+            "/shipments/",
+            json={
+                "receiver_name": "Test Customer",
+                "receiver_phone": "08012345678",
+                "receiver_email": "test@customer.com",
+                "receiver_address": "123 Test St",
+                "item_received": "ELECTRONICS AND CLOTHES",
+                "weight_kg": 10.0,
+                "amount": 25000.00,
+                "number_of_carton": 2,
+                "has_doorstep_delivery": True,
+                "currency": "NGN"
+            },
+            headers=self.headers_admin_a
+        )
+        self.assertEqual(response.status_code, 201)
+        shipment_data = response.json()
+        inv_no = shipment_data['invoice_number']
+
+        invoice = Invoice.objects.filter(organization=self.org_a, invoice_number=inv_no).first()
+        self.assertIsNotNone(invoice)
+        self.assertEqual(invoice.receiver_name, "Test Customer")
+        self.assertEqual(invoice.receiver_tel, "08012345678")
+        self.assertEqual(invoice.receiver_email, "test@customer.com")
+        self.assertEqual(float(invoice.total_ngn), 25000.00)
+        self.assertEqual(len(invoice.services), 2)
+

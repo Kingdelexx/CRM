@@ -54,7 +54,7 @@ class ContactSchema(ModelSchema):
 class ContactCreateSchema(Schema):
     first_name: str
     last_name: str
-    email: str
+    email: Optional[str] = ""
     phone: Optional[str] = None
     whatsapp_number: Optional[str] = None
     lead_acquisition_cost: Optional[float] = 0.0
@@ -67,6 +67,24 @@ class ContactCreateSchema(Schema):
     assigned_to_id: Optional[UUID] = None
     custom_fields: Optional[dict] = None
     country: Optional[str] = None
+
+class BulkContactImportItem(Schema):
+    first_name: str
+    last_name: Optional[str] = "."
+    email: Optional[str] = ""
+    phone: Optional[str] = None
+    whatsapp_number: Optional[str] = None
+    job_title: Optional[str] = None
+    address: Optional[str] = None
+    company_name: Optional[str] = None
+    status: Optional[str] = "LEAD"
+    assigned_to_id: Optional[UUID] = None
+
+class BulkContactImportSchema(Schema):
+    contacts: List[BulkContactImportItem]
+    status: Optional[str] = "LEAD"
+    assigned_to_id: Optional[UUID] = None
+    bypass_duplicates: Optional[bool] = True
 
 class DealSchema(ModelSchema):
     stage: StageSchema
@@ -378,8 +396,8 @@ class ShipmentSchema(ModelSchema):
         fields = [
             'id', 'sender_name', 'sender_phone', 'sender_email', 'sender_address',
             'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
-            'date', 'shipment_status', 'payment_status', 'currency', 'conversion_rate', 'amount',
-            'invoice_number', 'number_of_carton', 'partner_name', 'item_received', 'items_shipped',
+            'date', 'shipment_date', 'shipment_status', 'payment_status', 'shipping_type', 'currency', 'conversion_rate', 'amount',
+            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_doorstep_delivery', 'partner_name', 'item_received', 'items_shipped',
             'items_recieved', 'weight_kg', 'tracking_id', 'value', 'note', 'created_at', 'updated_at'
         ]
 
@@ -396,13 +414,17 @@ class ShipmentCreateSchema(Schema):
     receiver_email: Optional[str] = None
     receiver_address: Optional[str] = None
     date: Optional[str] = None
+    shipment_date: Optional[str] = None
     shipment_status: Optional[str] = 'PENDING'
     payment_status: Optional[str] = 'UNPAID'
+    shipping_type: Optional[str] = 'AIR'
     currency: Optional[str] = 'NGN'
     conversion_rate: Optional[float] = 1.0000
     amount: Optional[float] = 0.00
+    discount_percentage: Optional[float] = 0.00
     invoice_number: Optional[str] = None
     number_of_carton: Optional[int] = 1
+    has_doorstep_delivery: Optional[bool] = False
     partner_id: Optional[str] = None
     partner_name: Optional[str] = None
     item_received: Optional[str] = None
@@ -460,7 +482,7 @@ class CSRReportSchema(ModelSchema):
             'shipment_delays_and_reason', 'biggest_challenge_week', 'support_needed',
             'biggest_achievement_week', 'suggestion_for_improvement',
             'social_media_follows_encouraged', 'video_testimonial_received',
-            'biggest_challenge_month', 'biggest_achievement_month',
+            'biggest_challenge_month', 'biggest_achievement_month', 'month_name',
             'created_at', 'updated_at'
         ]
 
@@ -470,6 +492,7 @@ class CSRReportCreateSchema(Schema):
     report_type: Optional[str] = 'DAILY'
     staff_id: Optional[str] = None
     reported_to_id: Optional[str] = None
+    month_name: Optional[str] = None
 
     # Daily Report Metrics
     new_enquiries: Optional[int] = 0

@@ -21,8 +21,12 @@ class Organization(TimeStampedModel):
     lead_lifecycle_timer_enabled = models.BooleanField(default=False)
     default_lead_lifecycle_days = models.IntegerField(default=30)
 
-    # Exchange Rate Settings (GBP to NGN)
+    # Exchange & Delivery Rate Settings
     gbp_to_ngn_rate = models.DecimalField(max_digits=12, decimal_places=2, default=2000.00, null=True, blank=True)
+    parcel_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, null=True, blank=True)
+    doorstep_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, null=True, blank=True)
+    per_kg_price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, null=True, blank=True)
+
 
     def __str__(self):
         return self.name

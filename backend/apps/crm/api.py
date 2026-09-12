@@ -1,11 +1,13 @@
 from typing import List, Optional
 from uuid import UUID
 import json
+import quopri
+import urllib.parse
 from django.utils import timezone
 from datetime import date, datetime, timedelta
 from django.db import transaction
 from django.db.models import Q, Sum
-from ninja import Router
+from ninja import Router, File, UploadedFile
 from ninja.errors import HttpError
 from ninja.pagination import paginate, LimitOffsetPagination
 from ninja_jwt.authentication import JWTAuth
@@ -21,7 +23,7 @@ from .models import (
 from .schemas import (
     CompanySchema, CompanyCreateSchema,
     StageSchema, StageCreateSchema,
-    ContactSchema, ContactCreateSchema,
+    ContactSchema, ContactCreateSchema, BulkContactImportSchema, BulkContactImportItem,
     DealSchema, DealCreateSchema,
     ProjectSchema, ProjectCreateSchema,
     OrganizationLifecycleSettingsSchema,
@@ -190,6 +192,7 @@ def delete_stage(request, id: UUID):
 # ----------------- CONTACTS API -----------------
 
 @contacts_router.get("", response=List[ContactSchema])
+@contacts_router.get("/", response=List[ContactSchema])
 @paginate(LimitOffsetPagination)
 def list_contacts(
     request, 
@@ -221,6 +224,121 @@ def list_contacts(
         qs = qs.order_by(ordering)
     return qs
 
+
+@contacts_router.post("/import", response={201: dict})
+@contacts_router.post("/import/", response={201: dict})
+def import_contacts(request, data: BulkContactImportSchema):
+    org = request.user.organization
+    created_count = 0
+    skipped_count = 0
+    errors = []
+
+    default_assigned_to = None
+    if data.assigned_to_id:
+        default_assigned_to = User.objects.filter(id=data.assigned_to_id, organization=org).first()
+
+    default_status = data.status or 'LEAD'
+
+    with transaction.atomic():
+        for idx, item in enumerate(data.contacts):
+            try:
+                first_name = (item.first_name or '').strip()
+                last_name = (item.last_name or '').strip() or '.'
+                email = (item.email or '').strip()
+                phone = (item.phone or '').strip()
+
+                if not first_name:
+                    first_name = "Contact"
+
+                if not data.bypass_duplicates:
+                    dup_query = Q(first_name__iexact=first_name, last_name__iexact=last_name)
+                    if email:
+                        dup_query |= Q(email__iexact=email)
+                    if phone:
+                        dup_query |= Q(phone=phone)
+
+                    if Contact.objects.filter(dup_query, organization=org).exists():
+                        skipped_count += 1
+                        continue
+
+                company = None
+                if item.company_name:
+                    company, _ = Company.objects.get_or_create(
+                        name=item.company_name.strip(),
+                        organization=org
+                    )
+
+                assigned_to = default_assigned_to
+                if item.assigned_to_id:
+                    u = User.objects.filter(id=item.assigned_to_id, organization=org).first()
+                    if u:
+                        assigned_to = u
+
+                Contact.objects.create(
+                    organization=org,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    phone=phone,
+                    job_title=item.job_title or None,
+                    address=item.address or None,
+                    status=item.status or default_status,
+                    company=company,
+                    assigned_to=assigned_to
+                )
+                created_count += 1
+            except Exception as e:
+                errors.append(f"Contact {idx + 1}: {str(e)}")
+
+    return 201, {
+        "success": True,
+        "created_count": created_count,
+        "skipped_count": skipped_count,
+        "errors": errors
+    }
+
+
+@contacts_router.post("/import-vcf", response={201: dict})
+@contacts_router.post("/import-vcf/", response={201: dict})
+def import_vcf_file(
+    request,
+    file: UploadedFile = File(...),
+    status: Optional[str] = 'LEAD',
+    assigned_to_id: Optional[UUID] = None,
+    bypass_duplicates: Optional[bool] = True
+):
+    try:
+        content = file.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        raise HttpError(400, f"Unable to read VCF file: {str(e)}")
+
+    parsed_cards = parse_vcf_content(content)
+    if not parsed_cards:
+        raise HttpError(400, "No valid vCard contacts found in the uploaded VCF file.")
+
+    import_schema = BulkContactImportSchema(
+        contacts=[
+            BulkContactImportItem(
+                first_name=c['first_name'],
+                last_name=c['last_name'],
+                email=c['email'],
+                phone=c['phone'],
+                job_title=c['job_title'],
+                address=c['address'],
+                company_name=c['company_name'],
+                status=status,
+                assigned_to_id=assigned_to_id
+            )
+            for c in parsed_cards
+        ],
+        status=status,
+        assigned_to_id=assigned_to_id,
+        bypass_duplicates=bypass_duplicates
+    )
+
+    return import_contacts(request, import_schema)
+
+
 @contacts_router.get("/{id}", response=ContactSchema)
 def get_contact(request, id: UUID):
     contact = Contact.objects.filter(id=id, organization=request.user.organization).select_related('company', 'assigned_to').first()
@@ -229,6 +347,7 @@ def get_contact(request, id: UUID):
     return contact
 
 @contacts_router.post("", response={201: ContactSchema})
+@contacts_router.post("/", response={201: ContactSchema})
 def create_contact(request, data: ContactCreateSchema, bypass_duplicate_check: Optional[bool] = False):
     payload = data.dict()
     company_id = payload.pop('company_id', None)
@@ -283,6 +402,224 @@ def create_contact(request, data: ContactCreateSchema, bypass_duplicate_check: O
         **payload
     )
     return 201, contact
+
+
+def parse_vcf_content(vcf_text: str) -> List[dict]:
+    # 1. Strip UTF-8 BOM
+    cleaned = vcf_text.lstrip('\ufeff')
+    # 2. Unfold folded lines
+    unfolded = cleaned.replace('\r\n ', '').replace('\r\n\t', '').replace('\n ', '').replace('\n\t', '')
+    lines = unfolded.splitlines()
+
+    cards = []
+    current_card = None
+    raw_fn = None
+    raw_n = None
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        if 'BEGIN:VCARD' in line.upper():
+            current_card = {
+                'first_name': '',
+                'last_name': '',
+                'email': '',
+                'phone': '',
+                'job_title': '',
+                'company_name': '',
+                'address': ''
+            }
+            raw_fn = None
+            raw_n = None
+            continue
+
+        if 'END:VCARD' in line.upper():
+            if current_card:
+                if raw_fn:
+                    parts = raw_fn.strip().split()
+                    current_card['first_name'] = parts[0] if parts else ''
+                    current_card['last_name'] = ' '.join(parts[1:]) if len(parts) > 1 else '.'
+                elif raw_n:
+                    parts = raw_n.split(';')
+                    surname = parts[0].strip() if len(parts) > 0 else ''
+                    given_name = parts[1].strip() if len(parts) > 1 else ''
+                    current_card['first_name'] = given_name or surname or ''
+                    current_card['last_name'] = surname if given_name else '.'
+
+                if not current_card['first_name'] and not current_card['last_name']:
+                    if current_card['company_name']:
+                        current_card['first_name'] = current_card['company_name']
+                        current_card['last_name'] = '.'
+                    elif current_card['phone']:
+                        current_card['first_name'] = current_card['phone']
+                        current_card['last_name'] = '.'
+                    elif current_card['email']:
+                        current_card['first_name'] = current_card['email'].split('@')[0]
+                        current_card['last_name'] = '.'
+                    else:
+                        current_card['first_name'] = 'Unknown'
+                        current_card['last_name'] = 'Contact'
+                elif not current_card['first_name']:
+                    current_card['first_name'] = current_card['last_name'] or 'Contact'
+                    current_card['last_name'] = '.'
+                elif not current_card['last_name']:
+                    current_card['last_name'] = '.'
+
+                cards.append(current_card)
+            current_card = None
+            continue
+
+        if not current_card or ':' not in line:
+            continue
+
+        colon_idx = line.find(':')
+        key_part = line[:colon_idx].upper()
+        val_part = line[colon_idx + 1:].strip()
+
+        # Handle Quoted-Printable decoding
+        if 'ENCODING=QUOTED-PRINTABLE' in key_part or 'ENCODING=B' in key_part:
+            try:
+                val_part = quopri.decodestring(val_part.encode('utf-8')).decode('utf-8', errors='ignore')
+            except Exception:
+                pass
+
+        # Strip item prefixes like ITEM1.TEL -> TEL, ITEM2.EMAIL -> EMAIL
+        primary_key_spec = key_part.split(';')[0]
+        key_name = primary_key_spec.split('.')[-1] if '.' in primary_key_spec else primary_key_spec
+
+        if key_name == 'FN':
+            raw_fn = val_part
+        elif key_name == 'N':
+            raw_n = val_part
+        elif ('EMAIL' in key_name) and not current_card['email']:
+            current_card['email'] = val_part
+        elif ('TEL' in key_name) and not current_card['phone']:
+            current_card['phone'] = val_part
+        elif key_name == 'TITLE' and not current_card['job_title']:
+            current_card['job_title'] = val_part
+        elif key_name == 'ORG' and not current_card['company_name']:
+            current_card['company_name'] = val_part.split(';')[0].strip()
+        elif key_name == 'ADR' and not current_card['address']:
+            adr_parts = [p.strip() for p in val_part.split(';') if p.strip()]
+            current_card['address'] = ', '.join(adr_parts)
+
+    return cards
+
+
+@contacts_router.post("/import", response={201: dict})
+@contacts_router.post("/import/", response={201: dict})
+def import_contacts(request, data: BulkContactImportSchema):
+    org = request.user.organization
+    created_count = 0
+    skipped_count = 0
+    errors = []
+
+    default_assigned_to = None
+    if data.assigned_to_id:
+        default_assigned_to = User.objects.filter(id=data.assigned_to_id, organization=org).first()
+
+    default_status = data.status or 'LEAD'
+
+    with transaction.atomic():
+        for idx, item in enumerate(data.contacts):
+            try:
+                first_name = (item.first_name or '').strip()
+                last_name = (item.last_name or '').strip() or '.'
+                email = (item.email or '').strip()
+                phone = (item.phone or '').strip()
+
+                if not first_name:
+                    first_name = "Contact"
+
+                if not data.bypass_duplicates:
+                    dup_query = Q(first_name__iexact=first_name, last_name__iexact=last_name)
+                    if email:
+                        dup_query |= Q(email__iexact=email)
+                    if phone:
+                        dup_query |= Q(phone=phone)
+
+                    if Contact.objects.filter(dup_query, organization=org).exists():
+                        skipped_count += 1
+                        continue
+
+                company = None
+                if item.company_name:
+                    company, _ = Company.objects.get_or_create(
+                        name=item.company_name.strip(),
+                        organization=org
+                    )
+
+                assigned_to = default_assigned_to
+                if item.assigned_to_id:
+                    u = User.objects.filter(id=item.assigned_to_id, organization=org).first()
+                    if u:
+                        assigned_to = u
+
+                Contact.objects.create(
+                    organization=org,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    phone=phone,
+                    job_title=item.job_title or None,
+                    address=item.address or None,
+                    status=item.status or default_status,
+                    company=company,
+                    assigned_to=assigned_to
+                )
+                created_count += 1
+            except Exception as e:
+                errors.append(f"Contact {idx + 1}: {str(e)}")
+
+    return 201, {
+        "success": True,
+        "created_count": created_count,
+        "skipped_count": skipped_count,
+        "errors": errors
+    }
+
+
+@contacts_router.post("/import-vcf", response={201: dict})
+@contacts_router.post("/import-vcf/", response={201: dict})
+def import_vcf_file(
+    request,
+    file: UploadedFile = File(...),
+    status: Optional[str] = 'LEAD',
+    assigned_to_id: Optional[UUID] = None,
+    bypass_duplicates: Optional[bool] = True
+):
+    try:
+        content = file.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        raise HttpError(400, f"Unable to read VCF file: {str(e)}")
+
+    parsed_cards = parse_vcf_content(content)
+    if not parsed_cards:
+        raise HttpError(400, "No valid vCard contacts found in the uploaded VCF file.")
+
+    import_schema = BulkContactImportSchema(
+        contacts=[
+            BulkContactImportItem(
+                first_name=c['first_name'],
+                last_name=c['last_name'],
+                email=c['email'],
+                phone=c['phone'],
+                job_title=c['job_title'],
+                address=c['address'],
+                company_name=c['company_name'],
+                status=status,
+                assigned_to_id=assigned_to_id
+            )
+            for c in parsed_cards
+        ],
+        status=status,
+        assigned_to_id=assigned_to_id,
+        bypass_duplicates=bypass_duplicates
+    )
+
+    return import_contacts(request, import_schema)
 
 @contacts_router.put("/{id}", response=ContactSchema)
 def update_contact(request, id: UUID, data: ContactCreateSchema):
@@ -674,60 +1011,7 @@ def delete_lifecycle_rule(request, id: UUID):
     return 204, None
 
 
-# ----------------- ADDITIONAL CONTACTS OPERATIONS -----------------
 
-@contacts_router.post("/{id}/extend", response={200: ContactSchema})
-def extend_lead_lifecycle(request, id: UUID, days: int):
-    contact = Contact.objects.filter(id=id, organization=request.user.organization).first()
-    if not contact:
-        raise HttpError(404, "Contact not found.")
-    contact.lifecycle_extension_days += days
-    contact.save()
-    return contact
-
-@contacts_router.post("/{id}/merge", response={200: ContactSchema})
-def merge_contacts(request, id: UUID, candidate_id: UUID):
-    contact = Contact.objects.filter(id=id, organization=request.user.organization).first()
-    duplicate = Contact.objects.filter(id=candidate_id, organization=request.user.organization).first()
-    if not contact or not duplicate:
-        raise HttpError(404, "One or both contacts not found.")
-    
-    with transaction.atomic():
-        # Merge basic fields on contact
-        if not contact.phone and duplicate.phone:
-            contact.phone = duplicate.phone
-        if not contact.job_title and duplicate.job_title:
-            contact.job_title = duplicate.job_title
-        if not contact.company and duplicate.company:
-            contact.company = duplicate.company
-        if not contact.assigned_to and duplicate.assigned_to:
-            contact.assigned_to = duplicate.assigned_to
-            
-        # Merge custom fields
-        target_fields = contact.custom_fields or {}
-        duplicate_fields = duplicate.custom_fields or {}
-        for k, v in duplicate_fields.items():
-            if k not in target_fields:
-                target_fields[k] = v
-        contact.custom_fields = target_fields
-        contact.save()
-        
-        # Merge related entities
-        # 1. Activities
-        from apps.planning.models import Activity as PlanningActivity
-        PlanningActivity.objects.filter(contact=duplicate).update(contact=contact)
-        
-        # 2. Tasks
-        from apps.planning.models import Task as PlanningTask
-        PlanningTask.objects.filter(contact=duplicate).update(contact=contact)
-        
-        # 3. Deals
-        Deal.objects.filter(contact=duplicate).update(contact=contact)
-        
-        # Delete duplicate contact
-        duplicate.delete()
-        
-    return contact
 
 
 # ----------------- CUSTOMER LISTS / SEGMENTS API -----------------
@@ -1708,15 +1992,23 @@ def global_search(request, q: str):
 # ----------------- INVOICES API -----------------
 
 @invoices_router.get("", response=List[InvoiceSchema])
+@invoices_router.get("/", response=List[InvoiceSchema])
 @paginate(LimitOffsetPagination)
 def list_invoices(request, search: Optional[str] = None, status: Optional[str] = None, contact_id: Optional[UUID] = None):
     qs = Invoice.objects.filter(organization=request.user.organization).select_related('contact', 'company', 'deal')
     if search:
+        search_term = str(search).strip()
         qs = qs.filter(
-            Q(invoice_number__icontains=search) |
-            Q(receiver_name__icontains=search) |
-            Q(receiver_email__icontains=search) |
-            Q(expected_parcel_no__icontains=search)
+            Q(invoice_number__icontains=search_term) |
+            Q(receiver_name__icontains=search_term) |
+            Q(receiver_email__icontains=search_term) |
+            Q(receiver_tel__icontains=search_term) |
+            Q(expected_parcel_no__icontains=search_term) |
+            Q(contact__first_name__icontains=search_term) |
+            Q(contact__last_name__icontains=search_term) |
+            Q(issue_date__icontains=search_term) |
+            Q(due_date__icontains=search_term) |
+            Q(created_at__icontains=search_term)
         )
     if status:
         qs = qs.filter(status=status)
@@ -1860,11 +2152,16 @@ def mark_invoice_paid(request, id: UUID, payment_method: Optional[str] = 'BANK_T
 def list_receipts(request, search: Optional[str] = None):
     qs = Receipt.objects.filter(organization=request.user.organization).select_related('invoice', 'contact')
     if search:
+        search_term = str(search).strip()
         qs = qs.filter(
-            Q(receipt_number__icontains=search) |
-            Q(reference_number__icontains=search) |
-            Q(invoice__invoice_number__icontains=search) |
-            Q(invoice__receiver_name__icontains=search)
+            Q(receipt_number__icontains=search_term) |
+            Q(reference_number__icontains=search_term) |
+            Q(invoice__invoice_number__icontains=search_term) |
+            Q(invoice__receiver_name__icontains=search_term) |
+            Q(contact__first_name__icontains=search_term) |
+            Q(contact__last_name__icontains=search_term) |
+            Q(payment_date__icontains=search_term) |
+            Q(created_at__icontains=search_term)
         )
     return qs.order_by('-payment_date')
 
@@ -1908,33 +2205,49 @@ def delete_receipt(request, id: UUID):
 # ----------------- SHIPMENTS API -----------------
 
 @shipments_router.get("", response=List[ShipmentSchema])
+@shipments_router.get("/", response=List[ShipmentSchema])
 def list_shipments(
     request,
     search: Optional[str] = None,
     shipment_status: Optional[str] = None,
-    payment_status: Optional[str] = None
+    payment_status: Optional[str] = None,
+    shipping_type: Optional[str] = None
 ):
     qs = Shipment.objects.filter(organization=request.user.organization).select_related(
         'sender', 'receiver', 'partner', 'recorded_by'
     )
     if search:
+        search_term = str(search).strip()
         qs = qs.filter(
-            Q(tracking_id__icontains=search) |
-            Q(invoice_number__icontains=search) |
-            Q(sender_name__icontains=search) |
-            Q(sender_email__icontains=search) |
-            Q(sender_phone__icontains=search) |
-            Q(receiver_name__icontains=search) |
-            Q(receiver_email__icontains=search) |
-            Q(receiver_phone__icontains=search)
+            Q(tracking_id__icontains=search_term) |
+            Q(invoice_number__icontains=search_term) |
+            Q(sender_name__icontains=search_term) |
+            Q(sender_email__icontains=search_term) |
+            Q(sender_phone__icontains=search_term) |
+            Q(receiver_name__icontains=search_term) |
+            Q(receiver_email__icontains=search_term) |
+            Q(receiver_phone__icontains=search_term) |
+            Q(partner_name__icontains=search_term) |
+            Q(sender__first_name__icontains=search_term) |
+            Q(sender__last_name__icontains=search_term) |
+            Q(receiver__first_name__icontains=search_term) |
+            Q(receiver__last_name__icontains=search_term) |
+            Q(partner__first_name__icontains=search_term) |
+            Q(partner__last_name__icontains=search_term) |
+            Q(date__icontains=search_term) |
+            Q(shipment_date__icontains=search_term) |
+            Q(created_at__icontains=search_term)
         )
     if shipment_status:
         qs = qs.filter(shipment_status=shipment_status)
     if payment_status:
         qs = qs.filter(payment_status=payment_status)
+    if shipping_type:
+        qs = qs.filter(shipping_type=shipping_type)
     return qs.order_by('-created_at')
 
 @shipments_router.post("", response={201: ShipmentSchema})
+@shipments_router.post("/", response={201: ShipmentSchema})
 def create_shipment(request, data: ShipmentCreateSchema):
     payload = data.dict(exclude_unset=True)
 
@@ -1951,11 +2264,16 @@ def create_shipment(request, data: ShipmentCreateSchema):
     partner_id = parse_uuid(payload.pop('partner_id', None))
     recorded_by_id = parse_uuid(payload.pop('recorded_by_id', None))
 
+    shipment_date_val = payload.pop('shipment_date', None)
     date_val = payload.pop('date', None)
-    if date_val and str(date_val).strip():
-        payload['date'] = str(date_val).strip()
+    effective_date = shipment_date_val or date_val
+    if effective_date and str(effective_date).strip():
+        c_date = str(effective_date).strip()
+        payload['date'] = c_date
+        payload['shipment_date'] = c_date
     else:
         payload['date'] = None
+        payload['shipment_date'] = None
 
     # Clean up empty strings for optional text fields
     for field in ['sender_name', 'sender_phone', 'sender_email', 'sender_address',
@@ -1965,15 +2283,25 @@ def create_shipment(request, data: ShipmentCreateSchema):
         if field in payload and payload[field] is not None and str(payload[field]).strip() == '':
             payload[field] = None
 
-    # Auto-generate tracking_id if not supplied
-    if not payload.get('tracking_id'):
-        count = Shipment.objects.filter(organization=request.user.organization).count() + 1001
-        payload['tracking_id'] = f"TRK-{timezone.now().strftime('%Y%m%d')}-{count}"
-
-    # Auto-generate invoice_number if not supplied
+    # Auto-generate invoice_number in format: MINT/MONTH_3/DAY_3/NUMBER (e.g. MINT/SEP/FRI/1001)
     if not payload.get('invoice_number'):
+        from datetime import datetime
+        month_str = timezone.now().strftime('%b').upper()
+        day_str = timezone.now().strftime('%a').upper()
+        target_d = payload.get('shipment_date') or payload.get('date')
+        if target_d:
+            try:
+                dt = datetime.strptime(str(target_d).strip(), '%Y-%m-%d')
+                month_str = dt.strftime('%b').upper()
+                day_str = dt.strftime('%a').upper()
+            except Exception:
+                pass
         count = Shipment.objects.filter(organization=request.user.organization).count() + 1001
-        payload['invoice_number'] = f"INV-SHIP-{count}"
+        payload['invoice_number'] = f"MINT/{month_str}/{day_str}/{count}"
+
+    # Auto-fill tracking_id silently if not supplied
+    if not payload.get('tracking_id'):
+        payload['tracking_id'] = payload['invoice_number']
 
     shipment = Shipment.objects.create(
         organization=request.user.organization,
@@ -1999,6 +2327,16 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
         raise HttpError(404, "Shipment not found.")
     
     payload = data.dict(exclude_unset=True)
+    if 'shipment_date' in payload or 'date' in payload:
+        s_date = payload.get('shipment_date') or payload.get('date')
+        if s_date and str(s_date).strip():
+            c_date = str(s_date).strip()
+            payload['date'] = c_date
+            payload['shipment_date'] = c_date
+        else:
+            payload['date'] = None
+            payload['shipment_date'] = None
+
     for attr, val in payload.items():
         setattr(shipment, attr, val)
     shipment.save()
@@ -2206,16 +2544,81 @@ def list_csr_reports(
     return qs.order_by('-date', '-created_at')
 
 
+@csr_reports_router.get("/suggested-period", response=dict)
+def get_suggested_period(
+    request,
+    report_type: str,
+    staff_id: Optional[UUID] = None
+):
+    target_type = report_type.upper()
+    end_date = timezone.localdate()
+
+    qs = CSRReport.objects.filter(
+        organization=request.user.organization,
+        report_type=target_type
+    )
+    if staff_id:
+        qs = qs.filter(staff_id=staff_id)
+
+    last_report = qs.order_by('-date', '-created_at').first()
+
+    if last_report and last_report.date:
+        start_date = last_report.date + timedelta(days=1)
+    else:
+        if target_type == 'WEEKLY':
+            earliest_daily = CSRReport.objects.filter(
+                organization=request.user.organization,
+                report_type='DAILY'
+            )
+            if staff_id:
+                earliest_daily = earliest_daily.filter(staff_id=staff_id)
+            earliest = earliest_daily.order_by('date').first()
+            if earliest and earliest.date:
+                start_date = earliest.date
+            else:
+                start_date = end_date - timedelta(days=6)
+        elif target_type == 'MONTHLY':
+            earliest_weekly = CSRReport.objects.filter(
+                organization=request.user.organization,
+                report_type='WEEKLY'
+            )
+            if staff_id:
+                earliest_weekly = earliest_weekly.filter(staff_id=staff_id)
+            earliest = earliest_weekly.order_by('date').first()
+            if earliest and earliest.date:
+                start_date = earliest.date
+            else:
+                start_date = end_date.replace(day=1)
+        else:
+            start_date = end_date
+
+    if start_date > end_date:
+        start_date = end_date
+
+    month_name = end_date.strftime("%B %Y")
+
+    return {
+        "report_type": target_type,
+        "start_date": str(start_date),
+        "end_date": str(end_date),
+        "month_name": month_name,
+        "has_previous_report": bool(last_report and last_report.date),
+        "last_report_date": str(last_report.date) if (last_report and last_report.date) else None
+    }
+
+
 @csr_reports_router.get("/aggregate", response=dict)
 def aggregate_csr_daily_reports(
     request,
     start_date: str,
     end_date: str,
+    report_type: Optional[str] = 'DAILY',
     staff_id: Optional[UUID] = None
 ):
+    target_type = report_type.upper() if report_type else 'DAILY'
     qs = CSRReport.objects.filter(
         organization=request.user.organization,
-        report_type='DAILY',
+        report_type=target_type,
         date__range=[start_date, end_date]
     )
     if staff_id:
@@ -2249,7 +2652,8 @@ def aggregate_csr_daily_reports(
         "follow_up_completed": aggregated['total_follow_up_completed'] or 0,
         "customer_complaint_received": aggregated['total_customer_complaint_received'] or 0,
         "customer_escalated_to_manager": aggregated['total_customer_escalated_to_manager'] or 0,
-        "count_daily_reports": qs.count()
+        "count_daily_reports": qs.count(),
+        "count_reports": qs.count()
     }
 
 
@@ -2277,6 +2681,14 @@ def create_csr_report(request, data: CSRReportCreateSchema):
     staff = User.objects.filter(id=staff_id, organization=request.user.organization).first() if staff_id else request.user
     reported_to = User.objects.filter(id=reported_to_id, organization=request.user.organization).first() if reported_to_id else None
 
+    # Auto generate month_name if missing
+    if not payload.get('month_name') and payload.get('date'):
+        try:
+            d_obj = datetime.strptime(str(payload['date']), '%Y-%m-%d').date() if isinstance(payload['date'], str) else payload['date']
+            payload['month_name'] = d_obj.strftime("%B %Y")
+        except Exception:
+            payload['month_name'] = timezone.localdate().strftime("%B %Y")
+
     report = CSRReport.objects.create(
         organization=request.user.organization,
         staff=staff,
@@ -2284,6 +2696,7 @@ def create_csr_report(request, data: CSRReportCreateSchema):
         **payload
     )
     return 201, report
+
 
 
 @csr_reports_router.get("/{id}", response=CSRReportSchema)

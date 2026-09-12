@@ -17,6 +17,9 @@ export interface Organization extends BaseEntity {
   address?: string;
   billing_emails?: string;
   gbp_to_ngn_rate?: number;
+  parcel_rate?: number;
+  doorstep_rate?: number;
+  per_kg_price?: number;
 }
 
 export interface CustomRole extends BaseEntity {
@@ -443,13 +446,17 @@ export interface Shipment extends BaseEntity {
   receiver_email?: string;
   receiver_address?: string;
   date?: string;
+  shipment_date?: string;
   shipment_status: 'PENDING' | 'IN_TRANSIT' | 'DELIVERED' | 'CUSTOMS_HOLD' | 'CANCELLED';
   payment_status: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID';
+  shipping_type?: 'AIR' | 'SEA';
   currency: 'NGN' | 'USD' | 'GBP';
   conversion_rate: number;
   amount: number;
+  discount_percentage?: number;
   invoice_number?: string;
   number_of_carton: number;
+  has_doorstep_delivery?: boolean;
   partner?: Contact;
   partner_name?: string;
   item_received?: string;
@@ -512,6 +519,7 @@ export interface CSRReport extends BaseEntity {
   suggestion_for_improvement?: string;
 
   // Monthly Report Specific & Qualitative Details
+  month_name?: string;
   social_media_follows_encouraged: number;
   video_testimonial_received: number;
   biggest_challenge_month?: string;

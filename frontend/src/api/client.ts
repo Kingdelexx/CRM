@@ -65,6 +65,7 @@ apiClient.interceptors.response.use(
       message: error.response?.data?.detail || error.message || 'An unexpected error occurred.',
       errors: error.response?.data?.errors || null,
       status: error.response?.status || 500,
+      response: error.response,
     })
   }
 )
