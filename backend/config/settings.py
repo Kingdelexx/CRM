@@ -117,3 +117,19 @@ NINJA_JWT = {
     'ACCESS_TOKEN_LIFETIME': 3600,  # 1 hour
     'REFRESH_TOKEN_LIFETIME': 86400, # 1 day
 }
+
+import sys
+
+# Email Configuration (Gmail SMTP)
+is_testing = 'test' in sys.argv
+default_backend = 'django.core.mail.backends.locmem.EmailBackend' if is_testing else 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_BACKEND = env('EMAIL_BACKEND', default=default_backend)
+EMAIL_HOST = env('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = env.int('EMAIL_PORT', default=587)
+EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='').replace(' ', '')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='') or EMAIL_HOST_USER or 'noreply@mintana.com'
+
+
+

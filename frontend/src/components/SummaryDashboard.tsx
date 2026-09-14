@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { Deal, Stage, DashboardMetrics, User } from '@/types/crm'
+import type { Deal, Stage, DashboardMetrics, User, Task } from '@/types/crm'
 import {
   Award,
   Layers,
@@ -59,6 +59,20 @@ export default function SummaryDashboard() {
     queryFn: async () => {
       const response = await apiClient.get<Stage[]>('/stages/')
       return response.data
+    }
+  })
+
+  // 5. Fetch Tasks for dashboard status checklist
+  const { data: dashboardTasks = [] } = useQuery<Task[]>({
+    queryKey: ['dashboard-tasks-roster'],
+    queryFn: async () => {
+      let res
+      try {
+        res = await apiClient.get<Task[]>('/tasks')
+      } catch {
+        res = await apiClient.get<Task[]>('/tasks/')
+      }
+      return Array.isArray(res.data) ? res.data : (res.data as any).items || []
     }
   })
 
@@ -271,6 +285,72 @@ export default function SummaryDashboard() {
                   <span className="text-xl font-extrabold text-red-700 mt-1 block">{metrics.tasks.overdue}</span>
                 </div>
               </div>
+
+              {/* Tasks Roster Table with Green Completed Status */}
+              <div className="pt-3 border-t border-slate-100 space-y-2">
+                <div className="text-xs font-bold text-[#1A202C] uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <CheckSquare className="h-3.5 w-3.5 text-indigo-600" /> Task Status Roster
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">Live checklist status</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-[#E2E8F0] text-slate-600 font-bold uppercase text-[9px]">
+                        <th className="py-2.5 px-3">Task Details</th>
+                        <th className="py-2.5 px-3 text-center">Priority</th>
+                        <th className="py-2.5 px-3 text-center">Due Date</th>
+                        <th className="py-2.5 px-3 text-center">Assignee</th>
+                        <th className="py-2.5 px-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {dashboardTasks.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-4 text-center text-slate-400 italic">No registered tasks.</td>
+                        </tr>
+                      ) : (
+                        dashboardTasks.slice(0, 6).map(t => (
+                          <tr key={t.id} className="hover:bg-slate-50/60">
+                            <td className="py-2.5 px-3 font-semibold text-[#1A202C]">{t.title}</td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                                t.priority === 'HIGH' ? 'bg-red-50 text-red-600 border-red-200' :
+                                t.priority === 'MEDIUM' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                                'bg-emerald-50 text-emerald-600 border-emerald-200'
+                              }`}>
+                                {t.priority}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-center text-slate-500 text-[11px]">
+                              {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'No date'}
+                            </td>
+                            <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
+                              {t.assignee ? `${t.assignee.first_name || ''} ${t.assignee.last_name || ''}`.trim() || t.assignee.email : 'Unassigned'}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              {t.status === 'DONE' ? (
+                                <span className="inline-flex items-center gap-1 font-extrabold uppercase text-[9px] px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 shadow-sm">
+                                  ✓ Completed
+                                </span>
+                              ) : t.status === 'IN_PROGRESS' ? (
+                                <span className="inline-flex items-center gap-1 font-bold uppercase text-[9px] px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700">
+                                  In Progress
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 font-bold uppercase text-[9px] px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600">
+                                  To Do
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
 
             {/* My Activity Stream */}
@@ -474,6 +554,72 @@ export default function SummaryDashboard() {
             </div>
           </div>
 
+          {/* Executive Task Overview Section */}
+          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-6 space-y-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
+              <h3 className="text-sm font-bold text-[#1A202C] uppercase tracking-wider flex items-center gap-2">
+                <CheckSquare className="h-4.5 w-4.5 text-indigo-600" /> Executive Task Status Roster
+              </h3>
+              <span className="text-xs text-slate-500 font-medium">All Units</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-[#E2E8F0] text-slate-600 font-bold uppercase text-[9px]">
+                    <th className="py-2.5 px-3">Task Details</th>
+                    <th className="py-2.5 px-3 text-center">Priority</th>
+                    <th className="py-2.5 px-3 text-center">Due Date</th>
+                    <th className="py-2.5 px-3 text-center">Assignee</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {dashboardTasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-4 text-center text-slate-400 italic">No tasks registered in organization.</td>
+                    </tr>
+                  ) : (
+                    dashboardTasks.slice(0, 6).map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50/60">
+                        <td className="py-2.5 px-3 font-semibold text-[#1A202C]">{t.title}</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                            t.priority === 'HIGH' ? 'bg-red-50 text-red-600 border-red-200' :
+                            t.priority === 'MEDIUM' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                            'bg-emerald-50 text-emerald-600 border-emerald-200'
+                          }`}>
+                            {t.priority}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-slate-500 text-[11px]">
+                          {t.due_date ? new Date(t.due_date).toLocaleDateString() : 'No date'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-slate-600 font-medium">
+                          {t.assignee ? `${t.assignee.first_name || ''} ${t.assignee.last_name || ''}`.trim() || t.assignee.email : 'Unassigned'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {t.status === 'DONE' ? (
+                            <span className="inline-flex items-center gap-1 font-extrabold uppercase text-[9px] px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 shadow-sm">
+                              ✓ Completed
+                            </span>
+                          ) : t.status === 'IN_PROGRESS' ? (
+                            <span className="inline-flex items-center gap-1 font-bold uppercase text-[9px] px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-700">
+                              In Progress
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 font-bold uppercase text-[9px] px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600">
+                              To Do
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

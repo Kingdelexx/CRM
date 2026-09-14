@@ -19,6 +19,7 @@ from .schemas import (
 activities_router = Router(auth=JWTAuth())
 
 @activities_router.get("", response=List[ActivitySchema])
+@activities_router.get("/", response=List[ActivitySchema])
 @paginate(LimitOffsetPagination)
 def list_activities(
     request,
@@ -52,6 +53,7 @@ def get_activity(request, id: UUID):
     return activity
 
 @activities_router.post("", response={201: ActivitySchema})
+@activities_router.post("/", response={201: ActivitySchema})
 def create_activity(request, data: ActivityCreateSchema):
     payload = data.dict()
     deal_id = payload.pop('deal_id', None)
@@ -113,6 +115,7 @@ def delete_activity(request, id: UUID):
 tasks_router = Router(auth=JWTAuth())
 
 @tasks_router.get("", response=List[TaskSchema])
+@tasks_router.get("/", response=List[TaskSchema])
 @paginate(LimitOffsetPagination)
 def list_tasks(
     request,
@@ -164,6 +167,7 @@ def get_task(request, id: UUID):
     return task
 
 @tasks_router.post("", response={201: TaskSchema})
+@tasks_router.post("/", response={201: TaskSchema})
 def create_task(request, data: TaskCreateSchema):
     payload = data.dict(exclude_unset=True)
 
@@ -195,6 +199,8 @@ def create_task(request, data: TaskCreateSchema):
     assignee = None
     if assignee_id:
         assignee = User.objects.filter(id=assignee_id, organization=request.user.organization).first()
+    if not assignee:
+        assignee = request.user
 
     task_team = None
     if task_team_id:

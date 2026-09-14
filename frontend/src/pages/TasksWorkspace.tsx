@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import type { Task, User, Team, Deal, Contact, Company, ChecklistItem, TaskComment } from '@/types/crm'
@@ -21,6 +21,15 @@ import {
   Loader2,
   Edit3
 } from 'lucide-react'
+
+const getUserDisplayName = (u: User) => {
+  const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ').trim()
+  const roleBadge = u.role ? ` (${u.role === 'ADMIN' ? 'Admin' : u.role === 'MANAGER' ? 'Manager' : 'Staff'})` : ''
+  if (fullName) {
+    return `${fullName}${roleBadge} - ${u.email}`
+  }
+  return `${u.email || 'User'}${roleBadge}`
+}
 
 // Component
 export default function TasksWorkspace() {
@@ -98,10 +107,47 @@ export default function TasksWorkspace() {
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ['workspace-users'],
     queryFn: async () => {
-      const response = await apiClient.get<User[]>('/accounts/')
-      return Array.isArray(response.data) ? response.data : (response.data as any)?.items || []
+      try {
+        const response = await apiClient.get<User[]>('/accounts')
+        return Array.isArray(response.data) ? response.data : (response.data as any)?.items || []
+      } catch (err) {
+        const response = await apiClient.get<User[]>('/accounts/')
+        return Array.isArray(response.data) ? response.data : (response.data as any)?.items || []
+      }
     }
   })
+
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ['current-user-me'],
+    queryFn: async () => {
+      const response = await apiClient.get<User>('/accounts/me')
+      if (response.data) {
+        localStorage.setItem('current_user', JSON.stringify(response.data))
+      }
+      return response.data
+    }
+  })
+
+  const effectiveCurrentUser = currentUser || (() => {
+    try {
+      const raw = localStorage.getItem('current_user')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })()
+
+  // Guarantee currentUser is always present in staff options
+  const allStaffUsers = [...users]
+  if (effectiveCurrentUser?.id && !allStaffUsers.some(u => u.id === effectiveCurrentUser.id)) {
+    allStaffUsers.unshift(effectiveCurrentUser)
+  }
+
+  useEffect(() => {
+    if (isCreateModalOpen && !newTaskForm.assignee_id && effectiveCurrentUser?.id) {
+      setNewTaskForm(prev => ({ ...prev, assignee_id: effectiveCurrentUser.id }))
+    }
+  }, [isCreateModalOpen, effectiveCurrentUser?.id, newTaskForm.assignee_id])
 
   const { data: teams = [] } = useQuery<Team[]>({
     queryKey: ['workspace-teams'],
@@ -162,7 +208,11 @@ export default function TasksWorkspace() {
         partner_id: body.partner_id || null,
         company_id: body.company_id || null
       }
-      return apiClient.post('/tasks/', formatted)
+      try {
+        return await apiClient.post('/tasks', formatted)
+      } catch {
+        return await apiClient.post('/tasks/', formatted)
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workspace-tasks'] })
@@ -455,8 +505,8 @@ export default function TasksWorkspace() {
               className="bg-zinc-900 border border-zinc-800 rounded-md p-1.5 focus:border-indigo-650 focus:outline-none text-zinc-300 cursor-pointer"
             >
               <option value="">All Members</option>
-              {users.map(u => (
-                <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+              {allStaffUsers.map(u => (
+                <option key={u.id} value={u.id}>{getUserDisplayName(u)}</option>
               ))}
             </select>
           </div>
@@ -496,7 +546,24 @@ export default function TasksWorkspace() {
 
           {/* Create Button */}
           <button
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={() => {
+              const defaultAssignee = effectiveCurrentUser?.id || (allStaffUsers[0]?.id || '')
+              setNewTaskForm({
+                title: '',
+                description: '',
+                start_date: '',
+                due_date: '',
+                priority: 'MEDIUM',
+                status: 'TODO',
+                assignee_id: defaultAssignee,
+                task_team_id: '',
+                deal_id: '',
+                contact_id: '',
+                partner_id: '',
+                company_id: ''
+              })
+              setIsCreateModalOpen(true)
+            }}
             className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg px-4 py-2 font-bold transition-all shadow-md shadow-indigo-600/10 cursor-pointer flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -519,8 +586,9 @@ export default function TasksWorkspace() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-zinc-900/60 border-b border-zinc-900 text-zinc-400 font-bold uppercase tracking-wider">
-                      <th className="py-3 px-4 w-12 text-center">Status</th>
+                      <th className="py-3 px-4 w-10 text-center">#</th>
                       <th className="py-3 px-4">Task Details</th>
+                      <th className="py-3 px-4 w-32 text-center">Status</th>
                       <th className="py-3 px-4 w-28">Priority</th>
                       <th className="py-3 px-4 w-32">Due Date</th>
                       <th className="py-3 px-4 w-36">Assignee</th>
@@ -531,7 +599,7 @@ export default function TasksWorkspace() {
                   <tbody className="divide-y divide-zinc-900">
                     {tasks.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-16 text-center text-zinc-650 italic">
+                        <td colSpan={8} className="py-16 text-center text-zinc-650 italic">
                           No tasks match the active filters.
                         </td>
                       </tr>
@@ -552,7 +620,9 @@ export default function TasksWorkspace() {
                               <div className="space-y-0.5">
                                 <button
                                   onClick={() => setSelectedTaskId(task.id)}
-                                  className="font-bold text-zinc-200 hover:text-indigo-400 transition-colors text-left"
+                                  className={`font-bold transition-colors text-left ${
+                                    task.status === 'DONE' ? 'text-zinc-400 line-through' : 'text-zinc-200 hover:text-indigo-400'
+                                  }`}
                                 >
                                   {task.title}
                                 </button>
@@ -560,6 +630,21 @@ export default function TasksWorkspace() {
                                   <p className="text-zinc-550 line-clamp-1 max-w-lg">{task.description}</p>
                                 )}
                               </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              {task.status === 'DONE' ? (
+                                <span className="inline-flex items-center gap-1 font-extrabold uppercase text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-sm">
+                                  ✓ Completed
+                                </span>
+                              ) : task.status === 'IN_PROGRESS' ? (
+                                <span className="inline-flex items-center gap-1 font-extrabold uppercase text-[10px] px-2.5 py-0.5 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400">
+                                  In Progress
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 font-extrabold uppercase text-[10px] px-2.5 py-0.5 rounded-full bg-zinc-800/80 border border-zinc-700/60 text-zinc-400">
+                                  To Do
+                                </span>
+                              )}
                             </td>
                             <td className="py-3.5 px-4">
                               <span className={`inline-block font-extrabold uppercase text-[9px] px-2 py-0.5 rounded border ${
@@ -890,8 +975,8 @@ export default function TasksWorkspace() {
                     className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
                   >
                     <option value="">Unassigned</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                    {allStaffUsers.map(u => (
+                      <option key={u.id} value={u.id}>{getUserDisplayName(u)}</option>
                     ))}
                   </select>
                 </div>
@@ -1095,9 +1180,9 @@ export default function TasksWorkspace() {
                     className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
                   >
                     <option value="">Unassigned</option>
-                    {users.map(u => (
+                    {allStaffUsers.map(u => (
                       <option key={u.id} value={u.id}>
-                        {u.first_name} {u.last_name} ({u.email})
+                        {getUserDisplayName(u)}
                       </option>
                     ))}
                   </select>

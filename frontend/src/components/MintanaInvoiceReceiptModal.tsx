@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import type { Invoice, Receipt } from '../types/crm';
 import { X, Printer, Share2, ExternalLink, CheckCircle, FileText } from 'lucide-react';
 
@@ -65,8 +65,34 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
 
   const slaUrl = activeInvoice?.sla_terms_url || 'https://www.mintana.co.uk/terms-and-conditions';
 
+  // Extract last 4 numbers from invoice or receipt number
+  const docDigitsOnly = docNumber.replace(/\D/g, '');
+  const last4Numbers = docDigitsOnly.length >= 4 
+    ? docDigitsOnly.slice(-4) 
+    : (docNumber.slice(-4) || '0000');
+
+  const cleanReceiverName = (receiverName && receiverName !== 'Valued Client') 
+    ? receiverName.replace(/[\/\\:*?"<>|]/g, '-').trim() 
+    : 'Client';
+
+  const docType = receipt ? 'Receipt' : 'Invoice';
+  const downloadFileName = `${docType} - ${cleanReceiverName} - ${last4Numbers}`;
+
+  // Update document.title so PDF download defaults to "[DocType] - [Receiver Name] - [4 Numbers]"
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalTitle = document.title;
+    document.title = downloadFileName;
+
+    return () => {
+      document.title = originalTitle;
+    };
+  }, [isOpen, downloadFileName]);
+
   // Handler for native browser Print / PDF Save
   const handlePrint = () => {
+    document.title = downloadFileName;
     window.print();
   };
 
@@ -187,7 +213,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
               <div className="flex items-center space-x-2">
                 <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-sky-400 flex-shrink-0" />
                 <h3 className="text-sm sm:text-lg font-semibold text-white truncate">
-                  {receipt ? 'Official Payment Receipt' : 'Logistics Invoice Preview'}
+                  {receipt ? 'Official Payment Receipt' : 'Logistics Invoice'}: <span className="text-sky-300 font-mono font-bold">{cleanReceiverName} ({last4Numbers})</span>
                 </h3>
               </div>
               <div className="flex items-center flex-wrap gap-2">

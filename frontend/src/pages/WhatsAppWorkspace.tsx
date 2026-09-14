@@ -319,9 +319,14 @@ export default function WhatsAppWorkspace() {
                       className="bg-zinc-950 border border-zinc-900 text-[10px] px-2 py-1 rounded max-w-[130px] font-medium text-zinc-300 focus:outline-none"
                     >
                       <option value="">Unassigned Rep</option>
-                      {users.map(u => (
-                        <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
-                      ))}
+                      {users.map(u => {
+                        const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ').trim()
+                        return (
+                          <option key={u.id} value={u.id}>
+                            {fullName || u.email}
+                          </option>
+                        )
+                      })}
                     </select>
                   </div>
                   {/* Create Task Button */}

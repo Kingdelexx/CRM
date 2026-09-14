@@ -1157,7 +1157,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
 
   return (
-    <div className="space-y-6">
+    <>
+      <div className="space-y-6 print:hidden">
       {/* Workspace Header & Navigation Tabs */}
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
@@ -2237,7 +2238,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Invoice Number</span>
-                  <span className="font-mono font-bold text-emerald-400 text-sm">{selectedShipment.invoice_number || '-'}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-emerald-400 text-sm">{selectedShipment.invoice_number || '-'}</span>
+                    {selectedShipment.invoice_number && (
+                      <button
+                        onClick={() => handleViewShipmentInvoice(selectedShipment)}
+                        className="px-2 py-1 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 rounded text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <FileText className="h-3 w-3" /> View Invoice
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-zinc-800">
                   <span className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Date Created</span>
@@ -3604,13 +3615,15 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         </div>
       )}
 
+      </div>
+
       {/* Mintana Printable Invoice / Receipt Modal */}
       <MintanaInvoiceReceiptModal
         invoice={selectedInvoiceForModal}
         isOpen={isInvoiceReceiptModalOpen}
         onClose={() => setIsInvoiceReceiptModalOpen(false)}
       />
-    </div>
+    </>
   )
 }
 

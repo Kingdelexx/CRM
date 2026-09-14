@@ -955,6 +955,66 @@ class CSRReport(TimeStampedModel):
         return f"{self.get_report_type_display()} - {self.staff.first_name if self.staff else 'Staff'} ({self.date})"
 
 
+class PerformanceScorecard(TimeStampedModel):
+    SCORECARD_TYPE_CHOICES = [
+        ('CS_AGENT_WEEKLY', 'Customer Support Agent Weekly Performance Scorecard'),
+        ('CS_AGENT_MONTHLY', 'Customer Support Agent Monthly Performance Scorecard'),
+        ('SM_MANAGER_WEEKLY', 'Social Media Manager Weekly Performance Scorecard'),
+        ('SM_MANAGER_MONTHLY', 'Social Media Manager Monthly Performance Scorecard'),
+    ]
+
+    RATING_CHOICES = [
+        ('OUTSTANDING', 'Outstanding (90–100%)'),
+        ('VERY_GOOD', 'Very Good (80–89%)'),
+        ('GOOD', 'Good (70–79%)'),
+        ('NEEDS_IMPROVEMENT', 'Needs Improvement (60–69%)'),
+        ('UNSATISFACTORY', 'Unsatisfactory (Below 60%)'),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='performance_scorecards'
+    )
+    employee = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='performance_scorecards_received'
+    )
+    evaluator = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='performance_scorecards_evaluated'
+    )
+    scorecard_type = models.CharField(max_length=50, choices=SCORECARD_TYPE_CHOICES, db_index=True)
+    date = models.DateField(null=True, blank=True)
+    period_label = models.CharField(max_length=100, null=True, blank=True)
+
+    kpi_evaluations = models.JSONField(default=list, blank=True)
+    activity_metrics = models.JSONField(default=list, blank=True)
+    performance_metrics = models.JSONField(default=list, blank=True)
+
+    total_score = models.FloatField(default=0.0)
+    performance_rating = models.CharField(max_length=50, choices=RATING_CHOICES, default='GOOD')
+    key_strengths = models.TextField(null=True, blank=True)
+    areas_for_improvement = models.TextField(null=True, blank=True)
+    challenges_issues = models.TextField(null=True, blank=True)
+    key_achievement = models.TextField(null=True, blank=True)
+    recommendations = models.TextField(null=True, blank=True)
+    team_lead_comment = models.TextField(null=True, blank=True)
+    
+    evaluator_signature = models.CharField(max_length=255, null=True, blank=True)
+    evaluator_signature_date = models.DateField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.get_scorecard_type_display()} - {self.employee.first_name if self.employee else 'Employee'} ({self.period_label or self.date})"
+
+
+
 
 
 

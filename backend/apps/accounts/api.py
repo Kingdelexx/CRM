@@ -75,9 +75,12 @@ def get_me(request):
     return request.user
 
 @router.get("", response=List[UserSchema], auth=JWTAuth())
+@router.get("/", response=List[UserSchema], auth=JWTAuth())
 def list_users(request):
     User = get_user_model()
-    return User.objects.filter(organization=request.user.organization).select_related('custom_role', 'department', 'team')
+    if request.user.organization:
+        return User.objects.filter(organization=request.user.organization).select_related('custom_role', 'department', 'team')
+    return User.objects.filter(id=request.user.id).select_related('custom_role', 'department', 'team')
 
 # -- Organization Updates --
 @router.put("/organization", response=UserSchema, auth=JWTAuth())

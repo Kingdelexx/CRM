@@ -75,16 +75,24 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
   const fetchReports = async () => {
     try {
       setLoading(true);
-      let url = '/csr-reports/?';
+      let url = '/csr-reports?';
       if (searchQuery) url += `search=${encodeURIComponent(searchQuery)}&`;
       if (selectedTypeFilter !== 'ALL') url += `report_type=${selectedTypeFilter}&`;
       if (startDateFilter) url += `start_date=${startDateFilter}&`;
       if (endDateFilter) url += `end_date=${endDateFilter}&`;
 
       const res = await api.get(url);
-      setReports(res.data);
+      const d = res.data;
+      if (Array.isArray(d)) {
+        setReports(d);
+      } else if (d && Array.isArray(d.items)) {
+        setReports(d.items);
+      } else {
+        setReports([]);
+      }
     } catch (err) {
       console.error('Failed to fetch CSR reports:', err);
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -93,9 +101,10 @@ export const CSRReportsWorkspace: React.FC<CSRReportsWorkspaceProps> = ({ curren
   const fetchUsers = async () => {
     try {
       const res = await api.get('/accounts');
-      setUsers(res.data);
+      setUsers(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Failed to fetch users:', err);
+      setUsers([]);
     }
   };
 

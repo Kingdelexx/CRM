@@ -39,6 +39,7 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskDueDate, setNewTaskDueDate] = useState('')
   const [newTaskPriority, setNewTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM')
+  const [newTaskAssigneeId, setNewTaskAssigneeId] = useState('')
 
   // 1. Fetch Contact or Deal details
   const { data: itemData, isLoading: isLoadingItem, error: itemError } = useQuery({
@@ -92,11 +93,49 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
   const { data: users = [] } = useQuery({
     queryKey: ['users-select'],
     queryFn: async () => {
-      const response = await apiClient.get<User[]>('/accounts/')
+      try {
+        const response = await apiClient.get<User[]>('/accounts')
+        return Array.isArray(response.data) ? response.data : (response.data as any)?.items || []
+      } catch {
+        const response = await apiClient.get<User[]>('/accounts/')
+        return Array.isArray(response.data) ? response.data : (response.data as any)?.items || []
+      }
+    },
+    enabled: isOpen
+  })
+
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ['current-user-me'],
+    queryFn: async () => {
+      const response = await apiClient.get<User>('/accounts/me')
+      if (response.data) {
+        localStorage.setItem('current_user', JSON.stringify(response.data))
+      }
       return response.data
     },
     enabled: isOpen
   })
+
+  const effectiveCurrentUser = currentUser || (() => {
+    try {
+      const raw = localStorage.getItem('current_user')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })()
+
+  // Guarantee currentUser is always present in staff options
+  const allStaffUsers = [...users]
+  if (effectiveCurrentUser?.id && !allStaffUsers.some(u => u.id === effectiveCurrentUser.id)) {
+    allStaffUsers.unshift(effectiveCurrentUser)
+  }
+
+  useEffect(() => {
+    if (isOpen && effectiveCurrentUser?.id && !newTaskAssigneeId) {
+      setNewTaskAssigneeId(effectiveCurrentUser.id)
+    }
+  }, [isOpen, effectiveCurrentUser?.id, newTaskAssigneeId])
 
   const { data: stages = [] } = useQuery({
     queryKey: ['stages'],
@@ -245,7 +284,11 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
         ...payload,
         [type === 'contact' ? 'contact_id' : 'deal_id']: id
       }
-      return apiClient.post('/tasks/', body)
+      try {
+        return await apiClient.post('/tasks', body)
+      } catch {
+        return await apiClient.post('/tasks/', body)
+      }
     },
     onSuccess: () => {
       setNewTaskTitle('')
@@ -406,7 +449,8 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
       title: newTaskTitle.trim(),
       due_date: newTaskDueDate ? new Date(newTaskDueDate).toISOString() : null,
       priority: newTaskPriority,
-      status: 'TODO'
+      status: 'TODO',
+      assignee_id: newTaskAssigneeId || null
     })
   }
 
@@ -526,11 +570,15 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                         className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 rounded-md p-1.5 focus:border-indigo-650 cursor-pointer appearance-none pr-8"
                       >
                         <option value="">Unassigned</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.first_name} {u.last_name}
-                          </option>
-                        ))}
+                        {allStaffUsers.map((u) => {
+                          const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ').trim()
+                          const label = fullName ? `${fullName} (${u.email})` : u.email
+                          return (
+                            <option key={u.id} value={u.id}>
+                              {label}
+                            </option>
+                          )
+                        })}
                       </select>
                       <ChevronDown className="h-3 w-3 text-zinc-500 absolute right-2 top-2.5 pointer-events-none" />
                     </div>
@@ -1187,7 +1235,27 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                         />
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] text-zinc-500 font-bold uppercase">Task Owner (Staff)</label>
+                          <select
+                            value={newTaskAssigneeId}
+                            onChange={(e) => setNewTaskAssigneeId(e.target.value)}
+                            className="w-full bg-zinc-905 border border-zinc-800 rounded p-2 text-xs text-zinc-205 focus:outline-none focus:border-indigo-650 cursor-pointer"
+                          >
+                            <option value="">Unassigned</option>
+                            {allStaffUsers.map((u) => {
+                              const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ').trim()
+                              const roleBadge = u.role ? ` (${u.role === 'ADMIN' ? 'Admin' : u.role === 'MANAGER' ? 'Manager' : 'Staff'})` : ''
+                              const label = fullName ? `${fullName}${roleBadge} - ${u.email}` : `${u.email || 'User'}${roleBadge}`
+                              return (
+                                <option key={u.id} value={u.id}>
+                                  {label}
+                                </option>
+                              )
+                            })}
+                          </select>
+                        </div>
                         <div className="space-y-1">
                           <label className="text-[10px] text-zinc-500 font-bold uppercase">Target Due Date</label>
                           <input
@@ -1284,7 +1352,21 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-3 flex-shrink-0">
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {isCompleted ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold border bg-emerald-500/15 border-emerald-500/30 text-emerald-400 uppercase tracking-wider">
+                                    ✓ Completed
+                                  </span>
+                                ) : task.status === 'IN_PROGRESS' ? (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold border bg-blue-500/15 border-blue-500/30 text-blue-400 uppercase tracking-wider">
+                                    In Progress
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold border bg-zinc-800/80 border-zinc-700/60 text-zinc-400 uppercase tracking-wider">
+                                    To Do
+                                  </span>
+                                )}
+
                                 <span className={`px-2 py-0.5 rounded text-[8px] font-bold border uppercase tracking-wider ${priorityBadge}`}>
                                   {task.priority}
                                 </span>

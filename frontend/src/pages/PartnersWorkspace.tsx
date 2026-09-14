@@ -358,11 +358,15 @@ export default function PartnersWorkspace() {
               className="bg-transparent text-zinc-200 border-none outline-none focus:ring-0 cursor-pointer font-semibold"
             >
               <option value="" className="bg-zinc-950">All Partner Owners</option>
-              {usersData?.map((user) => (
-                <option key={user.id} value={user.id} className="bg-zinc-950">
-                  {user.first_name} {user.last_name}
-                </option>
-              ))}
+              {usersData?.map((user) => {
+                const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
+                const label = name ? `${name} - ${user.email}` : user.email
+                return (
+                  <option key={user.id} value={user.id} className="bg-zinc-950">
+                    {label}
+                  </option>
+                )
+              })}
             </select>
           </div>
 
@@ -502,11 +506,15 @@ export default function PartnersWorkspace() {
                   className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
                 >
                   <option value="" className="bg-zinc-950">Select Partner Owner (Staff Member)</option>
-                  {usersData?.map((user) => (
-                    <option key={user.id} value={user.id} className="bg-zinc-950">
-                      {user.first_name} {user.last_name} ({user.role})
-                    </option>
-                  ))}
+                  {usersData?.map((user) => {
+                    const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
+                    const label = name ? `${name} (${user.role}) - ${user.email}` : `${user.email} (${user.role})`
+                    return (
+                      <option key={user.id} value={user.id} className="bg-zinc-950">
+                        {label}
+                      </option>
+                    )
+                  })}
                 </select>
               </div>
 

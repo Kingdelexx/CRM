@@ -695,11 +695,15 @@ export default function ContactsDirectory() {
               className="bg-transparent text-zinc-305 border-none outline-none focus:ring-0 cursor-pointer"
             >
               <option value="">All Assignees</option>
-              {usersData?.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.first_name} {user.last_name}
-                </option>
-              ))}
+              {usersData?.map((user) => {
+                const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
+                const label = name ? `${name} - ${user.email}` : user.email
+                return (
+                  <option key={user.id} value={user.id}>
+                    {label}
+                  </option>
+                )
+              })}
             </select>
           </div>
 
@@ -933,11 +937,15 @@ export default function ContactsDirectory() {
                     className="w-full bg-zinc-905 border border-zinc-800 focus:border-indigo-650 focus:outline-none rounded-lg p-2 text-sm text-zinc-250 cursor-pointer"
                   >
                     <option value="">Unassigned</option>
-                    {usersData?.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.first_name} {user.last_name}
-                      </option>
-                    ))}
+                    {usersData?.map((user) => {
+                      const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
+                      const label = name ? `${name} (${user.role}) - ${user.email}` : `${user.email} (${user.role})`
+                      return (
+                        <option key={user.id} value={user.id}>
+                          {label}
+                        </option>
+                      )
+                    })}
                   </select>
                 </div>
               </div>

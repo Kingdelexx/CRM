@@ -18,7 +18,7 @@ from .models import (
     Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
     Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
     AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt, Shipment, ShipmentEscalation,
-    CSRReport
+    CSRReport, PerformanceScorecard
 )
 from .schemas import (
     CompanySchema, CompanyCreateSchema,
@@ -46,7 +46,8 @@ from .schemas import (
     ReceiptSchema, ReceiptCreateSchema,
     ShipmentSchema, ShipmentCreateSchema,
     ShipmentEscalationSchema, ShipmentEscalationCreateSchema,
-    CSRReportSchema, CSRReportCreateSchema
+    CSRReportSchema, CSRReportCreateSchema,
+    PerformanceScorecardSchema, PerformanceScorecardCreateSchema
 )
 
 # Route instances initialized with JWT Auth
@@ -72,7 +73,9 @@ receipts_router = Router(auth=JWTAuth())
 shipments_router = Router(auth=JWTAuth())
 shipment_escalations_router = Router(auth=JWTAuth())
 csr_reports_router = Router(auth=JWTAuth())
+performance_scorecards_router = Router(auth=JWTAuth())
 search_router = Router(auth=JWTAuth())
+
 
 
 # Helper: check user belongs to organization
@@ -2024,6 +2027,7 @@ def get_invoice(request, id: UUID):
     return inv
 
 @invoices_router.post("", response={201: InvoiceSchema})
+@invoices_router.post("/", response={201: InvoiceSchema})
 def create_invoice(request, data: InvoiceCreateSchema):
     payload = data.dict()
     contact_id = payload.pop('contact_id', None)
@@ -2755,6 +2759,165 @@ def delete_csr_report(request, id: UUID):
         raise HttpError(404, "CSR report not found.")
     report.delete()
     return 204, None
+
+
+# ----------------- PERFORMANCE SCORECARDS API -----------------
+
+@performance_scorecards_router.get("", response=List[PerformanceScorecardSchema])
+@performance_scorecards_router.get("/", response=List[PerformanceScorecardSchema])
+def list_performance_scorecards(
+    request,
+    employee_id: Optional[UUID] = None,
+    scorecard_type: Optional[str] = None,
+    search: Optional[str] = None,
+    ordering: str = '-created_at'
+):
+    if request.user.organization:
+        qs = PerformanceScorecard.objects.filter(
+            organization=request.user.organization
+        ).select_related('employee', 'evaluator')
+    else:
+        qs = PerformanceScorecard.objects.all().select_related('employee', 'evaluator')
+
+    if request.user.role not in [User.ADMIN, User.MANAGER]:
+        qs = qs.filter(employee=request.user)
+    elif employee_id:
+        qs = qs.filter(employee_id=employee_id)
+
+    if scorecard_type:
+        qs = qs.filter(scorecard_type=scorecard_type)
+
+    if search:
+        qs = qs.filter(
+            Q(period_label__icontains=search) |
+            Q(employee__first_name__icontains=search) |
+            Q(employee__last_name__icontains=search) |
+            Q(evaluator__first_name__icontains=search) |
+            Q(evaluator__last_name__icontains=search)
+        )
+
+    allowed_orderings = ['created_at', '-created_at', 'date', '-date', 'total_score', '-total_score']
+    if ordering in allowed_orderings:
+        qs = qs.order_by(ordering)
+    else:
+        qs = qs.order_by('-created_at')
+
+    return list(qs)
+
+
+@performance_scorecards_router.post("", response={201: PerformanceScorecardSchema})
+@performance_scorecards_router.post("/", response={201: PerformanceScorecardSchema})
+def create_performance_scorecard(request, data: PerformanceScorecardCreateSchema):
+    if request.user.role not in [User.ADMIN, User.MANAGER]:
+        raise HttpError(403, "Permission Denied: Only Managers and Admins can create performance scorecards.")
+
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    employee_id = parse_uuid(payload.pop('employee_id', None))
+    evaluator_id = parse_uuid(payload.pop('evaluator_id', None))
+
+    employee = User.objects.filter(id=employee_id, organization=request.user.organization).first() if employee_id else None
+    evaluator = User.objects.filter(id=evaluator_id, organization=request.user.organization).first() if evaluator_id else request.user
+
+    date_val = payload.pop('date', None)
+    if date_val and str(date_val).strip():
+        payload['date'] = str(date_val).strip()
+    else:
+        payload['date'] = timezone.localdate()
+
+    sig_date = payload.pop('evaluator_signature_date', None)
+    if sig_date and str(sig_date).strip():
+        payload['evaluator_signature_date'] = str(sig_date).strip()
+
+    scorecard = PerformanceScorecard.objects.create(
+        organization=request.user.organization,
+        employee=employee,
+        evaluator=evaluator,
+        **payload
+    )
+    return 201, scorecard
+
+
+@performance_scorecards_router.get("/{id}", response=PerformanceScorecardSchema)
+def get_performance_scorecard(request, id: UUID):
+    scorecard = PerformanceScorecard.objects.filter(
+        id=id, organization=request.user.organization
+    ).select_related('employee', 'evaluator').first()
+    if not scorecard:
+        raise HttpError(404, "Performance scorecard not found.")
+
+    if request.user.role not in [User.ADMIN, User.MANAGER] and scorecard.employee_id != request.user.id:
+        raise HttpError(403, "Permission Denied: You cannot view this scorecard.")
+
+    return scorecard
+
+
+@performance_scorecards_router.put("/{id}", response=PerformanceScorecardSchema)
+def update_performance_scorecard(request, id: UUID, data: PerformanceScorecardCreateSchema):
+    if request.user.role not in [User.ADMIN, User.MANAGER]:
+        raise HttpError(403, "Permission Denied: Only Managers and Admins can update performance scorecards.")
+
+    scorecard = PerformanceScorecard.objects.filter(
+        id=id, organization=request.user.organization
+    ).first()
+    if not scorecard:
+        raise HttpError(404, "Performance scorecard not found.")
+
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    if 'employee_id' in payload:
+        emp_id = parse_uuid(payload.pop('employee_id'))
+        scorecard.employee = User.objects.filter(id=emp_id, organization=request.user.organization).first() if emp_id else None
+
+    if 'evaluator_id' in payload:
+        ev_id = parse_uuid(payload.pop('evaluator_id'))
+        scorecard.evaluator = User.objects.filter(id=ev_id, organization=request.user.organization).first() if ev_id else None
+
+    if 'date' in payload:
+        d = payload.pop('date')
+        scorecard.date = str(d).strip() if d and str(d).strip() else None
+
+    if 'evaluator_signature_date' in payload:
+        sd = payload.pop('evaluator_signature_date')
+        scorecard.evaluator_signature_date = str(sd).strip() if sd and str(sd).strip() else None
+
+    for attr, val in payload.items():
+        setattr(scorecard, attr, val)
+
+    scorecard.save()
+    return scorecard
+
+
+@performance_scorecards_router.delete("/{id}", response={204: None})
+def delete_performance_scorecard(request, id: UUID):
+    if request.user.role not in [User.ADMIN, User.MANAGER]:
+        raise HttpError(403, "Permission Denied: Only Managers and Admins can delete performance scorecards.")
+
+    scorecard = PerformanceScorecard.objects.filter(
+        id=id, organization=request.user.organization
+    ).first()
+    if not scorecard:
+        raise HttpError(404, "Performance scorecard not found.")
+
+    scorecard.delete()
+    return 204, None
+
 
 
 

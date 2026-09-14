@@ -7,7 +7,7 @@ from .models import (
     Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
     AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest,
     Document, CustomModuleRecord, Invoice, Receipt, Shipment, ShipmentEscalation,
-    CSRReport
+    CSRReport, PerformanceScorecard
 )
 from apps.accounts.schemas import UserSchema, OrganizationSchema
 
@@ -520,6 +520,48 @@ class CSRReportCreateSchema(Schema):
     video_testimonial_received: Optional[int] = 0
     biggest_challenge_month: Optional[str] = None
     biggest_achievement_month: Optional[str] = None
+
+
+class PerformanceScorecardSchema(ModelSchema):
+    employee: Optional[UserSchema] = None
+    evaluator: Optional[UserSchema] = None
+
+    class Meta:
+        model = PerformanceScorecard
+        fields = [
+            'id', 'scorecard_type', 'date', 'period_label',
+            'kpi_evaluations', 'activity_metrics', 'performance_metrics',
+            'total_score', 'performance_rating', 'key_strengths',
+            'areas_for_improvement', 'challenges_issues', 'key_achievement',
+            'recommendations', 'team_lead_comment',
+            'evaluator_signature', 'evaluator_signature_date',
+            'created_at', 'updated_at'
+        ]
+
+
+class PerformanceScorecardCreateSchema(Schema):
+    employee_id: Optional[str] = None
+    evaluator_id: Optional[str] = None
+    scorecard_type: str
+    date: Optional[str] = None
+    period_label: Optional[str] = None
+
+    kpi_evaluations: Optional[list] = None
+    activity_metrics: Optional[list] = None
+    performance_metrics: Optional[list] = None
+
+    total_score: Optional[float] = 0.0
+    performance_rating: Optional[str] = 'GOOD'
+    key_strengths: Optional[str] = None
+    areas_for_improvement: Optional[str] = None
+    challenges_issues: Optional[str] = None
+    key_achievement: Optional[str] = None
+    recommendations: Optional[str] = None
+    team_lead_comment: Optional[str] = None
+
+    evaluator_signature: Optional[str] = None
+    evaluator_signature_date: Optional[str] = None
+
 
 
 

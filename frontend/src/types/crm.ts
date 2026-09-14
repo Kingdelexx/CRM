@@ -542,6 +542,61 @@ export interface CSRAggregationResult {
   count_daily_reports: number;
 }
 
+export type PerformanceScorecardType =
+  | 'CS_AGENT_WEEKLY'
+  | 'CS_AGENT_MONTHLY'
+  | 'SM_MANAGER_WEEKLY'
+  | 'SM_MANAGER_MONTHLY';
+
+export type PerformanceRating =
+  | 'OUTSTANDING'
+  | 'VERY_GOOD'
+  | 'GOOD'
+  | 'NEEDS_IMPROVEMENT'
+  | 'UNSATISFACTORY';
+
+export interface ScorecardKPI {
+  kpi: string;
+  target: string;
+  actual?: string;
+  score?: number;
+  remarks?: string;
+}
+
+export interface ScorecardActivityMetric {
+  activity: string;
+  total?: number | string;
+  remarks?: string;
+}
+
+export interface ScorecardPerformanceMetric {
+  metric: string;
+  result?: string;
+  remarks?: string;
+}
+
+export interface PerformanceScorecard extends BaseEntity {
+  employee?: User;
+  evaluator?: User;
+  scorecard_type: PerformanceScorecardType;
+  date?: string;
+  period_label?: string;
+  kpi_evaluations: ScorecardKPI[];
+  activity_metrics: ScorecardActivityMetric[];
+  performance_metrics: ScorecardPerformanceMetric[];
+  total_score: number;
+  performance_rating: PerformanceRating;
+  key_strengths?: string;
+  areas_for_improvement?: string;
+  challenges_issues?: string;
+  key_achievement?: string;
+  recommendations?: string;
+  team_lead_comment?: string;
+  evaluator_signature?: string;
+  evaluator_signature_date?: string;
+}
+
+
 
 
 
