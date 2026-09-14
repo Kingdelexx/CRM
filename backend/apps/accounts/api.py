@@ -19,6 +19,7 @@ from apps.accounts.schemas import (
 router = Router()
 
 @router.post("/signup", response={201: UserSchema})
+@router.post("/signup/", response={201: UserSchema})
 def signup(request, data: SignUpInputSchema):
     User = get_user_model()
     from apps.crm.models import Stage
@@ -71,6 +72,7 @@ def signup(request, data: SignUpInputSchema):
         raise HttpError(500, f"Error creating account: {str(e)}")
 
 @router.get("/me", response=UserSchema, auth=JWTAuth())
+@router.get("/me/", response=UserSchema, auth=JWTAuth())
 def get_me(request):
     return request.user
 
@@ -84,6 +86,7 @@ def list_users(request):
 
 # -- Organization Updates --
 @router.put("/organization", response=UserSchema, auth=JWTAuth())
+@router.put("/organization/", response=UserSchema, auth=JWTAuth())
 def update_organization(request, data: OrgUpdateSchema):
     if request.user.role != 'ADMIN':
         raise HttpError(403, "Only admins can change organization settings.")
@@ -98,6 +101,7 @@ def update_organization(request, data: OrgUpdateSchema):
 
 # -- User / Member Administration --
 @router.post("/users", response={201: UserSchema}, auth=JWTAuth())
+@router.post("/users/", response={201: UserSchema}, auth=JWTAuth())
 def invite_user(request, data: UserCreateSchema):
     if request.user.role != 'ADMIN':
         raise HttpError(403, "Only admins can add employees.")
@@ -129,6 +133,7 @@ def invite_user(request, data: UserCreateSchema):
     return 201, user
 
 @router.put("/users/{user_id}", response=UserSchema, auth=JWTAuth())
+@router.put("/users/{user_id}/", response=UserSchema, auth=JWTAuth())
 def update_user(request, user_id: UUID, data: UserUpdateSchema):
     if request.user.role != 'ADMIN':
         raise HttpError(403, "Only admins can edit user configurations.")
@@ -167,10 +172,12 @@ def update_user(request, user_id: UUID, data: UserUpdateSchema):
 
 # -- Department CRUD --
 @router.get("/departments", response=List[DepartmentSchema], auth=JWTAuth())
+@router.get("/departments/", response=List[DepartmentSchema], auth=JWTAuth())
 def list_departments(request):
     return Department.objects.filter(organization=request.user.organization)
 
 @router.post("/departments", response={201: DepartmentSchema}, auth=JWTAuth())
+@router.post("/departments/", response={201: DepartmentSchema}, auth=JWTAuth())
 def create_department(request, data: DepartmentCreateSchema):
     User = get_user_model()
     manager = None
@@ -184,6 +191,7 @@ def create_department(request, data: DepartmentCreateSchema):
     return 201, dept
 
 @router.put("/departments/{id}", response=DepartmentSchema, auth=JWTAuth())
+@router.put("/departments/{id}/", response=DepartmentSchema, auth=JWTAuth())
 def update_department(request, id: UUID, data: DepartmentCreateSchema):
     dept = Department.objects.filter(id=id, organization=request.user.organization).first()
     if not dept:
@@ -198,6 +206,7 @@ def update_department(request, id: UUID, data: DepartmentCreateSchema):
     return dept
 
 @router.delete("/departments/{id}", response={204: None}, auth=JWTAuth())
+@router.delete("/departments/{id}/", response={204: None}, auth=JWTAuth())
 def delete_department(request, id: UUID):
     dept = Department.objects.filter(id=id, organization=request.user.organization).first()
     if not dept:
@@ -207,10 +216,12 @@ def delete_department(request, id: UUID):
 
 # -- Team CRUD --
 @router.get("/teams", response=List[TeamSchema], auth=JWTAuth())
+@router.get("/teams/", response=List[TeamSchema], auth=JWTAuth())
 def list_teams(request):
     return Team.objects.filter(organization=request.user.organization)
 
 @router.post("/teams", response={201: TeamSchema}, auth=JWTAuth())
+@router.post("/teams/", response={201: TeamSchema}, auth=JWTAuth())
 def create_team(request, data: TeamCreateSchema):
     dept = Department.objects.filter(id=data.department_id, organization=request.user.organization).first()
     if not dept:
@@ -228,6 +239,7 @@ def create_team(request, data: TeamCreateSchema):
     return 201, team
 
 @router.put("/teams/{id}", response=TeamSchema, auth=JWTAuth())
+@router.put("/teams/{id}/", response=TeamSchema, auth=JWTAuth())
 def update_team(request, id: UUID, data: TeamCreateSchema):
     team = Team.objects.filter(id=id, organization=request.user.organization).first()
     if not team:
@@ -246,6 +258,7 @@ def update_team(request, id: UUID, data: TeamCreateSchema):
     return team
 
 @router.delete("/teams/{id}", response={204: None}, auth=JWTAuth())
+@router.delete("/teams/{id}/", response={204: None}, auth=JWTAuth())
 def delete_team(request, id: UUID):
     team = Team.objects.filter(id=id, organization=request.user.organization).first()
     if not team:
@@ -255,10 +268,12 @@ def delete_team(request, id: UUID):
 
 # -- Custom Roles CRUD --
 @router.get("/roles", response=List[RoleSchema], auth=JWTAuth())
+@router.get("/roles/", response=List[RoleSchema], auth=JWTAuth())
 def list_roles(request):
     return Role.objects.filter(organization=request.user.organization)
 
 @router.post("/roles", response={201: RoleSchema}, auth=JWTAuth())
+@router.post("/roles/", response={201: RoleSchema}, auth=JWTAuth())
 def create_role(request, data: RoleCreateSchema):
     role = Role.objects.create(
         organization=request.user.organization,
@@ -268,6 +283,7 @@ def create_role(request, data: RoleCreateSchema):
     return 201, role
 
 @router.put("/roles/{id}", response=RoleSchema, auth=JWTAuth())
+@router.put("/roles/{id}/", response=RoleSchema, auth=JWTAuth())
 def update_role(request, id: UUID, data: RoleCreateSchema):
     role = Role.objects.filter(id=id, organization=request.user.organization).first()
     if not role:
@@ -278,6 +294,7 @@ def update_role(request, id: UUID, data: RoleCreateSchema):
     return role
 
 @router.delete("/roles/{id}", response={204: None}, auth=JWTAuth())
+@router.delete("/roles/{id}/", response={204: None}, auth=JWTAuth())
 def delete_role(request, id: UUID):
     role = Role.objects.filter(id=id, organization=request.user.organization).first()
     if not role:
@@ -287,6 +304,7 @@ def delete_role(request, id: UUID):
 
 # -- COMPREHENSIVE DASHBOARD METRICS ENGINE --
 @router.get("/dashboard-metrics", auth=JWTAuth())
+@router.get("/dashboard-metrics/", auth=JWTAuth())
 def get_dashboard_metrics(request):
     user = request.user
     org = user.organization

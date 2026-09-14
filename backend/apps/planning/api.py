@@ -46,6 +46,7 @@ def list_activities(
     return qs
 
 @activities_router.get("/{id}", response=ActivitySchema)
+@activities_router.get("/{id}/", response=ActivitySchema)
 def get_activity(request, id: UUID):
     activity = Activity.objects.filter(id=id, organization=request.user.organization).select_related('performed_by', 'deal', 'contact', 'company').first()
     if not activity:
@@ -98,6 +99,7 @@ def create_activity(request, data: ActivityCreateSchema):
     return 201, activity
 
 @activities_router.delete("/{id}", response={204: None})
+@activities_router.delete("/{id}/", response={204: None})
 def delete_activity(request, id: UUID):
     activity = Activity.objects.filter(id=id, organization=request.user.organization).first()
     if not activity:
@@ -121,7 +123,6 @@ def list_tasks(
     request,
     deal_id: Optional[str] = None,
     contact_id: Optional[str] = None,
-    partner_id: Optional[str] = None,
     company_id: Optional[str] = None,
     assignee_id: Optional[str] = None,
     team_id: Optional[str] = None,
@@ -129,7 +130,7 @@ def list_tasks(
     overdue: Optional[bool] = None
 ):
     from django.utils import timezone
-    qs = Task.objects.filter(organization=request.user.organization).select_related('assignee', 'created_by', 'task_team', 'deal', 'contact', 'partner', 'company')
+    qs = Task.objects.filter(organization=request.user.organization).select_related('assignee', 'created_by', 'task_team', 'deal', 'contact', 'company')
     
     # Non-admin staff users can only see tasks assigned to them or created by them (admin-created tasks are only visible to the assignee staff member)
     if request.user.role != User.ADMIN:
@@ -139,8 +140,6 @@ def list_tasks(
         qs = qs.filter(deal_id=deal_id)
     if contact_id and contact_id.strip():
         qs = qs.filter(contact_id=contact_id)
-    if partner_id and partner_id.strip():
-        qs = qs.filter(partner_id=partner_id)
     if company_id and company_id.strip():
         qs = qs.filter(company_id=company_id)
     if assignee_id and assignee_id.strip():
@@ -157,8 +156,9 @@ def list_tasks(
     return qs
 
 @tasks_router.get("/{id}", response=TaskSchema)
+@tasks_router.get("/{id}/", response=TaskSchema)
 def get_task(request, id: UUID):
-    qs = Task.objects.filter(id=id, organization=request.user.organization).select_related('assignee', 'created_by', 'task_team', 'deal', 'contact', 'partner', 'company')
+    qs = Task.objects.filter(id=id, organization=request.user.organization).select_related('assignee', 'created_by', 'task_team', 'deal', 'contact', 'company')
     if request.user.role != User.ADMIN:
         qs = qs.filter(Q(assignee=request.user) | Q(created_by=request.user))
     task = qs.first()
@@ -183,7 +183,6 @@ def create_task(request, data: TaskCreateSchema):
     task_team_id = parse_uuid(payload.pop('task_team_id', None))
     deal_id = parse_uuid(payload.pop('deal_id', None))
     contact_id = parse_uuid(payload.pop('contact_id', None))
-    partner_id = parse_uuid(payload.pop('partner_id', None))
     company_id = parse_uuid(payload.pop('company_id', None))
 
     subject = payload.pop('subject', None)
@@ -215,10 +214,6 @@ def create_task(request, data: TaskCreateSchema):
     if contact_id:
         contact = Contact.objects.filter(id=contact_id, organization=request.user.organization).first()
 
-    partner = None
-    if partner_id:
-        partner = Contact.objects.filter(id=partner_id, organization=request.user.organization).first()
-
     company = None
     if company_id:
         company = Company.objects.filter(id=company_id, organization=request.user.organization).first()
@@ -235,7 +230,6 @@ def create_task(request, data: TaskCreateSchema):
         task_team=task_team,
         deal=deal,
         contact=contact,
-        partner=partner,
         company=company,
         **payload
     )
@@ -255,6 +249,7 @@ def create_task(request, data: TaskCreateSchema):
     return 201, task
 
 @tasks_router.put("/{id}", response=TaskSchema)
+@tasks_router.put("/{id}/", response=TaskSchema)
 def update_task(request, id: UUID, data: TaskCreateSchema):
     task = Task.objects.filter(id=id, organization=request.user.organization).first()
     if not task:
@@ -274,7 +269,6 @@ def update_task(request, id: UUID, data: TaskCreateSchema):
     task_team_id = parse_uuid(payload.pop('task_team_id', None))
     deal_id = parse_uuid(payload.pop('deal_id', None))
     contact_id = parse_uuid(payload.pop('contact_id', None))
-    partner_id = parse_uuid(payload.pop('partner_id', None))
     company_id = parse_uuid(payload.pop('company_id', None))
 
     if 'assignee_id' in data.dict():
@@ -289,9 +283,6 @@ def update_task(request, id: UUID, data: TaskCreateSchema):
 
     if 'contact_id' in data.dict():
         task.contact = Contact.objects.filter(id=contact_id, organization=request.user.organization).first() if contact_id else None
-
-    if 'partner_id' in data.dict():
-        task.partner = Contact.objects.filter(id=partner_id, organization=request.user.organization).first() if partner_id else None
 
     if 'company_id' in data.dict():
         task.company = Company.objects.filter(id=company_id, organization=request.user.organization).first() if company_id else None
@@ -323,6 +314,7 @@ def update_task(request, id: UUID, data: TaskCreateSchema):
     return task
 
 @tasks_router.delete("/{id}", response={204: None})
+@tasks_router.delete("/{id}/", response={204: None})
 def delete_task(request, id: UUID):
     task = Task.objects.filter(id=id, organization=request.user.organization).first()
     if not task:

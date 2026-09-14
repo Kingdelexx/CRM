@@ -1,8 +1,10 @@
 import axios from 'axios'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+
 // Axios client mapping to backend API
 export const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: `${API_BASE}/api`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -36,7 +38,7 @@ apiClient.interceptors.response.use(
       if (refreshToken) {
         try {
           // Request new access token using refresh token
-          const refreshResponse = await axios.post('/api/token/refresh', {
+          const refreshResponse = await axios.post(`${API_BASE}/api/token/refresh`, {
             refresh: refreshToken
           })
           

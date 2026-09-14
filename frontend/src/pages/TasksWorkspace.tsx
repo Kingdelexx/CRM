@@ -60,7 +60,6 @@ export default function TasksWorkspace() {
     task_team_id: '',
     deal_id: '',
     contact_id: '',
-    partner_id: '',
     company_id: ''
   })
 
@@ -78,7 +77,6 @@ export default function TasksWorkspace() {
     task_team_id: '',
     deal_id: '',
     contact_id: '',
-    partner_id: '',
     company_id: ''
   })
 
@@ -173,13 +171,7 @@ export default function TasksWorkspace() {
     }
   })
 
-  const { data: partners = [] } = useQuery<Contact[]>({
-    queryKey: ['workspace-partners'],
-    queryFn: async () => {
-      const response = await apiClient.get<any>('/contacts/partners')
-      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
-    }
-  })
+
 
   // Selected Task details query
   const { data: taskDetails, refetch: refetchTaskDetails } = useQuery<Task>({
@@ -205,7 +197,6 @@ export default function TasksWorkspace() {
         task_team_id: body.task_team_id || null,
         deal_id: body.deal_id || null,
         contact_id: body.contact_id || null,
-        partner_id: body.partner_id || null,
         company_id: body.company_id || null
       }
       try {
@@ -229,7 +220,6 @@ export default function TasksWorkspace() {
         task_team_id: '',
         deal_id: '',
         contact_id: '',
-        partner_id: '',
         company_id: ''
       })
     },
@@ -267,7 +257,6 @@ export default function TasksWorkspace() {
         task_team_id: body.task_team_id !== undefined ? (body.task_team_id || null) : (existing?.task_team?.id || null),
         deal_id: body.deal_id !== undefined ? (body.deal_id || null) : (existing?.deal?.id || null),
         contact_id: body.contact_id !== undefined ? (body.contact_id || null) : (existing?.contact?.id || null),
-        partner_id: body.partner_id !== undefined ? (body.partner_id || null) : (existing?.partner?.id || null),
         company_id: body.company_id !== undefined ? (body.company_id || null) : (existing?.company?.id || null),
         attachments: body.attachments !== undefined ? body.attachments : (existing?.attachments || []),
         checklist: body.checklist !== undefined ? body.checklist : (existing?.checklist || []),
@@ -317,7 +306,6 @@ export default function TasksWorkspace() {
       task_team_id: task.task_team?.id || '',
       deal_id: task.deal?.id || '',
       contact_id: task.contact?.id || '',
-      partner_id: task.partner?.id || '',
       company_id: task.company?.id || ''
     })
     setErrorMessage(null)
@@ -559,7 +547,6 @@ export default function TasksWorkspace() {
                 task_team_id: '',
                 deal_id: '',
                 contact_id: '',
-                partner_id: '',
                 company_id: ''
               })
               setIsCreateModalOpen(true)
@@ -1021,23 +1008,8 @@ export default function TasksWorkspace() {
                 </div>
               </div>
 
-              {/* Partner & Priority */}
+              {/* Priority & Status */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Partner</label>
-                  <select
-                    value={newTaskForm.partner_id}
-                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, partner_id: e.target.value }))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
-                  >
-                    <option value="">No Partner</option>
-                    {partners.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : (p.company?.name || 'Partner')}
-                      </option>
-                    ))}
-                  </select>
-                </div>
                 <div className="space-y-1">
                   <label className="text-[10px] text-zinc-500 font-bold uppercase">Priority</label>
                   <select
@@ -1050,20 +1022,18 @@ export default function TasksWorkspace() {
                     <option value="HIGH">High</option>
                   </select>
                 </div>
-              </div>
-
-              {/* Status */}
-              <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase">Status</label>
-                <select
-                  value={newTaskForm.status}
-                  onChange={(e) => setNewTaskForm(prev => ({ ...prev, status: e.target.value as any }))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
-                >
-                  <option value="TODO">To Do</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="DONE">Completed</option>
-                </select>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Status</label>
+                  <select
+                    value={newTaskForm.status}
+                    onChange={(e) => setNewTaskForm(prev => ({ ...prev, status: e.target.value as any }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-250 focus:outline-none focus:border-indigo-650 cursor-pointer"
+                  >
+                    <option value="TODO">To Do</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="DONE">Completed</option>
+                  </select>
+                </div>
               </div>
 
               {/* Description */}
@@ -1234,23 +1204,8 @@ export default function TasksWorkspace() {
                 </div>
               </div>
 
-              {/* Partner & Priority */}
+              {/* Priority & Status */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Partner</label>
-                  <select
-                    value={editTaskForm.partner_id}
-                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, partner_id: e.target.value }))}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
-                  >
-                    <option value="">No Partner</option>
-                    {partners.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.first_name || p.last_name ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : (p.company?.name || 'Partner')}
-                      </option>
-                    ))}
-                  </select>
-                </div>
                 <div className="space-y-1">
                   <label className="text-[10px] text-zinc-500 font-bold uppercase">Priority</label>
                   <select
@@ -1263,20 +1218,18 @@ export default function TasksWorkspace() {
                     <option value="HIGH">High</option>
                   </select>
                 </div>
-              </div>
-
-              {/* Status */}
-              <div className="space-y-1">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase">Status</label>
-                <select
-                  value={editTaskForm.status}
-                  onChange={(e) => setEditTaskForm(prev => ({ ...prev, status: e.target.value as any }))}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  <option value="TODO">To Do</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="DONE">Completed</option>
-                </select>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Status</label>
+                  <select
+                    value={editTaskForm.status}
+                    onChange={(e) => setEditTaskForm(prev => ({ ...prev, status: e.target.value as any }))}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="TODO">To Do</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="DONE">Completed</option>
+                  </select>
+                </div>
               </div>
 
               {/* Description */}

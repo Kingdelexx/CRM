@@ -79,12 +79,8 @@ const sidebarNavItems: { id: DashboardView; label: string; icon: React.ReactNode
   { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="h-4.5 w-4.5 flex-shrink-0 text-amber-600" /> },
   { id: 'pipeline', label: 'Pipeline Dashboard', icon: <Layers className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
   { id: 'contacts', label: 'Contacts', icon: <Users className="h-4.5 w-4.5 flex-shrink-0 text-blue-600" /> },
-  { id: 'projects', label: 'Projects', icon: <FolderKanban className="h-4.5 w-4.5 flex-shrink-0 text-teal-600" /> },
   { id: 'invoices', label: 'Invoices & Receipts', icon: <ReceiptIcon className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
   { id: 'calendar', label: 'CRM Calendar', icon: <CalendarIcon className="h-4.5 w-4.5 flex-shrink-0 text-purple-600" /> },
-  { id: 'emails', label: 'Emails Sync', icon: <Mail className="h-4.5 w-4.5 flex-shrink-0 text-rose-600" /> },
-  { id: 'whatsapp', label: 'WhatsApp Inbox', icon: <MessageSquare className="h-4.5 w-4.5 flex-shrink-0 text-emerald-600" /> },
-  { id: 'automations', label: 'Automation Rules', icon: <Zap className="h-4.5 w-4.5 flex-shrink-0 text-amber-600" /> },
   { id: 'approvals', label: 'Signoff Compliance', icon: <FileCheck className="h-4.5 w-4.5 flex-shrink-0 text-emerald-600" /> },
   { id: 'reports', label: 'Reports Visualizer', icon: <BarChart3 className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
 ]

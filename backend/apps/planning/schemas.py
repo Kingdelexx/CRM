@@ -33,7 +33,6 @@ class TaskSchema(ModelSchema):
     task_team: Optional[TeamSchema] = None
     deal: Optional[DealSchema] = None
     contact: Optional[ContactSchema] = None
-    partner: Optional[ContactSchema] = None
     company: Optional[CompanySchema] = None
     
     class Meta:
@@ -52,7 +51,6 @@ class TaskCreateSchema(Schema):
     task_team_id: Optional[str] = None
     deal_id: Optional[str] = None
     contact_id: Optional[str] = None
-    partner_id: Optional[str] = None
     company_id: Optional[str] = None
     attachments: Optional[List[str]] = None
     checklist: Optional[List[dict]] = None

@@ -20,6 +20,7 @@ export const InvoicesWorkspace: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [autoPrintModal, setAutoPrintModal] = useState(false);
 
   // New Invoice Form Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -431,19 +432,15 @@ export const InvoicesWorkspace: React.FC = () => {
   const handleDownloadInvoice = (inv: Invoice) => {
     setSelectedInvoice(inv);
     setSelectedReceipt(null);
+    setAutoPrintModal(true);
     setIsModalOpen(true);
-    setTimeout(() => {
-      window.print();
-    }, 500);
   };
 
   const handleDownloadReceipt = (rcpt: Receipt) => {
     setSelectedReceipt(rcpt);
     setSelectedInvoice(null);
+    setAutoPrintModal(true);
     setIsModalOpen(true);
-    setTimeout(() => {
-      window.print();
-    }, 500);
   };
 
   // Delete Receipt
@@ -880,7 +877,11 @@ export const InvoicesWorkspace: React.FC = () => {
         invoice={selectedInvoice}
         receipt={selectedReceipt}
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        autoPrint={autoPrintModal}
+        onClose={() => {
+          setIsModalOpen(false);
+          setAutoPrintModal(false);
+        }}
       />
 
       {/* Create Invoice Modal Form */}

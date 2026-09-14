@@ -86,6 +86,7 @@ def check_tenant(request_user, obj):
 # ----------------- COMPANIES API -----------------
 
 @companies_router.get("", response=List[CompanySchema])
+@companies_router.get("/", response=List[CompanySchema])
 @paginate(LimitOffsetPagination)
 def list_companies(request, search: Optional[str] = None, industry: Optional[str] = None, ordering: str = '-created_at'):
     qs = Company.objects.filter(organization=request.user.organization)
@@ -102,6 +103,7 @@ def list_companies(request, search: Optional[str] = None, industry: Optional[str
     return qs
 
 @companies_router.get("/{id}", response=CompanySchema)
+@companies_router.get("/{id}/", response=CompanySchema)
 def get_company(request, id: UUID):
     company = Company.objects.filter(id=id, organization=request.user.organization).first()
     if not company:
@@ -109,6 +111,7 @@ def get_company(request, id: UUID):
     return company
 
 @companies_router.post("", response={201: CompanySchema})
+@companies_router.post("/", response={201: CompanySchema})
 def create_company(request, data: CompanyCreateSchema):
     company = Company.objects.create(
         organization=request.user.organization,
@@ -117,6 +120,7 @@ def create_company(request, data: CompanyCreateSchema):
     return 201, company
 
 @companies_router.put("/{id}", response=CompanySchema)
+@companies_router.put("/{id}/", response=CompanySchema)
 def update_company(request, id: UUID, data: CompanyCreateSchema):
     company = Company.objects.filter(id=id, organization=request.user.organization).first()
     if not company:
@@ -128,6 +132,7 @@ def update_company(request, id: UUID, data: CompanyCreateSchema):
     return company
 
 @companies_router.delete("/{id}", response={204: None})
+@companies_router.delete("/{id}/", response={204: None})
 def delete_company(request, id: UUID):
     company = Company.objects.filter(id=id, organization=request.user.organization).first()
     if not company:
@@ -139,10 +144,12 @@ def delete_company(request, id: UUID):
 # ----------------- STAGES API -----------------
 
 @stages_router.get("", response=List[StageSchema])
+@stages_router.get("/", response=List[StageSchema])
 def list_stages(request, pipeline_type: Optional[str] = 'SALES'):
     return Stage.objects.filter(organization=request.user.organization, pipeline_type=pipeline_type)
 
 @stages_router.get("/{id}", response=StageSchema)
+@stages_router.get("/{id}/", response=StageSchema)
 def get_stage(request, id: UUID):
     stage = Stage.objects.filter(id=id, organization=request.user.organization).first()
     if not stage:
@@ -150,6 +157,7 @@ def get_stage(request, id: UUID):
     return stage
 
 @stages_router.post("", response={201: StageSchema})
+@stages_router.post("/", response={201: StageSchema})
 def create_stage(request, data: StageCreateSchema):
     # Only Admin can create pipeline stages
     if request.user.role != User.ADMIN:
@@ -162,6 +170,7 @@ def create_stage(request, data: StageCreateSchema):
     return 201, stage
 
 @stages_router.put("/{id}", response=StageSchema)
+@stages_router.put("/{id}/", response=StageSchema)
 def update_stage(request, id: UUID, data: StageCreateSchema):
     if request.user.role != User.ADMIN:
         raise HttpError(403, "Permission Denied: Only Administrators can edit stages.")
@@ -176,6 +185,7 @@ def update_stage(request, id: UUID, data: StageCreateSchema):
     return stage
 
 @stages_router.delete("/{id}", response={204: None})
+@stages_router.delete("/{id}/", response={204: None})
 def delete_stage(request, id: UUID):
     if request.user.role != User.ADMIN:
         raise HttpError(403, "Permission Denied: Only Administrators can delete stages.")
@@ -343,6 +353,7 @@ def import_vcf_file(
 
 
 @contacts_router.get("/{id}", response=ContactSchema)
+@contacts_router.get("/{id}/", response=ContactSchema)
 def get_contact(request, id: UUID):
     contact = Contact.objects.filter(id=id, organization=request.user.organization).select_related('company', 'assigned_to').first()
     if not contact:
@@ -625,6 +636,7 @@ def import_vcf_file(
     return import_contacts(request, import_schema)
 
 @contacts_router.put("/{id}", response=ContactSchema)
+@contacts_router.put("/{id}/", response=ContactSchema)
 def update_contact(request, id: UUID, data: ContactCreateSchema):
     contact = Contact.objects.filter(id=id, organization=request.user.organization).first()
     if not contact:
@@ -667,6 +679,7 @@ def update_contact(request, id: UUID, data: ContactCreateSchema):
     return contact
 
 @contacts_router.delete("/{id}", response={204: None})
+@contacts_router.delete("/{id}/", response={204: None})
 def delete_contact(request, id: UUID):
     contact = Contact.objects.filter(id=id, organization=request.user.organization).first()
     if not contact:
@@ -680,6 +693,7 @@ def delete_contact(request, id: UUID):
     return 204, None
 
 @contacts_router.post("/{id}/merge", response=ContactSchema)
+@contacts_router.post("/{id}/merge/", response=ContactSchema)
 def merge_contact(request, id: UUID, candidate_id: UUID):
     primary = Contact.objects.filter(id=id, organization=request.user.organization).first()
     if not primary:
@@ -722,6 +736,7 @@ def merge_contact(request, id: UUID, candidate_id: UUID):
     return primary
 
 @contacts_router.post("/{id}/extend", response=ContactSchema)
+@contacts_router.post("/{id}/extend/", response=ContactSchema)
 def extend_lead_lifecycle(request, id: UUID, days: int):
     contact = Contact.objects.filter(id=id, organization=request.user.organization).first()
     if not contact:
@@ -736,6 +751,7 @@ def extend_lead_lifecycle(request, id: UUID, days: int):
 # ----------------- DEALS API -----------------
 
 @deals_router.get("", response=List[DealSchema])
+@deals_router.get("/", response=List[DealSchema])
 @paginate(LimitOffsetPagination)
 def list_deals(
     request, 
@@ -765,6 +781,7 @@ def list_deals(
     return qs
 
 @deals_router.get("/{id}", response=DealSchema)
+@deals_router.get("/{id}/", response=DealSchema)
 def get_deal(request, id: UUID):
     deal = Deal.objects.filter(id=id, organization=request.user.organization).select_related('stage', 'contact', 'company').first()
     if not deal:
@@ -772,6 +789,7 @@ def get_deal(request, id: UUID):
     return deal
 
 @deals_router.post("", response={201: DealSchema})
+@deals_router.post("/", response={201: DealSchema})
 def create_deal(request, data: DealCreateSchema):
     payload = data.dict()
     stage_id = payload.pop('stage_id')
@@ -805,6 +823,7 @@ def create_deal(request, data: DealCreateSchema):
     return 201, deal
 
 @deals_router.put("/{id}", response=DealSchema)
+@deals_router.put("/{id}/", response=DealSchema)
 def update_deal(request, id: UUID, data: DealCreateSchema):
     deal = Deal.objects.filter(id=id, organization=request.user.organization).first()
     if not deal:
@@ -847,6 +866,7 @@ def update_deal(request, id: UUID, data: DealCreateSchema):
     return deal
 
 @deals_router.delete("/{id}", response={204: None})
+@deals_router.delete("/{id}/", response={204: None})
 def delete_deal(request, id: UUID):
     deal = Deal.objects.filter(id=id, organization=request.user.organization).first()
     if not deal:
@@ -862,6 +882,7 @@ def delete_deal(request, id: UUID):
 
 # Projects API Endpoints
 @projects_router.get("", response=List[ProjectSchema])
+@projects_router.get("/", response=List[ProjectSchema])
 @paginate(LimitOffsetPagination)
 def list_projects(request, search: Optional[str] = None, contact_id: Optional[UUID] = None, deal_id: Optional[UUID] = None):
     qs = Project.objects.filter(organization=request.user.organization).select_related('manager', 'deal').prefetch_related('members')
@@ -874,6 +895,7 @@ def list_projects(request, search: Optional[str] = None, contact_id: Optional[UU
     return qs
 
 @projects_router.get("/{id}", response=ProjectSchema)
+@projects_router.get("/{id}/", response=ProjectSchema)
 def get_project(request, id: UUID):
     project = Project.objects.filter(id=id, organization=request.user.organization).select_related('manager', 'deal').prefetch_related('members').first()
     if not project:
@@ -881,6 +903,7 @@ def get_project(request, id: UUID):
     return project
 
 @projects_router.post("", response={201: ProjectSchema})
+@projects_router.post("/", response={201: ProjectSchema})
 def create_project(request, data: ProjectCreateSchema):
     payload = data.dict()
     manager_id = payload.pop('manager_id', None)
@@ -915,6 +938,7 @@ def create_project(request, data: ProjectCreateSchema):
     return 201, project
 
 @projects_router.put("/{id}", response=ProjectSchema)
+@projects_router.put("/{id}/", response=ProjectSchema)
 def update_project(request, id: UUID, data: ProjectCreateSchema):
     project = Project.objects.filter(id=id, organization=request.user.organization).first()
     if not project:
@@ -954,6 +978,7 @@ def update_project(request, id: UUID, data: ProjectCreateSchema):
     return project
 
 @projects_router.delete("/{id}", response={204: None})
+@projects_router.delete("/{id}/", response={204: None})
 def delete_project(request, id: UUID):
     project = Project.objects.filter(id=id, organization=request.user.organization).first()
     if not project:
@@ -965,6 +990,7 @@ def delete_project(request, id: UUID):
 # ----------------- SETTINGS / LIFECYCLE API -----------------
 
 @settings_router.get("/lifecycle", response=OrganizationLifecycleSettingsSchema)
+@settings_router.get("/lifecycle/", response=OrganizationLifecycleSettingsSchema)
 def get_lifecycle_settings(request):
     org = request.user.organization
     return {
@@ -973,6 +999,7 @@ def get_lifecycle_settings(request):
     }
 
 @settings_router.put("/lifecycle", response=OrganizationLifecycleSettingsSchema)
+@settings_router.put("/lifecycle/", response=OrganizationLifecycleSettingsSchema)
 def update_lifecycle_settings(request, data: OrganizationLifecycleSettingsSchema):
     org = request.user.organization
     org.lead_lifecycle_timer_enabled = data.lead_lifecycle_timer_enabled
@@ -984,10 +1011,12 @@ def update_lifecycle_settings(request, data: OrganizationLifecycleSettingsSchema
     }
 
 @settings_router.get("/lifecycle-rules", response=List[LeadLifecycleRuleSchema])
+@settings_router.get("/lifecycle-rules/", response=List[LeadLifecycleRuleSchema])
 def list_lifecycle_rules(request):
     return LeadLifecycleRule.objects.filter(organization=request.user.organization)
 
 @settings_router.post("/lifecycle-rules", response={201: LeadLifecycleRuleSchema})
+@settings_router.post("/lifecycle-rules/", response={201: LeadLifecycleRuleSchema})
 def create_lifecycle_rule(request, data: LeadLifecycleRuleCreateSchema):
     rule = LeadLifecycleRule.objects.create(
         organization=request.user.organization,
@@ -996,6 +1025,7 @@ def create_lifecycle_rule(request, data: LeadLifecycleRuleCreateSchema):
     return 201, rule
 
 @settings_router.put("/lifecycle-rules/{id}", response=LeadLifecycleRuleSchema)
+@settings_router.put("/lifecycle-rules/{id}/", response=LeadLifecycleRuleSchema)
 def update_lifecycle_rule(request, id: UUID, data: LeadLifecycleRuleCreateSchema):
     rule = LeadLifecycleRule.objects.filter(id=id, organization=request.user.organization).first()
     if not rule:
@@ -1020,6 +1050,7 @@ def delete_lifecycle_rule(request, id: UUID):
 # ----------------- CUSTOMER LISTS / SEGMENTS API -----------------
 
 @customer_lists_router.get("", response=List[CustomerListSchema])
+@customer_lists_router.get("/", response=List[CustomerListSchema])
 def list_customer_lists(request):
     lists = CustomerList.objects.filter(organization=request.user.organization)
     res = []
@@ -1038,6 +1069,7 @@ def list_customer_lists(request):
     return res
 
 @customer_lists_router.post("", response={201: CustomerListSchema})
+@customer_lists_router.post("/", response={201: CustomerListSchema})
 def create_customer_list(request, data: CustomerListCreateSchema):
     cl = CustomerList.objects.create(
         organization=request.user.organization,
@@ -1052,6 +1084,7 @@ def create_customer_list(request, data: CustomerListCreateSchema):
     }
 
 @customer_lists_router.delete("/{id}", response={204: None})
+@customer_lists_router.delete("/{id}/", response={204: None})
 def delete_customer_list(request, id: UUID):
     cl = CustomerList.objects.filter(id=id, organization=request.user.organization).first()
     if not cl:
@@ -1099,6 +1132,7 @@ def count_smart_list_contacts(organization, rules):
     return evaluate_smart_list_query(organization, rules).count()
 
 @customer_lists_router.get("/{id}/contacts", response=List[ContactSchema])
+@customer_lists_router.get("/{id}/contacts/", response=List[ContactSchema])
 def get_customer_list_contacts(request, id: UUID):
     cl = CustomerList.objects.filter(id=id, organization=request.user.organization).first()
     if not cl:
@@ -1109,6 +1143,7 @@ def get_customer_list_contacts(request, id: UUID):
         return evaluate_smart_list_query(request.user.organization, cl.rules)
 
 @customer_lists_router.post("/{id}/add-contact", response={200: bool})
+@customer_lists_router.post("/{id}/add-contact/", response={200: bool})
 def add_contact_to_static_list(request, id: UUID, contact_id: UUID):
     cl = CustomerList.objects.filter(id=id, organization=request.user.organization, list_type=CustomerList.STATIC).first()
     if not cl:
@@ -1120,6 +1155,7 @@ def add_contact_to_static_list(request, id: UUID, contact_id: UUID):
     return True
 
 @customer_lists_router.post("/{id}/remove-contact", response={200: bool})
+@customer_lists_router.post("/{id}/remove-contact/", response={200: bool})
 def remove_contact_from_static_list(request, id: UUID, contact_id: UUID):
     cl = CustomerList.objects.filter(id=id, organization=request.user.organization, list_type=CustomerList.STATIC).first()
     if not cl:
@@ -1134,10 +1170,12 @@ def remove_contact_from_static_list(request, id: UUID, contact_id: UUID):
 # ----------------- CUSTOM MODULES API -----------------
 
 @custom_modules_router.get("", response=List[CustomModuleSchema])
+@custom_modules_router.get("/", response=List[CustomModuleSchema])
 def list_custom_modules(request):
     return CustomModule.objects.filter(organization=request.user.organization)
 
 @custom_modules_router.post("", response={201: CustomModuleSchema})
+@custom_modules_router.post("/", response={201: CustomModuleSchema})
 def create_custom_module(request, data: CustomModuleCreateSchema):
     try:
         cm = CustomModule.objects.create(
@@ -1149,6 +1187,7 @@ def create_custom_module(request, data: CustomModuleCreateSchema):
         raise HttpError(400, f"Error creating custom module: {str(e)}")
 
 @custom_modules_router.get("/{id}", response=CustomModuleSchema)
+@custom_modules_router.get("/{id}/", response=CustomModuleSchema)
 def get_custom_module(request, id: UUID):
     cm = CustomModule.objects.filter(id=id, organization=request.user.organization).first()
     if not cm:
@@ -1156,6 +1195,7 @@ def get_custom_module(request, id: UUID):
     return cm
 
 @custom_modules_router.delete("/{id}", response={204: None})
+@custom_modules_router.delete("/{id}/", response={204: None})
 def delete_custom_module(request, id: UUID):
     cm = CustomModule.objects.filter(id=id, organization=request.user.organization).first()
     if not cm:
@@ -1164,6 +1204,7 @@ def delete_custom_module(request, id: UUID):
     return 204, None
 
 @custom_modules_router.get("/{id}/records", response=List[CustomModuleRecordSchema])
+@custom_modules_router.get("/{id}/records/", response=List[CustomModuleRecordSchema])
 def list_custom_records(request, id: UUID):
     cm = CustomModule.objects.filter(id=id, organization=request.user.organization).first()
     if not cm:
@@ -1171,6 +1212,7 @@ def list_custom_records(request, id: UUID):
     return CustomModuleRecord.objects.filter(custom_module=cm, organization=request.user.organization).order_by('-created_at')
 
 @custom_modules_router.post("/{id}/records", response={201: CustomModuleRecordSchema})
+@custom_modules_router.post("/{id}/records/", response={201: CustomModuleRecordSchema})
 def create_custom_record(request, id: UUID, data: dict):
     cm = CustomModule.objects.filter(id=id, organization=request.user.organization).first()
     if not cm:
@@ -1191,6 +1233,7 @@ def create_custom_record(request, id: UUID, data: dict):
     return 201, rec
 
 @custom_modules_router.put("/{id}/records/{record_id}", response=CustomModuleRecordSchema)
+@custom_modules_router.put("/{id}/records/{record_id}/", response=CustomModuleRecordSchema)
 def update_custom_record(request, id: UUID, record_id: UUID, data: dict):
     cm = CustomModule.objects.filter(id=id, organization=request.user.organization).first()
     if not cm:
@@ -1210,6 +1253,7 @@ def update_custom_record(request, id: UUID, record_id: UUID, data: dict):
     return rec
 
 @custom_modules_router.delete("/{id}/records/{record_id}", response={204: None})
+@custom_modules_router.delete("/{id}/records/{record_id}/", response={204: None})
 def delete_custom_record(request, id: UUID, record_id: UUID):
     cm = CustomModule.objects.filter(id=id, organization=request.user.organization).first()
     if not cm:
@@ -1223,10 +1267,12 @@ def delete_custom_record(request, id: UUID, record_id: UUID):
 
 # ----------------- PIPELINES API -----------------
 @pipelines_router.get("", response=List[PipelineSchema])
+@pipelines_router.get("/", response=List[PipelineSchema])
 def list_pipelines(request):
     return Pipeline.objects.filter(organization=request.user.organization)
 
 @pipelines_router.get("/{id}", response=PipelineSchema)
+@pipelines_router.get("/{id}/", response=PipelineSchema)
 def get_pipeline(request, id: UUID):
     p = Pipeline.objects.filter(id=id, organization=request.user.organization).first()
     if not p:
@@ -1234,6 +1280,7 @@ def get_pipeline(request, id: UUID):
     return p
 
 @pipelines_router.post("", response={201: PipelineSchema})
+@pipelines_router.post("/", response={201: PipelineSchema})
 def create_pipeline(request, data: PipelineCreateSchema):
     p = Pipeline.objects.create(
         organization=request.user.organization,
@@ -1242,6 +1289,7 @@ def create_pipeline(request, data: PipelineCreateSchema):
     return 201, p
 
 @pipelines_router.put("/{id}", response=PipelineSchema)
+@pipelines_router.put("/{id}/", response=PipelineSchema)
 def update_pipeline(request, id: UUID, data: PipelineCreateSchema):
     p = Pipeline.objects.filter(id=id, organization=request.user.organization).first()
     if not p:
@@ -1252,6 +1300,7 @@ def update_pipeline(request, id: UUID, data: PipelineCreateSchema):
     return p
 
 @pipelines_router.delete("/{id}", response={204: None})
+@pipelines_router.delete("/{id}/", response={204: None})
 def delete_pipeline(request, id: UUID):
     p = Pipeline.objects.filter(id=id, organization=request.user.organization).first()
     if not p:
@@ -1262,6 +1311,7 @@ def delete_pipeline(request, id: UUID):
 
 # ----------------- CUSTOM FIELD DEFINITIONS API -----------------
 @settings_router.get("/custom-fields", response=List[CustomFieldDefinitionSchema])
+@settings_router.get("/custom-fields/", response=List[CustomFieldDefinitionSchema])
 def list_custom_fields(request, model_name: Optional[str] = None):
     qs = CustomFieldDefinition.objects.filter(organization=request.user.organization)
     if model_name:
@@ -1269,6 +1319,7 @@ def list_custom_fields(request, model_name: Optional[str] = None):
     return qs
 
 @settings_router.post("/custom-fields", response={201: CustomFieldDefinitionSchema})
+@settings_router.post("/custom-fields/", response={201: CustomFieldDefinitionSchema})
 def create_custom_field(request, data: CustomFieldDefinitionCreateSchema):
     payload = data.dict()
     payload['model_name'] = payload['model_name'].upper()
@@ -1279,6 +1330,7 @@ def create_custom_field(request, data: CustomFieldDefinitionCreateSchema):
     return 201, cf
 
 @settings_router.delete("/custom-fields/{id}", response={204: None})
+@settings_router.delete("/custom-fields/{id}/", response={204: None})
 def delete_custom_field(request, id: UUID):
     cf = CustomFieldDefinition.objects.filter(id=id, organization=request.user.organization).first()
     if not cf:
@@ -1289,10 +1341,12 @@ def delete_custom_field(request, id: UUID):
 
 # ----------------- REPORTS API -----------------
 @reports_router.get("", response=List[ReportSchema])
+@reports_router.get("/", response=List[ReportSchema])
 def list_reports(request):
     return Report.objects.filter(organization=request.user.organization)
 
 @reports_router.post("", response={201: ReportSchema})
+@reports_router.post("/", response={201: ReportSchema})
 def create_report(request, data: ReportCreateSchema):
     r = Report.objects.create(
         organization=request.user.organization,
@@ -1302,6 +1356,7 @@ def create_report(request, data: ReportCreateSchema):
     return 201, r
 
 @reports_router.delete("/{id}", response={204: None})
+@reports_router.delete("/{id}/", response={204: None})
 def delete_report(request, id: UUID):
     r = Report.objects.filter(id=id, organization=request.user.organization).first()
     if not r:
@@ -1310,6 +1365,7 @@ def delete_report(request, id: UUID):
     return 204, None
 
 @reports_router.get("/{id}/data")
+@reports_router.get("/{id}/data/")
 def evaluate_report_data(request, id: UUID):
     r = Report.objects.filter(id=id, organization=request.user.organization).first()
     if not r:
@@ -2020,6 +2076,7 @@ def list_invoices(request, search: Optional[str] = None, status: Optional[str] =
     return qs.order_by('-created_at')
 
 @invoices_router.get("/{id}", response=InvoiceSchema)
+@invoices_router.get("/{id}/", response=InvoiceSchema)
 def get_invoice(request, id: UUID):
     inv = Invoice.objects.filter(id=id, organization=request.user.organization).select_related('contact', 'company', 'deal').first()
     if not inv:
@@ -2074,6 +2131,7 @@ def create_invoice(request, data: InvoiceCreateSchema):
     return 201, inv
 
 @invoices_router.put("/{id}", response=InvoiceSchema)
+@invoices_router.put("/{id}/", response=InvoiceSchema)
 def update_invoice(request, id: UUID, data: InvoiceCreateSchema):
     inv = Invoice.objects.filter(id=id, organization=request.user.organization).first()
     if not inv:
@@ -2108,6 +2166,7 @@ def update_invoice(request, id: UUID, data: InvoiceCreateSchema):
     return inv
 
 @invoices_router.delete("/{id}", response={204: None})
+@invoices_router.delete("/{id}/", response={204: None})
 def delete_invoice(request, id: UUID):
     inv = Invoice.objects.filter(id=id, organization=request.user.organization).first()
     if not inv:
@@ -2116,6 +2175,7 @@ def delete_invoice(request, id: UUID):
     return 204, None
 
 @invoices_router.post("/{id}/mark-paid", response=ReceiptSchema)
+@invoices_router.post("/{id}/mark-paid/", response=ReceiptSchema)
 def mark_invoice_paid(request, id: UUID, payment_method: Optional[str] = 'BANK_TRANSFER', reference_number: Optional[str] = None):
     inv = Invoice.objects.filter(id=id, organization=request.user.organization).first()
     if not inv:
@@ -2152,6 +2212,7 @@ def mark_invoice_paid(request, id: UUID, payment_method: Optional[str] = 'BANK_T
 # ----------------- RECEIPTS API -----------------
 
 @receipts_router.get("", response=List[ReceiptSchema])
+@receipts_router.get("/", response=List[ReceiptSchema])
 @paginate(LimitOffsetPagination)
 def list_receipts(request, search: Optional[str] = None):
     qs = Receipt.objects.filter(organization=request.user.organization).select_related('invoice', 'contact')
@@ -2170,6 +2231,7 @@ def list_receipts(request, search: Optional[str] = None):
     return qs.order_by('-payment_date')
 
 @receipts_router.get("/{id}", response=ReceiptSchema)
+@receipts_router.get("/{id}/", response=ReceiptSchema)
 def get_receipt(request, id: UUID):
     rcpt = Receipt.objects.filter(id=id, organization=request.user.organization).select_related('invoice', 'contact').first()
     if not rcpt:
@@ -2177,6 +2239,7 @@ def get_receipt(request, id: UUID):
     return rcpt
 
 @receipts_router.post("", response={201: ReceiptSchema})
+@receipts_router.post("/", response={201: ReceiptSchema})
 def create_receipt(request, data: ReceiptCreateSchema):
     payload = data.dict()
     invoice_id = payload.pop('invoice_id', None)
@@ -2198,6 +2261,7 @@ def create_receipt(request, data: ReceiptCreateSchema):
     return 201, rcpt
 
 @receipts_router.delete("/{id}", response={204: None})
+@receipts_router.delete("/{id}/", response={204: None})
 def delete_receipt(request, id: UUID):
     rcpt = Receipt.objects.filter(id=id, organization=request.user.organization).first()
     if not rcpt:
@@ -2283,7 +2347,7 @@ def create_shipment(request, data: ShipmentCreateSchema):
     for field in ['sender_name', 'sender_phone', 'sender_email', 'sender_address',
                   'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
                   'invoice_number', 'partner_name', 'item_received',
-                  'items_shipped', 'items_recieved', 'tracking_id', 'note']:
+                  'items_shipped', 'items_recieved', 'tracking_id', 'note', 'packager']:
         if field in payload and payload[field] is not None and str(payload[field]).strip() == '':
             payload[field] = None
 
@@ -2315,9 +2379,106 @@ def create_shipment(request, data: ShipmentCreateSchema):
         recorded_by_id=recorded_by_id or request.user.id,
         **payload
     )
+    try:
+        sync_shipment_invoice(shipment)
+    except Exception as e:
+        print(f"Failed to auto-sync invoice for shipment {shipment.id}: {e}")
+
     return 201, shipment
 
+def sync_shipment_invoice(shipment):
+    if not shipment or not shipment.invoice_number:
+        return None
+
+    is_gbp = (shipment.currency == 'GBP')
+    conversion_rate = float(shipment.conversion_rate or 2000)
+    if conversion_rate <= 0:
+        conversion_rate = 2000.0
+
+    amount_num = float(shipment.amount or 0)
+    total_ngn = amount_num * conversion_rate if is_gbp else amount_num
+    total_gbp = amount_num if is_gbp else (amount_num / conversion_rate)
+
+    rec_name = shipment.receiver_name or shipment.sender_name or 'Valued Client'
+    rec_phone = shipment.receiver_phone or shipment.sender_phone or 'N/A'
+    rec_email = shipment.receiver_email or shipment.sender_email or 'N/A'
+    rec_addr = shipment.receiver_address or shipment.sender_address or 'N/A'
+
+    item_nature = shipment.item_received or shipment.items_shipped or 'CARGO / PARCEL'
+    dos_date = str(shipment.shipment_date or shipment.date or timezone.localdate())
+
+    items = [
+        {
+            'dos': dos_date,
+            'nature_of_item': item_nature.upper(),
+            'weight_kg': float(shipment.weight_kg or 0),
+            'price_ngn': round(total_ngn, 2),
+            'price_gbp': round(total_gbp, 2),
+            'total_ngn': round(total_ngn, 2),
+            'total_gbp': round(total_gbp, 2)
+        }
+    ]
+
+    services = [
+        {
+            'sn': 1,
+            'service_name': 'Doorstep Delivery' if shipment.has_doorstep_delivery else 'Standard Shipping',
+            'price_ngn': 0,
+            'price_gbp': 0
+        }
+    ]
+
+    inv_status = Invoice.PAID if shipment.payment_status == 'PAID' else Invoice.DRAFT
+    issue_date = shipment.shipment_date or shipment.date or timezone.localdate()
+
+    inv, created = Invoice.objects.get_or_create(
+        organization=shipment.organization,
+        invoice_number=shipment.invoice_number,
+        defaults={
+            'contact': shipment.receiver or shipment.sender,
+            'receiver_name': rec_name,
+            'receiver_tel': rec_phone,
+            'receiver_email': rec_email,
+            'receiver_address': rec_addr,
+            'total_value_items': shipment.value or 0,
+            'expected_parcel_no': shipment.tracking_id or shipment.invoice_number,
+            'parcel_handler': f"Mintana Express ({shipment.packager})" if shipment.packager else "Mintana Express",
+            'items': items,
+            'services': services,
+            'total_ngn': round(total_ngn, 2),
+            'total_gbp': round(total_gbp, 2),
+            'amount_paid': round(total_ngn, 2) if inv_status == Invoice.PAID else 0,
+            'currency': shipment.currency or 'NGN',
+            'issue_date': issue_date,
+            'status': inv_status,
+            'notes': shipment.note or ''
+        }
+    )
+
+    if not created:
+        inv.contact = shipment.receiver or shipment.sender
+        inv.receiver_name = rec_name
+        inv.receiver_tel = rec_phone
+        inv.receiver_email = rec_email
+        inv.receiver_address = rec_addr
+        inv.total_value_items = shipment.value or 0
+        inv.expected_parcel_no = shipment.tracking_id or shipment.invoice_number
+        inv.parcel_handler = f"Mintana Express ({shipment.packager})" if shipment.packager else "Mintana Express"
+        inv.items = items
+        inv.services = services
+        inv.total_ngn = round(total_ngn, 2)
+        inv.total_gbp = round(total_gbp, 2)
+        inv.status = inv_status
+        if inv_status == Invoice.PAID:
+            inv.amount_paid = round(total_ngn, 2)
+        if issue_date:
+            inv.issue_date = issue_date
+        inv.save()
+
+    return inv
+
 @shipments_router.get("/{id}", response=ShipmentSchema)
+@shipments_router.get("/{id}/", response=ShipmentSchema)
 def get_shipment(request, id: UUID):
     shipment = Shipment.objects.filter(id=id, organization=request.user.organization).first()
     if not shipment:
@@ -2325,6 +2486,7 @@ def get_shipment(request, id: UUID):
     return shipment
 
 @shipments_router.put("/{id}", response=ShipmentSchema)
+@shipments_router.put("/{id}/", response=ShipmentSchema)
 def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
     shipment = Shipment.objects.filter(id=id, organization=request.user.organization).first()
     if not shipment:
@@ -2344,9 +2506,15 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
     for attr, val in payload.items():
         setattr(shipment, attr, val)
     shipment.save()
+    try:
+        sync_shipment_invoice(shipment)
+    except Exception as e:
+        print(f"Failed to auto-sync invoice for shipment {shipment.id}: {e}")
+
     return shipment
 
 @shipments_router.delete("/{id}", response={204: None})
+@shipments_router.delete("/{id}/", response={204: None})
 def delete_shipment(request, id: UUID):
     shipment = Shipment.objects.filter(id=id, organization=request.user.organization).first()
     if not shipment:
@@ -2358,6 +2526,7 @@ def delete_shipment(request, id: UUID):
 # ----------------- SHIPMENT ESCALATIONS API -----------------
 
 @shipment_escalations_router.get("", response=List[ShipmentEscalationSchema])
+@shipment_escalations_router.get("/", response=List[ShipmentEscalationSchema])
 def list_shipment_escalations(
     request,
     search: Optional[str] = None,
@@ -2395,6 +2564,7 @@ def list_shipment_escalations(
     return qs.order_by('-created_at')
 
 @shipment_escalations_router.post("", response={201: ShipmentEscalationSchema})
+@shipment_escalations_router.post("/", response={201: ShipmentEscalationSchema})
 def create_shipment_escalation(request, data: ShipmentEscalationCreateSchema):
     payload = data.dict(exclude_unset=True)
 
@@ -2444,6 +2614,7 @@ def create_shipment_escalation(request, data: ShipmentEscalationCreateSchema):
     return 201, escalation
 
 @shipment_escalations_router.get("/{id}", response=ShipmentEscalationSchema)
+@shipment_escalations_router.get("/{id}/", response=ShipmentEscalationSchema)
 def get_shipment_escalation(request, id: UUID):
     escalation = ShipmentEscalation.objects.filter(
         id=id, organization=request.user.organization
@@ -2453,6 +2624,7 @@ def get_shipment_escalation(request, id: UUID):
     return escalation
 
 @shipment_escalations_router.put("/{id}", response=ShipmentEscalationSchema)
+@shipment_escalations_router.put("/{id}/", response=ShipmentEscalationSchema)
 def update_shipment_escalation(request, id: UUID, data: ShipmentEscalationCreateSchema):
     escalation = ShipmentEscalation.objects.filter(
         id=id, organization=request.user.organization
@@ -2502,6 +2674,7 @@ def update_shipment_escalation(request, id: UUID, data: ShipmentEscalationCreate
     return escalation
 
 @shipment_escalations_router.delete("/{id}", response={204: None})
+@shipment_escalations_router.delete("/{id}/", response={204: None})
 def delete_shipment_escalation(request, id: UUID):
     escalation = ShipmentEscalation.objects.filter(
         id=id, organization=request.user.organization
@@ -2515,6 +2688,7 @@ def delete_shipment_escalation(request, id: UUID):
 # ----------------- CSR REPORTS API -----------------
 
 @csr_reports_router.get("", response=List[CSRReportSchema])
+@csr_reports_router.get("/", response=List[CSRReportSchema])
 def list_csr_reports(
     request,
     search: Optional[str] = None,
@@ -2549,6 +2723,7 @@ def list_csr_reports(
 
 
 @csr_reports_router.get("/suggested-period", response=dict)
+@csr_reports_router.get("/suggested-period/", response=dict)
 def get_suggested_period(
     request,
     report_type: str,
@@ -2612,6 +2787,7 @@ def get_suggested_period(
 
 
 @csr_reports_router.get("/aggregate", response=dict)
+@csr_reports_router.get("/aggregate/", response=dict)
 def aggregate_csr_daily_reports(
     request,
     start_date: str,
@@ -2662,6 +2838,7 @@ def aggregate_csr_daily_reports(
 
 
 @csr_reports_router.post("", response={201: CSRReportSchema})
+@csr_reports_router.post("/", response={201: CSRReportSchema})
 def create_csr_report(request, data: CSRReportCreateSchema):
     payload = data.dict(exclude_unset=True)
 
@@ -2704,6 +2881,7 @@ def create_csr_report(request, data: CSRReportCreateSchema):
 
 
 @csr_reports_router.get("/{id}", response=CSRReportSchema)
+@csr_reports_router.get("/{id}/", response=CSRReportSchema)
 def get_csr_report(request, id: UUID):
     report = CSRReport.objects.filter(
         id=id, organization=request.user.organization
@@ -2714,6 +2892,7 @@ def get_csr_report(request, id: UUID):
 
 
 @csr_reports_router.put("/{id}", response=CSRReportSchema)
+@csr_reports_router.put("/{id}/", response=CSRReportSchema)
 def update_csr_report(request, id: UUID, data: CSRReportCreateSchema):
     report = CSRReport.objects.filter(
         id=id, organization=request.user.organization
@@ -2751,6 +2930,7 @@ def update_csr_report(request, id: UUID, data: CSRReportCreateSchema):
 
 
 @csr_reports_router.delete("/{id}", response={204: None})
+@csr_reports_router.delete("/{id}/", response={204: None})
 def delete_csr_report(request, id: UUID):
     report = CSRReport.objects.filter(
         id=id, organization=request.user.organization
@@ -2847,6 +3027,7 @@ def create_performance_scorecard(request, data: PerformanceScorecardCreateSchema
 
 
 @performance_scorecards_router.get("/{id}", response=PerformanceScorecardSchema)
+@performance_scorecards_router.get("/{id}/", response=PerformanceScorecardSchema)
 def get_performance_scorecard(request, id: UUID):
     scorecard = PerformanceScorecard.objects.filter(
         id=id, organization=request.user.organization
@@ -2861,6 +3042,7 @@ def get_performance_scorecard(request, id: UUID):
 
 
 @performance_scorecards_router.put("/{id}", response=PerformanceScorecardSchema)
+@performance_scorecards_router.put("/{id}/", response=PerformanceScorecardSchema)
 def update_performance_scorecard(request, id: UUID, data: PerformanceScorecardCreateSchema):
     if request.user.role not in [User.ADMIN, User.MANAGER]:
         raise HttpError(403, "Permission Denied: Only Managers and Admins can update performance scorecards.")
@@ -2905,6 +3087,7 @@ def update_performance_scorecard(request, id: UUID, data: PerformanceScorecardCr
 
 
 @performance_scorecards_router.delete("/{id}", response={204: None})
+@performance_scorecards_router.delete("/{id}/", response={204: None})
 def delete_performance_scorecard(request, id: UUID):
     if request.user.role not in [User.ADMIN, User.MANAGER]:
         raise HttpError(403, "Permission Denied: Only Managers and Admins can delete performance scorecards.")

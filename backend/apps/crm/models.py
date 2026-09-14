@@ -779,6 +779,8 @@ class Shipment(TimeStampedModel):
     # Cartons & Delivery & Partner
     number_of_carton = models.IntegerField(default=1)
     has_doorstep_delivery = models.BooleanField(default=False)
+    dpd = models.BooleanField(default=False)
+    packager = models.CharField(max_length=255, null=True, blank=True)
     partner = models.ForeignKey(
         Contact,
         on_delete=models.SET_NULL,

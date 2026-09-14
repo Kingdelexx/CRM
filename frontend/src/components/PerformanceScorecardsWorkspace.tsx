@@ -803,22 +803,28 @@ export default function PerformanceScorecardsWorkspace({ currentUser }: Props) {
             </div>
 
             <div className="space-y-4 text-xs text-slate-700">
-              {selectedCsrForView.biggest_achievement && (
+              {((selectedCsrForView as any).biggest_achievement_week || (selectedCsrForView as any).biggest_achievement_month || (selectedCsrForView as any).biggest_achievement) && (
                 <div>
                   <h4 className="font-bold text-slate-800">Key Achievement:</h4>
-                  <p className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 mt-1">{selectedCsrForView.biggest_achievement}</p>
+                  <p className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 mt-1">
+                    {(selectedCsrForView as any).biggest_achievement_week || (selectedCsrForView as any).biggest_achievement_month || (selectedCsrForView as any).biggest_achievement}
+                  </p>
                 </div>
               )}
-              {selectedCsrForView.biggest_challenge && (
+              {((selectedCsrForView as any).biggest_challenge_week || (selectedCsrForView as any).biggest_challenge_month || (selectedCsrForView as any).biggest_challenge) && (
                 <div>
                   <h4 className="font-bold text-slate-800">Key Challenge:</h4>
-                  <p className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 mt-1">{selectedCsrForView.biggest_challenge}</p>
+                  <p className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 mt-1">
+                    {(selectedCsrForView as any).biggest_challenge_week || (selectedCsrForView as any).biggest_challenge_month || (selectedCsrForView as any).biggest_challenge}
+                  </p>
                 </div>
               )}
-              {selectedCsrForView.notes && (
+              {((selectedCsrForView as any).notes || (selectedCsrForView as any).support_needed) && (
                 <div>
-                  <h4 className="font-bold text-slate-800">Additional Notes:</h4>
-                  <p className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 mt-1">{selectedCsrForView.notes}</p>
+                  <h4 className="font-bold text-slate-800">Additional Notes / Support Needed:</h4>
+                  <p className="p-2.5 bg-slate-50 rounded-lg border border-slate-100 mt-1">
+                    {(selectedCsrForView as any).notes || (selectedCsrForView as any).support_needed}
+                  </p>
                 </div>
               )}
             </div>

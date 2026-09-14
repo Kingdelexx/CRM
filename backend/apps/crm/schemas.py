@@ -397,7 +397,7 @@ class ShipmentSchema(ModelSchema):
             'id', 'sender_name', 'sender_phone', 'sender_email', 'sender_address',
             'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
             'date', 'shipment_date', 'shipment_status', 'payment_status', 'shipping_type', 'currency', 'conversion_rate', 'amount',
-            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_doorstep_delivery', 'partner_name', 'item_received', 'items_shipped',
+            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_doorstep_delivery', 'dpd', 'packager', 'partner_name', 'item_received', 'items_shipped',
             'items_recieved', 'weight_kg', 'tracking_id', 'value', 'note', 'created_at', 'updated_at'
         ]
 
@@ -425,6 +425,8 @@ class ShipmentCreateSchema(Schema):
     invoice_number: Optional[str] = None
     number_of_carton: Optional[int] = 1
     has_doorstep_delivery: Optional[bool] = False
+    dpd: Optional[bool] = False
+    packager: Optional[str] = None
     partner_id: Optional[str] = None
     partner_name: Optional[str] = None
     item_received: Optional[str] = None

@@ -276,7 +276,6 @@ export interface Task extends BaseEntity {
   task_team?: Team;
   deal?: Deal;
   contact?: Contact;
-  partner?: Contact;
   company?: Company;
   attachments?: string[];
   checklist?: ChecklistItem[];
@@ -457,6 +456,8 @@ export interface Shipment extends BaseEntity {
   invoice_number?: string;
   number_of_carton: number;
   has_doorstep_delivery?: boolean;
+  dpd?: boolean;
+  packager?: string;
   partner?: Contact;
   partner_name?: string;
   item_received?: string;

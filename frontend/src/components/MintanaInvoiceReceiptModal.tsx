@@ -6,6 +6,7 @@ interface MintanaInvoiceReceiptModalProps {
   invoice?: Invoice | null;
   receipt?: Receipt | null;
   isOpen: boolean;
+  autoPrint?: boolean;
   onClose: () => void;
 }
 
@@ -13,6 +14,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
   invoice,
   receipt,
   isOpen,
+  autoPrint = false,
   onClose,
 }) => {
   if (!isOpen || (!invoice && !receipt)) return null;
@@ -85,10 +87,18 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
     const originalTitle = document.title;
     document.title = downloadFileName;
 
+    let timer: any = null;
+    if (autoPrint) {
+      timer = setTimeout(() => {
+        window.print();
+      }, 400);
+    }
+
     return () => {
       document.title = originalTitle;
+      if (timer) clearTimeout(timer);
     };
-  }, [isOpen, downloadFileName]);
+  }, [isOpen, downloadFileName, autoPrint]);
 
   // Handler for native browser Print / PDF Save
   const handlePrint = () => {

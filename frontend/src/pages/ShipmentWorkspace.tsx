@@ -40,7 +40,8 @@ import {
   Check,
   Plane,
   Anchor,
-  Percent
+  Percent,
+  Download
 } from 'lucide-react'
 
 interface ShipmentWorkspaceProps {
@@ -84,19 +85,74 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   // Invoice Preview Modal State
   const [selectedInvoiceForModal, setSelectedInvoiceForModal] = useState<Invoice | null>(null)
   const [isInvoiceReceiptModalOpen, setIsInvoiceReceiptModalOpen] = useState(false)
+  const [autoPrintInvoiceModal, setAutoPrintInvoiceModal] = useState(false)
 
-  const handleViewShipmentInvoice = async (shipment: Shipment) => {
-    if (!shipment.invoice_number) return
+  const shipmentToInvoice = (shipment: Shipment): Invoice => {
+    const isGbp = shipment.currency === 'GBP'
+    const conversionRate = Number(shipment.conversion_rate) || 2000
+    const amountNum = Number(shipment.amount) || 0
+    
+    const totalNgn = isGbp ? amountNum * conversionRate : amountNum
+    const totalGbp = isGbp ? amountNum : (conversionRate > 0 ? amountNum / conversionRate : 0)
+
+    const itemNature = shipment.item_received || shipment.items_shipped || 'CARGO / PARCEL'
+
+    return {
+      id: shipment.id || 'temp-id',
+      invoice_number: shipment.invoice_number || shipment.tracking_id || 'MINT-0001',
+      issue_date: shipment.shipment_date || shipment.date || new Date().toISOString().split('T')[0],
+      due_date: shipment.date || null,
+      status: shipment.payment_status === 'PAID' ? 'PAID' : 'DRAFT',
+      receiver_name: shipment.receiver_name || shipment.sender_name || 'Valued Client',
+      receiver_tel: shipment.receiver_phone || shipment.sender_phone || 'N/A',
+      receiver_email: shipment.receiver_email || shipment.sender_email || 'N/A',
+      receiver_address: shipment.receiver_address || shipment.sender_address || 'N/A',
+      total_value_items: Number(shipment.value) || 0,
+      expected_parcel_no: shipment.tracking_id || shipment.invoice_number || 'N/A',
+      parcel_handler: shipment.packager ? `Mintana Express (${shipment.packager})` : 'Mintana Express',
+      items: [
+        {
+          dos: shipment.shipment_date || shipment.date || new Date().toISOString().split('T')[0],
+          nature_of_item: itemNature.toUpperCase(),
+          weight_kg: Number(shipment.weight_kg) || 0,
+          price_ngn: totalNgn,
+          price_gbp: totalGbp,
+          total_ngn: totalNgn,
+          total_gbp: totalGbp
+        }
+      ],
+      services: [
+        { sn: 1, service_name: shipment.has_doorstep_delivery ? 'Doorstep Delivery' : 'Standard Shipping', price_ngn: 0, price_gbp: 0 }
+      ],
+      total_ngn: totalNgn,
+      total_gbp: totalGbp,
+      amount_paid: shipment.payment_status === 'PAID' ? totalNgn : 0,
+      currency: shipment.currency || 'NGN',
+      sla_terms_url: 'https://www.mintana.co.uk/terms-and-conditions',
+      notes: shipment.note || '',
+      created_at: shipment.created_at || new Date().toISOString(),
+      updated_at: shipment.updated_at || new Date().toISOString()
+    }
+  }
+
+  const handleViewShipmentInvoice = async (shipment: Shipment, autoPrint: boolean = false) => {
+    if (!shipment.invoice_number && !shipment.tracking_id) return
     try {
-      const invRes = await apiClient.get<any>(`/invoices/?search=${encodeURIComponent(shipment.invoice_number)}`)
+      const searchTarget = shipment.invoice_number || shipment.tracking_id || ''
+      const invRes = await apiClient.get<any>(`/invoices/?search=${encodeURIComponent(searchTarget)}`)
       const items = invRes.data?.items || (Array.isArray(invRes.data) ? invRes.data : [])
-      const matched = items.find((i: any) => i.invoice_number === shipment.invoice_number) || items[0]
-      if (matched) {
-        setSelectedInvoiceForModal(matched)
-        setIsInvoiceReceiptModalOpen(true)
+      let matched = items.find((i: any) => i.invoice_number === shipment.invoice_number) || items[0]
+      if (!matched) {
+        matched = shipmentToInvoice(shipment)
       }
+      setSelectedInvoiceForModal(matched)
+      setAutoPrintInvoiceModal(autoPrint)
+      setIsInvoiceReceiptModalOpen(true)
     } catch (err) {
-      console.error("Failed to fetch invoice for shipment:", err)
+      console.error("Failed to fetch invoice for shipment, using synthesized fallback:", err)
+      setSelectedInvoiceForModal(shipmentToInvoice(shipment))
+      setAutoPrintInvoiceModal(autoPrint)
+      setIsInvoiceReceiptModalOpen(true)
     }
   }
 
@@ -124,6 +180,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     discount_percentage: '',
     invoice_number: '',
     number_of_carton: '1',
+    packager: '',
     partner_id: '',
     partner_name: '',
     // Package Details
@@ -153,8 +210,19 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const orgDoorstepRate = meData?.organization?.doorstep_rate || 0
   const orgPerKgPrice = meData?.organization?.per_kg_price || 0
 
+  // Set default "Recorded By (Staff)" to current logged-in account owner
+  useEffect(() => {
+    if (meData?.id) {
+      setFormData(prev => ({
+        ...prev,
+        recorded_by_id: prev.recorded_by_id || meData.id
+      }))
+    }
+  }, [meData?.id])
+
   const [hasPackaging, setHasPackaging] = useState<'NO' | 'YES'>('NO')
   const [hasDoorstepDelivery, setHasDoorstepDelivery] = useState<'NO' | 'YES'>('NO')
+  const [dpd, setDpd] = useState<'NO' | 'YES'>('NO')
 
   const recalculateTotalAmount = (
     currentHasPackaging: 'YES' | 'NO',
@@ -269,14 +337,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const { data: escalationsData, isLoading: isEscalationsLoading, isError: isEscalationsError } = useQuery({
     queryKey: ['shipment-escalations', escalationSearchTerm, escalationTypeFilter, escalationPriorityFilter, escalationStatusFilter],
     queryFn: async () => {
-      const response = await apiClient.get<ShipmentEscalation[]>('/shipment-escalations/', {
-        params: {
-          search: escalationSearchTerm || undefined,
-          escalation_type: escalationTypeFilter || undefined,
-          priority: escalationPriorityFilter || undefined,
-          status: escalationStatusFilter || undefined
-        }
-      })
+      const params = {
+        search: escalationSearchTerm || undefined,
+        escalation_type: escalationTypeFilter || undefined,
+        priority: escalationPriorityFilter || undefined,
+        status: escalationStatusFilter || undefined
+      }
+      const response = await apiClient.get<ShipmentEscalation[]>('/shipment-escalations/', { params })
       return response.data
     }
   })
@@ -308,7 +375,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         resolution: payload.resolution || null,
         resolution_date: payload.resolution_date || null
       }
-      return apiClient.post('/shipment-escalations/', formatted)
+      return await apiClient.post('/shipment-escalations/', formatted)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shipment-escalations'] })
@@ -371,6 +438,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         invoice_number: payload.invoice_number || null,
         number_of_carton: parseInt(payload.number_of_carton) || 1,
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
+        dpd: dpd === 'YES',
+        packager: payload.packager || null,
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
         item_received: payload.item_received || null,
@@ -424,6 +493,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       discount_percentage: shipment.discount_percentage ? String(shipment.discount_percentage) : '',
       invoice_number: shipment.invoice_number || '',
       number_of_carton: shipment.number_of_carton ? String(shipment.number_of_carton) : '1',
+      packager: shipment.packager || '',
       partner_id: shipment.partner?.id || '',
       partner_name: shipment.partner_name || '',
       item_received: shipment.item_received || '',
@@ -439,6 +509,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
     setHasPackaging('NO')
     setHasDoorstepDelivery(shipment.has_doorstep_delivery ? 'YES' : 'NO')
+    setDpd(shipment.dpd ? 'YES' : 'NO')
     if (shipment.currency === 'GBP') {
       setAmountGbp(amt > 0 ? String(amt) : '')
       setAmountNgn(amt > 0 ? (amt * orgExchangeRate).toFixed(2) : '')
@@ -555,7 +626,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     return contactsData?.filter(c => c.status === 'PARTNER') || []
   }, [contactsData])
 
-  // 3. Fetch Staff Members for "Recorded By" dropdown
+  // 3. Fetch Staff Members for dropdowns
   const { data: usersData } = useQuery({
     queryKey: ['users-select'],
     queryFn: async () => {
@@ -563,6 +634,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       return response.data
     }
   })
+
+  // Filter Admins & Managers for Escalation dropdown
+  const adminManagerUsers = useMemo(() => {
+    return usersData?.filter(u => u.role === 'ADMIN' || u.role === 'MANAGER') || []
+  }, [usersData])
 
   // Metrics summary calculations
   const metrics = useMemo(() => {
@@ -572,6 +648,62 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const delivered = items.filter(s => s.shipment_status === 'DELIVERED').length
     const totalRevenue = items.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0)
     return { total, inTransit, delivered, totalRevenue }
+  }, [shipmentsData])
+
+  // 24-Hour Staff Shipment Creation Tracker (Resets Daily at 8:00 AM)
+  const staffDailyMetrics = useMemo(() => {
+    const items = Array.isArray(shipmentsData) ? shipmentsData : []
+
+    const now = new Date()
+    const cutoff = new Date(now)
+    cutoff.setHours(8, 0, 0, 0)
+    if (now.getTime() < cutoff.getTime()) {
+      cutoff.setDate(cutoff.getDate() - 1)
+    }
+
+    const recentShipments = items.filter(s => {
+      if (!s.created_at) return false
+      const createdDate = new Date(s.created_at)
+      return createdDate.getTime() >= cutoff.getTime()
+    })
+
+    const countsMap: { [key: string]: { name: string; role?: string; count: number } } = {}
+
+    recentShipments.forEach(s => {
+      let key = 'unassigned'
+      let name = 'Unassigned Staff'
+      let role = ''
+
+      if (s.recorded_by) {
+        key = s.recorded_by.id || s.recorded_by.email || s.recorded_by.first_name || 'recorded'
+        const fName = s.recorded_by.first_name || ''
+        const lName = s.recorded_by.last_name || ''
+        name = `${fName} ${lName}`.trim() || s.recorded_by.email || 'Staff'
+        role = s.recorded_by.role || ''
+      } else if (s.packager) {
+        key = `packager-${s.packager}`
+        name = s.packager
+        role = 'Packager'
+      }
+
+      if (!countsMap[key]) {
+        countsMap[key] = { name, role, count: 0 }
+      }
+      countsMap[key].count += 1
+    })
+
+    const leaderboard = Object.values(countsMap).sort((a, b) => b.count - a.count)
+    const totalToday = recentShipments.length
+
+    const isTodayCutoff = cutoff.toDateString() === now.toDateString()
+    const cutoffLabel = isTodayCutoff ? '8:00 AM Today' : '8:00 AM Yesterday'
+
+    return {
+      cutoff,
+      cutoffLabel,
+      totalToday,
+      leaderboard
+    }
   }, [shipmentsData])
 
   // Create Shipment Mutation
@@ -600,6 +732,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         invoice_number: payload.invoice_number || null,
         number_of_carton: parseInt(payload.number_of_carton) || 1,
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
+        dpd: dpd === 'YES',
+        packager: payload.packager || null,
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
         item_received: payload.item_received || null,
@@ -625,13 +759,20 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         try {
           const invRes = await apiClient.get<any>(`/invoices/?search=${encodeURIComponent(invNumber)}`)
           const items = invRes.data?.items || (Array.isArray(invRes.data) ? invRes.data : [])
-          const matched = items.find((i: any) => i.invoice_number === invNumber) || items[0]
+          let matched = items.find((i: any) => i.invoice_number === invNumber) || items[0]
+          if (!matched && res?.data) {
+            matched = shipmentToInvoice(res.data)
+          }
           if (matched) {
             setSelectedInvoiceForModal(matched)
             setIsInvoiceReceiptModalOpen(true)
           }
         } catch (err) {
           console.error("Error fetching invoice modal after shipment creation:", err)
+          if (res?.data) {
+            setSelectedInvoiceForModal(shipmentToInvoice(res.data))
+            setIsInvoiceReceiptModalOpen(true)
+          }
         }
       }
     },
@@ -679,6 +820,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       discount_percentage: '',
       invoice_number: '',
       number_of_carton: '1',
+      packager: '',
       partner_id: '',
       partner_name: '',
       item_received: '',
@@ -688,12 +830,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       tracking_id: '',
       value: '',
       note: '',
-      recorded_by_id: ''
+      recorded_by_id: meData?.id || ''
     })
     setAmountNgn('')
     setAmountGbp('')
     setHasPackaging('NO')
     setHasDoorstepDelivery('NO')
+    setDpd('NO')
     setActiveTab('shipment')
   }
 
@@ -960,9 +1103,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 <Truck className="h-2.5 w-2.5" /> Doorstep
               </span>
             )}
+            {info.row.original.dpd && (
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
+                DPD
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-zinc-500">
             Weight: <span className="text-zinc-300 font-medium">{info.row.original.weight_kg || 0} kg</span>
+            {info.row.original.packager && (
+              <span className="ml-2 text-zinc-400 font-medium">| Packager: {info.row.original.packager}</span>
+            )}
           </div>
         </div>
       )
@@ -1011,12 +1162,22 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           <button
             onClick={(e) => {
               e.stopPropagation()
-              handleViewShipmentInvoice(info.row.original)
+              handleViewShipmentInvoice(info.row.original, false)
             }}
             title="View Invoice"
             className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-emerald-400 rounded transition-colors cursor-pointer"
           >
             <FileText className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleViewShipmentInvoice(info.row.original, true)
+            }}
+            title="Download PDF"
+            className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-sky-400 rounded transition-colors cursor-pointer"
+          >
+            <Download className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => {
@@ -1455,6 +1616,77 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               </div>
             </div>
           </div>
+
+          {/* 24-HOUR STAFF SHIPMENT CREATION LEADERBOARD (Visible to Admins & Managers Only) */}
+          {(meData?.role === 'ADMIN' || meData?.role === 'MANAGER') && (
+            <div className="bg-black border border-yellow-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-yellow-500/20 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-400">
+                    <UserCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      Daily Staff Shipment Creation Tracker
+                      <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-yellow-400/10 text-yellow-400 border border-yellow-500/30">
+                        Resets 8:00 AM
+                      </span>
+                    </h3>
+                    <p className="text-xs text-white mt-0.5">
+                      Shipment creation count per staff or manager • <span className="text-yellow-300 font-bold">Resets daily at 8:00 AM</span> (Cycle started: <span className="text-emerald-400 font-semibold">{staffDailyMetrics.cutoffLabel}</span>)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-black px-3.5 py-1.5 rounded-xl border border-emerald-500/40 text-xs text-white self-start sm:self-auto font-mono shadow-inner">
+                  <Clock className="h-3.5 w-3.5 text-yellow-400 animate-pulse" />
+                  <span>Total Created Today: <strong className="text-emerald-400 text-sm font-black">{staffDailyMetrics.totalToday}</strong></span>
+                </div>
+              </div>
+
+              {staffDailyMetrics.leaderboard.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {staffDailyMetrics.leaderboard.map((item, idx) => (
+                    <div 
+                      key={idx} 
+                      className="bg-black border border-zinc-800 hover:border-yellow-400/60 rounded-xl p-3.5 flex items-center justify-between transition-all group shadow-md"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-full bg-yellow-400/10 border border-yellow-400/30 text-yellow-400 font-black text-xs flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
+                          {item.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'ST'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-white truncate" title={item.name}>
+                            {item.name}
+                          </div>
+                          {item.role && (
+                            <span className="text-[10px] uppercase font-bold text-yellow-400/90 block truncate">
+                              {item.role}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <span className="text-xl font-black text-emerald-400 block leading-tight font-mono">
+                          {item.count}
+                        </span>
+                        <span className="text-[10px] text-white font-medium">
+                          {item.count === 1 ? 'shipment' : 'shipments'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-black border border-dashed border-yellow-500/30 rounded-xl p-4 text-center">
+                  <p className="text-xs text-white">
+                    No shipments created yet since <span className="text-emerald-400 font-bold">{staffDailyMetrics.cutoffLabel}</span>. Counts update automatically in real-time as staff create shipments.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* FILTER TOOLBAR */}
           <div className="bg-zinc-950/40 border border-zinc-900 rounded-xl p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -1898,6 +2130,37 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
+                  {/* DPD (Yes/No Dropdown) & Packager (Manual Text Input) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Truck className="h-3.5 w-3.5 text-amber-400" /> DPD
+                      </label>
+                      <select
+                        value={dpd}
+                        onChange={(e) => setDpd(e.target.value as 'YES' | 'NO')}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-amber-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
+                      >
+                        <option value="NO" className="bg-zinc-950">No</option>
+                        <option value="YES" className="bg-zinc-950">Yes</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <UserIcon className="h-3.5 w-3.5 text-indigo-400" /> Packager
+                      </label>
+                      <input
+                        type="text"
+                        name="packager"
+                        value={formData.packager}
+                        onChange={handleInputChange}
+                        placeholder="Type packager name manually..."
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-medium"
+                      />
+                    </div>
+                  </div>
+
                   {(hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || (parseFloat(formData.weight_kg) || 0) > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
                     <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
                       <div className="text-xs text-zinc-300 space-y-1 pt-1">
@@ -2336,6 +2599,16 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-zinc-500">DPD:</span>
+                    <span className={selectedShipment.dpd ? "text-amber-400 font-bold" : "text-zinc-400"}>
+                      {selectedShipment.dpd ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">Packager:</span>
+                    <span className="text-zinc-200 font-medium">{selectedShipment.packager || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-zinc-500">Declared Value:</span>
                     <span className="text-zinc-300">{selectedShipment.currency} {selectedShipment.value}</span>
                   </div>
@@ -2556,20 +2829,20 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   </select>
                 </div>
 
-                {/* 8. Escalation To (Admins/Staff) */}
+                {/* 8. Escalation To (Admins/Managers) */}
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                    <UserCheck className="h-3.5 w-3.5 text-zinc-400" /> Escalation To (Admin / Staff)
+                    <UserCheck className="h-3.5 w-3.5 text-zinc-400" /> Escalation To (Admin / Manager)
                   </label>
                   <select
                     value={escalationFormData.escalation_to_id}
                     onChange={(e) => setEscalationFormData(prev => ({ ...prev, escalation_to_id: e.target.value }))}
                     className="w-full bg-zinc-900 border border-zinc-800 focus:border-red-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
                   >
-                    <option value="" className="bg-zinc-950">Select Admin/Staff Member</option>
-                    {usersData?.map(u => (
+                    <option value="" className="bg-zinc-950">Select Admin/Manager</option>
+                    {adminManagerUsers.map(u => (
                       <option key={u.id} value={u.id} className="bg-zinc-950">
-                        {u.first_name} {u.last_name} ({u.role || 'Staff'})
+                        {u.first_name} {u.last_name} ({u.role || 'Admin'})
                       </option>
                     ))}
                   </select>
@@ -2744,7 +3017,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[11px] text-zinc-400 font-semibold">Assign Admin</label>
+                    <label className="text-[11px] text-zinc-400 font-semibold">Assign Admin / Manager</label>
                     <select
                       value={selectedEscalation.escalation_to?.id || ''}
                       onChange={(e) => {
@@ -2756,7 +3029,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2 text-xs text-zinc-200 cursor-pointer"
                     >
                       <option value="">Unassigned</option>
-                      {usersData?.map(u => (
+                      {adminManagerUsers.map(u => (
                         <option key={u.id} value={u.id}>
                           {u.first_name} {u.last_name}
                         </option>
@@ -3151,6 +3424,37 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         <option value="PARTIALLY_PAID" className="bg-zinc-950">Partially Paid</option>
                         <option value="PAID" className="bg-zinc-950">Paid</option>
                       </select>
+                    </div>
+                  </div>
+
+                  {/* DPD (Yes/No Dropdown) & Packager (Manual Text Input) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Truck className="h-3.5 w-3.5 text-amber-400" /> DPD
+                      </label>
+                      <select
+                        value={dpd}
+                        onChange={(e) => setDpd(e.target.value as 'YES' | 'NO')}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-amber-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
+                      >
+                        <option value="NO" className="bg-zinc-950">No</option>
+                        <option value="YES" className="bg-zinc-950">Yes</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <UserIcon className="h-3.5 w-3.5 text-indigo-400" /> Packager
+                      </label>
+                      <input
+                        type="text"
+                        name="packager"
+                        value={formData.packager}
+                        onChange={handleInputChange}
+                        placeholder="Type packager name manually..."
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-medium"
+                      />
                     </div>
                   </div>
 
@@ -3621,7 +3925,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       <MintanaInvoiceReceiptModal
         invoice={selectedInvoiceForModal}
         isOpen={isInvoiceReceiptModalOpen}
-        onClose={() => setIsInvoiceReceiptModalOpen(false)}
+        autoPrint={autoPrintInvoiceModal}
+        onClose={() => {
+          setIsInvoiceReceiptModalOpen(false)
+          setAutoPrintInvoiceModal(false)
+        }}
       />
     </>
   )
