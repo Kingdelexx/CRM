@@ -413,7 +413,7 @@ export default function ContactsDirectory() {
       cell: (info: any) => (
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-full bg-indigo-600/20 border border-indigo-600/30 flex items-center justify-center text-indigo-400 font-bold text-xs uppercase">
-            {info.row.original.first_name[0]}{info.row.original.last_name[0]}
+            {(info.row.original.first_name?.[0] || '') + (info.row.original.last_name?.[0] || '')}
           </div>
           <div>
             <div className="font-semibold text-zinc-200">
@@ -483,7 +483,7 @@ export default function ContactsDirectory() {
         return (
           <div className="flex items-center gap-1.5 text-xs text-zinc-300">
             <div className="h-5 w-5 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-400 font-bold uppercase animate-fade">
-              {user.first_name[0]}{user.last_name[0]}
+              {(user.first_name?.[0] || '') + (user.last_name?.[0] || '')}
             </div>
             <span>{user.first_name} {user.last_name}</span>
           </div>

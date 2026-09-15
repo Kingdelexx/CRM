@@ -182,9 +182,10 @@ export default function Dashboard() {
     )
   }
 
-  const userInitials = currentUser
-    ? `${currentUser.first_name[0]}${currentUser.last_name[0]}`.toUpperCase()
-    : 'US'
+  const userInitials = (
+    (currentUser?.first_name?.[0] || '') +
+    (currentUser?.last_name?.[0] || '')
+  ).toUpperCase() || (currentUser?.email?.[0] || 'U').toUpperCase()
 
   const getBreadcrumbTitle = () => {
     switch (currentView) {

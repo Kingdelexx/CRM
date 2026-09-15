@@ -251,7 +251,7 @@ export default function ProjectsWorkspace() {
                   <div className="flex items-center gap-1.5 text-zinc-450 text-[11px]">
                     <UserIcon className="h-3.5 w-3.5" />
                     <span className="truncate max-w-[100px]">
-                      {proj.manager ? `${proj.manager.first_name} ${proj.manager.last_name[0]}.` : 'No manager'}
+                      {proj.manager ? `${proj.manager.first_name} ${proj.manager.last_name?.[0] || ''}.` : 'No manager'}
                     </span>
                   </div>
 
@@ -263,7 +263,7 @@ export default function ProjectsWorkspace() {
                           className="h-5.5 w-5.5 rounded-full bg-indigo-750 border border-zinc-900 flex items-center justify-center text-[10px] font-bold text-indigo-250 uppercase"
                           title={`${m.first_name} ${m.last_name}`}
                         >
-                          {m.first_name[0]}{m.last_name[0]}
+                          {(m.first_name?.[0] || '') + (m.last_name?.[0] || '')}
                         </div>
                       ))}
                       {proj.members.length > 3 && (
@@ -348,7 +348,7 @@ export default function ProjectsWorkspace() {
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2 p-2 bg-zinc-950/30 rounded-xl border border-zinc-900/50">
                     <div className="h-6 w-6 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold text-white uppercase">
-                      {selectedProject.manager ? selectedProject.manager.first_name[0] : 'U'}
+                      {selectedProject.manager ? selectedProject.manager.first_name?.[0] || 'U' : 'U'}
                     </div>
                     <div>
                       <span className="text-xs font-semibold text-zinc-300 block">
@@ -361,7 +361,7 @@ export default function ProjectsWorkspace() {
                   {selectedProject.members?.map((m, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-2 bg-zinc-950/10 rounded-xl border border-zinc-900/20">
                       <div className="h-6 w-6 rounded-full bg-zinc-805 flex items-center justify-center text-xs font-semibold text-zinc-400 uppercase border border-zinc-800">
-                        {m.first_name[0]}
+                        {m.first_name?.[0] || 'U'}
                       </div>
                       <div>
                         <span className="text-xs font-medium text-zinc-400 block">{m.first_name} {m.last_name}</span>

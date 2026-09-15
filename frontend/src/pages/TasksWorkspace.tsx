@@ -658,7 +658,7 @@ export default function TasksWorkspace() {
                               {task.assignee ? (
                                 <div className="flex items-center gap-2">
                                   <div className="h-6 w-6 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] font-bold text-zinc-350 flex items-center justify-center uppercase">
-                                    {(task.assignee.first_name[0] + task.assignee.last_name[0]).toUpperCase()}
+                                     {((task.assignee.first_name?.[0] || '') + (task.assignee.last_name?.[0] || '')).toUpperCase() || 'U'}
                                   </div>
                                   <span className="text-zinc-300 font-medium truncate">
                                     {task.assignee.first_name} {task.assignee.last_name}
@@ -798,7 +798,7 @@ export default function TasksWorkspace() {
                                       className="h-5 w-5 rounded-full bg-zinc-900 border border-zinc-800 text-[8px] font-bold text-zinc-300 flex items-center justify-center uppercase"
                                       title={`${task.assignee.first_name} ${task.assignee.last_name}`}
                                     >
-                                      {(task.assignee.first_name[0] + task.assignee.last_name[0]).toUpperCase()}
+                                       {((task.assignee.first_name?.[0] || '') + (task.assignee.last_name?.[0] || '')).toUpperCase() || 'U'}
                                     </div>
                                   ) : (
                                     <UserIcon className="h-4.5 w-4.5 text-zinc-650" />

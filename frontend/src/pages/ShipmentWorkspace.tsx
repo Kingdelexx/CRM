@@ -1653,7 +1653,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="h-9 w-9 rounded-full bg-yellow-400/10 border border-yellow-400/30 text-yellow-400 font-black text-xs flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                          {item.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'ST'}
+                          {(item.name || '').split(' ').filter(Boolean).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'ST'}
                         </div>
                         <div className="min-w-0">
                           <div className="text-xs font-bold text-white truncate" title={item.name}>

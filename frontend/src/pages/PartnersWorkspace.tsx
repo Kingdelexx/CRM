@@ -170,7 +170,7 @@ export default function PartnersWorkspace() {
         return (
           <div className="flex items-center gap-2 text-xs text-zinc-200">
             <div className="h-6 w-6 rounded-full bg-indigo-600/20 border border-indigo-600/30 flex items-center justify-center text-[10px] text-indigo-400 font-bold uppercase flex-shrink-0">
-              {user.first_name[0]}{user.last_name[0]}
+              {(user.first_name?.[0] || '') + (user.last_name?.[0] || '')}
             </div>
             <span className="truncate">{user.first_name} {user.last_name}</span>
           </div>
