@@ -1196,9 +1196,9 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                                   {act.performed_by && (
                                     <div className="text-[9px] text-zinc-550 font-semibold tracking-wide flex items-center gap-1">
                                       <div className="h-3.5 w-3.5 rounded-full bg-zinc-800/80 flex items-center justify-center font-bold text-[8px] uppercase">
-                                        {act.performed_by.first_name[0]}{act.performed_by.last_name[0]}
+                                        {(act.performed_by.first_name?.[0] || '') + (act.performed_by.last_name?.[0] || '') || 'U'}
                                       </div>
-                                      Logged by {act.performed_by.first_name} {act.performed_by.last_name}
+                                      Logged by {act.performed_by.first_name || ''} {act.performed_by.last_name || ''}
                                     </div>
                                   )}
                                 </div>

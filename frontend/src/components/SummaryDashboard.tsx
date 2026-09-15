@@ -769,7 +769,7 @@ export default function SummaryDashboard() {
                 return `${acc} C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${p.x} ${p.y}`
               }, '')
 
-              const areaPath = linePath
+              const areaPath = points.length > 0 && linePath
                 ? `${linePath} L ${points[points.length - 1].x} ${height - paddingY} L ${points[0].x} ${height - paddingY} Z`
                 : ''
 
