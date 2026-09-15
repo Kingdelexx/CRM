@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { Deal, Stage, Contact, Company } from '@/types/crm'
+import type { Deal, Stage, Contact, Company, User, Shipment, ShipmentEscalation, Invoice, Task, CSRReport } from '@/types/crm'
 import {
   DragDropContext,
   Droppable,
@@ -19,7 +19,17 @@ import {
   Calendar,
   X,
   User as UserIcon,
-  Building
+  Building,
+  Users,
+  Truck,
+  ShieldAlert,
+  Receipt,
+  CheckSquare,
+  Activity,
+  CheckCircle2,
+  Clock,
+  Sparkles,
+  ArrowUpRight
 } from 'lucide-react'
 import DetailDrawer from '@/components/DetailDrawer'
 
@@ -41,7 +51,19 @@ export default function DealsKanban() {
     probability: 20
   })
 
-  // 1. Fetch Stages
+  // 1. Fetch User Profile
+  const { data: me } = useQuery<User>({
+    queryKey: ['me-pipeline'],
+    queryFn: async () => {
+      const response = await apiClient.get<User>('/accounts/me')
+      return response.data
+    }
+  })
+
+  const isAdminOrManager = me?.role === 'ADMIN' || me?.role === 'MANAGER'
+  const currentUserId = me?.id
+
+  // 2. Fetch Stages & Deals
   const { data: stages = [], isLoading: loadingStages, isError: errorStages } = useQuery({
     queryKey: ['stages'],
     queryFn: async () => {
@@ -50,7 +72,6 @@ export default function DealsKanban() {
     }
   })
 
-  // 2. Fetch Deals
   const { data: dealsData, isLoading: loadingDeals, isError: errorDeals } = useQuery({
     queryKey: ['deals'],
     queryFn: async () => {
@@ -61,18 +82,15 @@ export default function DealsKanban() {
     }
   })
 
-  // 3. Fetch Contacts for Select Dropdown
-  const { data: contactsData } = useQuery({
-    queryKey: ['contacts-select'],
+  // 3. Fetch Contacts, Companies, Shipments, Escalations, Invoices, Tasks, CSR Reports
+  const { data: rawContacts = [] } = useQuery<Contact[]>({
+    queryKey: ['contacts-pipeline'],
     queryFn: async () => {
-      const response = await apiClient.get<{ items: Contact[] }>('/contacts/', {
-        params: { limit: 200 }
-      })
-      return response.data.items
+      const response = await apiClient.get<any>('/contacts/')
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
     }
   })
 
-  // 4. Fetch Companies for Select Dropdown
   const { data: companiesData } = useQuery({
     queryKey: ['companies-select'],
     queryFn: async () => {
@@ -83,10 +101,206 @@ export default function DealsKanban() {
     }
   })
 
-  // 5. Drag and Drop Mutation with Optimistic Updates
+  const { data: rawShipments = [] } = useQuery<Shipment[]>({
+    queryKey: ['shipments-pipeline'],
+    queryFn: async () => {
+      const response = await apiClient.get<any>('/shipments/')
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
+    }
+  })
+
+  const { data: rawEscalations = [] } = useQuery<ShipmentEscalation[]>({
+    queryKey: ['escalations-pipeline'],
+    queryFn: async () => {
+      const response = await apiClient.get<any>('/shipment-escalations/')
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
+    }
+  })
+
+  const { data: rawInvoices = [] } = useQuery<Invoice[]>({
+    queryKey: ['invoices-pipeline'],
+    queryFn: async () => {
+      const response = await apiClient.get<any>('/invoices/')
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
+    }
+  })
+
+  const { data: rawTasks = [] } = useQuery<Task[]>({
+    queryKey: ['tasks-pipeline'],
+    queryFn: async () => {
+      const response = await apiClient.get<any>('/tasks/')
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
+    }
+  })
+
+  const { data: rawReports = [] } = useQuery<CSRReport[]>({
+    queryKey: ['csr-reports-pipeline'],
+    queryFn: async () => {
+      const response = await apiClient.get<any>('/csr-reports/')
+      return Array.isArray(response.data) ? response.data : (response.data?.items || [])
+    }
+  })
+
+  // Role Scoping computations: Admins/Managers see all; Staff see only their own data
+  const scopedContacts = useMemo(() => {
+    if (isAdminOrManager) return rawContacts
+    return rawContacts.filter(c => c.assigned_to?.id === currentUserId || (c as any).created_by?.id === currentUserId)
+  }, [rawContacts, isAdminOrManager, currentUserId])
+
+  const scopedShipments = useMemo(() => {
+    if (isAdminOrManager) return rawShipments
+    return rawShipments.filter(s => s.recorded_by?.id === currentUserId || (s as any).created_by?.id === currentUserId)
+  }, [rawShipments, isAdminOrManager, currentUserId])
+
+  const scopedEscalations = useMemo(() => {
+    if (isAdminOrManager) return rawEscalations
+    return rawEscalations.filter(e => e.escalation_to?.id === currentUserId || e.created_by?.id === currentUserId)
+  }, [rawEscalations, isAdminOrManager, currentUserId])
+
+  const scopedInvoices = useMemo(() => {
+    if (isAdminOrManager) return rawInvoices
+    return rawInvoices.filter(i => (i as any).recorded_by?.id === currentUserId || (i as any).created_by?.id === currentUserId)
+  }, [rawInvoices, isAdminOrManager, currentUserId])
+
+  const scopedTasks = useMemo(() => {
+    if (isAdminOrManager) return rawTasks
+    return rawTasks.filter(t => t.assignee?.id === currentUserId || (t as any).created_by?.id === currentUserId)
+  }, [rawTasks, isAdminOrManager, currentUserId])
+
+  // Escalations breakdown: Pending vs Resolved (Resolved disappears after 30 days)
+  const { pendingEscalations, resolvedEscalations30Days } = useMemo(() => {
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const pending = scopedEscalations.filter(e => e.status === 'OPEN' || e.status === 'IN_PROGRESS')
+    const resolved = scopedEscalations.filter(e => {
+      if (e.status !== 'RESOLVED' && e.status !== 'CLOSED') return false
+      const resDateStr = e.resolution_date || e.date || e.created_at
+      if (!resDateStr) return true
+      return new Date(resDateStr) >= thirtyDaysAgo
+    })
+
+    return { pendingEscalations: pending, resolvedEscalations30Days: resolved }
+  }, [scopedEscalations])
+
+  // Invoices breakdown
+  const { paidInvoices, unpaidInvoices, paidAmount, unpaidAmount } = useMemo(() => {
+    const paid = scopedInvoices.filter(i => i.status === 'PAID')
+    const unpaid = scopedInvoices.filter(i => i.status !== 'PAID' && i.status !== 'CANCELLED')
+    const pAmt = paid.reduce((sum, i) => sum + (Number(i.amount_paid) || Number(i.total_ngn) || 0), 0)
+    const uAmt = unpaid.reduce((sum, i) => sum + (Number(i.total_ngn) || 0), 0)
+    return { paidInvoices: paid, unpaidInvoices: unpaid, paidAmount: pAmt, unpaidAmount: uAmt }
+  }, [scopedInvoices])
+
+  // Tasks breakdown
+  const { finishedTasks, unfinishedTasks } = useMemo(() => {
+    const finished = scopedTasks.filter(t => t.status === 'DONE')
+    const unfinished = scopedTasks.filter(t => t.status === 'TODO' || t.status === 'IN_PROGRESS')
+    return { finishedTasks: finished, unfinishedTasks: unfinished }
+  }, [scopedTasks])
+
+  // Today's Staff Activity Highlights phrase builder
+  const dailyActivityPhrases = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    const isToday = (dStr?: string) => dStr && dStr.startsWith(todayStr)
+
+    if (isAdminOrManager) {
+      const staffMap: Record<string, { name: string; shipments: number; reports: number; escalations: number; tasks: number }> = {}
+
+      const getStaffKey = (u?: User) => {
+        if (!u) return null
+        const key = u.id
+        const name = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email
+        if (!staffMap[key]) {
+          staffMap[key] = { name, shipments: 0, reports: 0, escalations: 0, tasks: 0 }
+        }
+        return key
+      }
+
+      rawShipments.forEach(s => {
+        if (isToday(s.shipment_date || s.date || s.created_at) && s.recorded_by) {
+          const k = getStaffKey(s.recorded_by)
+          if (k) staffMap[k].shipments += 1
+        }
+      })
+
+      rawReports.forEach(r => {
+        if (isToday(r.date || r.created_at) && r.staff) {
+          const k = getStaffKey(r.staff)
+          if (k) staffMap[k].reports += 1
+        }
+      })
+
+      rawEscalations.forEach(e => {
+        if (isToday(e.date || e.created_at) && e.created_by) {
+          const k = getStaffKey(e.created_by)
+          if (k) staffMap[k].escalations += 1
+        }
+      })
+
+      rawTasks.forEach(t => {
+        if (isToday(t.updated_at || t.due_date || t.created_at) && t.status === 'DONE' && t.assignee) {
+          const k = getStaffKey(t.assignee)
+          if (k) staffMap[k].tasks += 1
+        }
+      })
+
+      const phrases: string[] = []
+      Object.values(staffMap).forEach(st => {
+        const parts: string[] = []
+        if (st.reports > 0) parts.push(`${st.reports} report${st.reports > 1 ? 's' : ''}`)
+        if (st.shipments > 0) parts.push(`${st.shipments} shipment${st.shipments > 1 ? 's' : ''}`)
+        if (st.escalations > 0) parts.push(`${st.escalations} escalation${st.escalations > 1 ? 's' : ''}`)
+        if (st.tasks > 0) parts.push(`completed ${st.tasks} task${st.tasks > 1 ? 's' : ''}`)
+        if (parts.length > 0) {
+          phrases.push(`${st.name} created ${parts.join(', ')} today`)
+        }
+      })
+
+      return phrases.length > 0 ? phrases : ["No staff creation activity logged yet today."]
+    } else {
+      let myShipments = 0
+      let myReports = 0
+      let myTasks = 0
+      let myEscalations = 0
+
+      rawShipments.forEach(s => {
+        if (isToday(s.shipment_date || s.date || s.created_at) && (s.recorded_by?.id === currentUserId || (s as any).created_by?.id === currentUserId)) {
+          myShipments += 1
+        }
+      })
+
+      rawReports.forEach(r => {
+        if (isToday(r.date || r.created_at) && r.staff?.id === currentUserId) {
+          myReports += 1
+        }
+      })
+
+      rawTasks.forEach(t => {
+        if (isToday(t.updated_at || t.due_date || t.created_at) && t.status === 'DONE' && t.assignee?.id === currentUserId) {
+          myTasks += 1
+        }
+      })
+
+      rawEscalations.forEach(e => {
+        if (isToday(e.date || e.created_at) && (e.created_by?.id === currentUserId || e.escalation_to?.id === currentUserId)) {
+          myEscalations += 1
+        }
+      })
+
+      const parts: string[] = []
+      if (myReports > 0) parts.push(`${myReports} report${myReports > 1 ? 's' : ''}`)
+      if (myShipments > 0) parts.push(`${myShipments} shipment${myShipments > 1 ? 's' : ''}`)
+      if (myEscalations > 0) parts.push(`${myEscalations} escalation${myEscalations > 1 ? 's' : ''}`)
+      if (myTasks > 0) parts.push(`completed ${myTasks} task${myTasks > 1 ? 's' : ''}`)
+
+      return parts.length > 0 ? [`You created ${parts.join(', ')} today`] : ["You have no logged activity yet today."]
+    }
+  }, [isAdminOrManager, currentUserId, rawShipments, rawReports, rawEscalations, rawTasks])
+
+  // Drag and Drop Mutation
   const updateDealStageMutation = useMutation({
     mutationFn: async ({ dealId, stageId, originalDeal }: { dealId: string; stageId: string; originalDeal: Deal }) => {
-      // Put expects full DealCreateSchema fields: title, value, stage_id, contact_id, company_id, expected_close_date, probability, status
       const payload = {
         title: originalDeal.title,
         value: Number(originalDeal.value),
@@ -100,19 +314,12 @@ export default function DealsKanban() {
       }
       return apiClient.put(`/deals/${dealId}`, payload)
     },
-    // Optimistic UI updates
     onMutate: async ({ dealId, stageId }) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['deals'] })
-
-      // Snapshot previous deals state
       const previousDealsData = queryClient.getQueryData<{ items: Deal[]; count: number }>(['deals'])
-
-      // Find the target stage object details
       const targetStage = stages.find(s => s.id === stageId)
 
       if (previousDealsData && targetStage) {
-        // Optimistically map over deals and change the stage on target deal ID
         const nextItems = previousDealsData.items.map(d => {
           if (d.id === dealId) {
             return { ...d, stage: targetStage }
@@ -124,23 +331,20 @@ export default function DealsKanban() {
           items: nextItems
         })
       }
-
       return { previousDealsData }
     },
     onError: (err: any, _variables, context) => {
-      // Rollback to previous state
       if (context?.previousDealsData) {
         queryClient.setQueryData(['deals'], context.previousDealsData)
       }
       alert(`Error moving deal: ${err?.message || 'Unauthorized action'}`)
     },
     onSettled: () => {
-      // Refresh list from database to ensure correctness
       queryClient.invalidateQueries({ queryKey: ['deals'] })
     }
   })
 
-  // 6. Create Deal Mutation
+  // Create Deal Mutation
   const createDealMutation = useMutation({
     mutationFn: async (payload: typeof formData) => {
       const formatted = {
@@ -171,24 +375,13 @@ export default function DealsKanban() {
     }
   })
 
-  // DnD drag end handler
   const handleDragEnd = (result: DropResult) => {
     const { destination, source, draggableId } = result
-    
-    // Dropped outside list
     if (!destination) return
-    
-    // Dropped in same position
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source.index
-    ) {
-      return
-    }
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return
 
     const deals = dealsData?.items || []
     const deal = deals.find(d => d.id === draggableId)
-    
     if (deal) {
       updateDealStageMutation.mutate({
         dealId: deal.id,
@@ -198,12 +391,10 @@ export default function DealsKanban() {
     }
   }
 
-  // Handle Input Changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  // Submit Deal
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.title.trim() || !formData.value.trim() || !formData.stage_id) {
@@ -217,17 +408,13 @@ export default function DealsKanban() {
     createDealMutation.mutate(formData)
   }
 
-  // Group deals by stage
   const deals = dealsData?.items || []
   const dealsByStage = stages.reduce<Record<string, Deal[]>>((acc, stage) => {
     acc[stage.id] = deals.filter(deal => deal.stage.id === stage.id)
     return acc
   }, {})
 
-  // Compute aggregate dashboard stats from deals
   const totalPipelineValue = dealsData?.items.reduce((sum, d) => sum + Number(d.value), 0) || 0
-  const openDealsCount = dealsData?.items.filter(d => d.status === 'OPEN').length || 0
-  const closedWonValue = dealsData?.items.filter(d => d.status === 'WON').reduce((sum, d) => sum + Number(d.value), 0) || 0
 
   if (loadingStages || loadingDeals) {
     return (
@@ -249,41 +436,224 @@ export default function DealsKanban() {
 
   return (
     <div className="space-y-6">
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* 1. TOP PIPELINE METRICS ROW (Role-Scoped) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Contacts */}
         <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-5 rounded-xl flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="space-y-1">
-            <span className="text-xs text-slate-500 font-medium">Total Pipeline Value</span>
-            <h3 className="text-2xl font-bold text-[#1A202C]">${totalPipelineValue.toLocaleString()}</h3>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Contacts</span>
+            <h3 className="text-2xl font-black text-[#1A202C]">{scopedContacts.length}</h3>
+            <span className="text-[10px] text-slate-400 font-semibold block">
+              {isAdminOrManager ? 'Organization Total' : 'Assigned to You'}
+            </span>
           </div>
           <div className="h-10 w-10 bg-indigo-50 border border-indigo-200 flex items-center justify-center rounded-lg text-indigo-600 font-bold">
-            <DollarSign className="h-5 w-5" />
+            <Users className="h-5 w-5" />
           </div>
         </div>
 
+        {/* Total Shipments Created */}
         <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-5 rounded-xl flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="space-y-1">
-            <span className="text-xs text-slate-500 font-medium">Open Opportunities</span>
-            <h3 className="text-2xl font-bold text-[#1A202C]">{openDealsCount}</h3>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Shipments Created</span>
+            <h3 className="text-2xl font-black text-[#1A202C]">{scopedShipments.length}</h3>
+            <span className="text-[10px] text-slate-400 font-semibold block">
+              {isAdminOrManager ? 'All Staff Total' : 'Recorded by You'}
+            </span>
           </div>
-          <div className="h-10 w-10 bg-indigo-50 border border-indigo-200 flex items-center justify-center rounded-lg text-indigo-600 font-bold">
-            <Briefcase className="h-5 w-5" />
+          <div className="h-10 w-10 bg-sky-50 border border-sky-200 flex items-center justify-center rounded-lg text-sky-600 font-bold">
+            <Truck className="h-5 w-5" />
           </div>
         </div>
 
+        {/* Number of Escalations */}
         <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-5 rounded-xl flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="space-y-1">
-            <span className="text-xs text-slate-500 font-medium">Closed Won Revenue</span>
-            <h3 className="text-2xl font-bold text-emerald-600">${closedWonValue.toLocaleString()}</h3>
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Escalations</span>
+            <h3 className="text-2xl font-black text-red-600">{scopedEscalations.length}</h3>
+            <span className="text-[10px] text-slate-400 font-semibold block">
+              {pendingEscalations.length} Pending | {resolvedEscalations30Days.length} Resolved (30d)
+            </span>
+          </div>
+          <div className="h-10 w-10 bg-red-50 border border-red-200 flex items-center justify-center rounded-lg text-red-600 font-bold">
+            <ShieldAlert className="h-5 w-5" />
+          </div>
+        </div>
+
+        {/* Total Pipeline Value */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-5 rounded-xl flex items-center justify-between shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <div className="space-y-1">
+            <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Pipeline Value</span>
+            <h3 className="text-2xl font-black text-emerald-600">${totalPipelineValue.toLocaleString()}</h3>
+            <span className="text-[10px] text-slate-400 font-semibold block">Active Opportunities</span>
           </div>
           <div className="h-10 w-10 bg-emerald-50 border border-emerald-200 flex items-center justify-center rounded-lg text-emerald-600 font-bold">
-            <TrendingUp className="h-5 w-5" />
+            <DollarSign className="h-5 w-5" />
           </div>
         </div>
       </div>
 
-      {/* Kanban Layout Title & Add */}
-      <div className="flex justify-between items-center">
+      {/* 2. DAILY STAFF CREATION & ACTIVITY TRACKER CARD */}
+      <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 shadow-2xl relative overflow-hidden">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4.5 w-4.5 text-yellow-400" />
+            <h3 className="text-xs font-black text-white uppercase tracking-wider">
+              {isAdminOrManager ? 'Daily Staff Activity Highlights' : 'Your Daily Activity Highlights'}
+            </h3>
+          </div>
+          <span className="text-[10px] bg-zinc-900 border border-zinc-800 text-yellow-400 font-bold px-2 py-0.5 rounded">
+            Live Today
+          </span>
+        </div>
+
+        <div className="space-y-2">
+          {dailyActivityPhrases.map((phrase, idx) => (
+            <div key={idx} className="text-xs flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
+              <span className="text-white font-medium">
+                {phrase.split(/(created|completed|\d+ \w+)/g).map((part, pIdx) => {
+                  if (/^\d+/.test(part)) {
+                    return <strong key={pIdx} className="text-yellow-400 font-bold">{part}</strong>
+                  } else if (part === 'created' || part === 'completed') {
+                    return <span key={pIdx} className="text-emerald-400 font-semibold"> {part} </span>
+                  }
+                  return part
+                })}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. ESCALATIONS SEGMENT (Pending & Resolved - Disappears after 30 days) */}
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-6 space-y-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-4.5 w-4.5 text-red-600" />
+            <h3 className="text-sm font-bold text-[#1A202C] uppercase tracking-wider">Shipment Escalations Status</h3>
+          </div>
+          <span className="text-[10px] text-slate-500 font-semibold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+            Resolved items auto-clear after 30 days
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Pending Escalations */}
+          <div className="bg-red-50/40 border border-red-200/80 rounded-lg p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold text-red-700 uppercase tracking-wider">Pending Escalations</span>
+              <span className="bg-red-100 text-red-700 border border-red-300 px-2 py-0.5 rounded text-xs font-black">
+                {pendingEscalations.length}
+              </span>
+            </div>
+            <div className="space-y-2 max-h-44 overflow-y-auto">
+              {pendingEscalations.length === 0 ? (
+                <div className="text-xs text-slate-400 italic py-2">No pending escalations.</div>
+              ) : (
+                pendingEscalations.map(esc => (
+                  <div key={esc.id} className="bg-white p-2.5 rounded border border-red-200 text-xs space-y-1">
+                    <div className="flex justify-between font-bold text-[#1A202C]">
+                      <span>{esc.customer_name || 'Valued Client'}</span>
+                      <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase">{esc.priority}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 line-clamp-1">{esc.complaint_summary}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Resolved Escalations (Last 30 Days) */}
+          <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-lg p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Resolved Escalations (Last 30 Days)</span>
+              <span className="bg-emerald-100 text-emerald-700 border border-emerald-300 px-2 py-0.5 rounded text-xs font-black">
+                {resolvedEscalations30Days.length}
+              </span>
+            </div>
+            <div className="space-y-2 max-h-44 overflow-y-auto">
+              {resolvedEscalations30Days.length === 0 ? (
+                <div className="text-xs text-slate-400 italic py-2">No resolved escalations in the last 30 days.</div>
+              ) : (
+                resolvedEscalations30Days.map(esc => (
+                  <div key={esc.id} className="bg-white p-2.5 rounded border border-emerald-200 text-xs space-y-1">
+                    <div className="flex justify-between font-bold text-[#1A202C]">
+                      <span>{esc.customer_name || 'Valued Client'}</span>
+                      <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase">Resolved</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 line-clamp-1">{esc.resolution || esc.complaint_summary}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. INVOICES BREAKDOWN & TASKS STATUS GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Invoices Breakdown */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-6 space-y-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
+            <div className="flex items-center gap-2">
+              <Receipt className="h-4.5 w-4.5 text-sky-600" />
+              <h3 className="text-sm font-bold text-[#1A202C] uppercase tracking-wider">Invoices Breakdown</h3>
+            </div>
+            <span className="text-[10px] text-slate-400 font-semibold">{scopedInvoices.length} Total Invoices</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Paid Invoices */}
+            <div className="bg-emerald-50/50 border border-emerald-200 p-4 rounded-xl text-center">
+              <span className="text-xs font-bold text-emerald-700 uppercase block">Paid Invoices</span>
+              <span className="text-2xl font-black text-emerald-700 mt-1 block">{paidInvoices.length}</span>
+              <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">
+                ${paidAmount.toLocaleString()} settled
+              </span>
+            </div>
+
+            {/* Unpaid / Pending Invoices */}
+            <div className="bg-amber-50/50 border border-amber-200 p-4 rounded-xl text-center">
+              <span className="text-xs font-bold text-amber-700 uppercase block">Unpaid / Pending Invoices</span>
+              <span className="text-2xl font-black text-amber-700 mt-1 block">{unpaidInvoices.length}</span>
+              <span className="text-[10px] text-amber-600 font-semibold block mt-0.5">
+                ${unpaidAmount.toLocaleString()} outstanding
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tasks Status Breakdown */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-6 space-y-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="h-4.5 w-4.5 text-indigo-600" />
+              <h3 className="text-sm font-bold text-[#1A202C] uppercase tracking-wider">Tasks Status Checklist</h3>
+            </div>
+            <span className="text-[10px] text-slate-400 font-semibold">{scopedTasks.length} Total Tasks</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Finished Tasks */}
+            <div className="bg-indigo-50/50 border border-indigo-200 p-4 rounded-xl text-center">
+              <span className="text-xs font-bold text-indigo-700 uppercase block">Finished Tasks</span>
+              <span className="text-2xl font-black text-indigo-700 mt-1 block">{finishedTasks.length}</span>
+              <span className="text-[10px] text-indigo-600 font-semibold block mt-0.5">✓ Completed</span>
+            </div>
+
+            {/* Unfinished Tasks */}
+            <div className="bg-slate-100/70 border border-slate-200 p-4 rounded-xl text-center">
+              <span className="text-xs font-bold text-slate-700 uppercase block">Unfinished Tasks</span>
+              <span className="text-2xl font-black text-slate-700 mt-1 block">{unfinishedTasks.length}</span>
+              <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">In Progress / Pending</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. KANBAN LAYOUT TITLE & ADD DEAL BUTTON */}
+      <div className="flex justify-between items-center pt-4">
         <div>
           <h2 className="text-lg font-bold text-[#1A202C] flex items-center gap-2">
             <Layers className="h-5 w-5 text-indigo-600" /> Pipeline Deal Board
@@ -511,7 +881,7 @@ export default function DealsKanban() {
                     className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-650 focus:outline-none rounded-lg p-2 text-sm text-zinc-250 cursor-pointer"
                   >
                     <option value="">None (Independent)</option>
-                    {contactsData?.map((cnt) => (
+                    {scopedContacts.map((cnt) => (
                       <option key={cnt.id} value={cnt.id}>
                         {cnt.first_name} {cnt.last_name}
                       </option>

@@ -71,13 +71,13 @@ type DashboardView =
   | 'invoices'
 
 const sidebarNavItems: { id: DashboardView; label: string; icon: React.ReactNode }[] = [
+  { id: 'pipeline', label: ' Dashboard', icon: <Layers className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
   { id: 'summary', label: 'Summary Analytics', icon: <TrendingUp className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
   { id: 'leads', label: 'Leads', icon: <Target className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
   { id: 'partners', label: 'Partners', icon: <Handshake className="h-4.5 w-4.5 flex-shrink-0 text-emerald-600" /> },
   { id: 'shipments', label: 'Shipments', icon: <Truck className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
   { id: 'escalations', label: 'Escalations', icon: <ShieldAlert className="h-4.5 w-4.5 flex-shrink-0 text-red-600" /> },
   { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="h-4.5 w-4.5 flex-shrink-0 text-amber-600" /> },
-  { id: 'pipeline', label: 'Pipeline Dashboard', icon: <Layers className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
   { id: 'contacts', label: 'Contacts', icon: <Users className="h-4.5 w-4.5 flex-shrink-0 text-blue-600" /> },
   { id: 'invoices', label: 'Invoices & Receipts', icon: <ReceiptIcon className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
   { id: 'calendar', label: 'CRM Calendar', icon: <CalendarIcon className="h-4.5 w-4.5 flex-shrink-0 text-purple-600" /> },
@@ -93,7 +93,7 @@ export default function Dashboard() {
   // App States
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [currentView, setCurrentView] = useState<DashboardView>('summary')
+  const [currentView, setCurrentView] = useState<DashboardView>('pipeline')
   
   // UI States
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
