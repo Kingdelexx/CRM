@@ -550,7 +550,7 @@ export default function DetailDrawer({ type, id, isOpen, onClose, onUpdate }: De
                   {type === 'deal' ? (
                     <div className="relative">
                       <select
-                        value={(itemData as Deal).stage.id}
+                        value={(itemData as Deal).stage?.id || ''}
                         onChange={(e) => updateStageMutation.mutate(e.target.value)}
                         className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 rounded-md p-1.5 focus:border-indigo-650 cursor-pointer appearance-none pr-8"
                       >

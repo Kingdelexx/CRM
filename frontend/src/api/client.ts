@@ -37,10 +37,17 @@ apiClient.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token')
       if (refreshToken) {
         try {
-          // Request new access token using refresh token
-          const refreshResponse = await axios.post(`${API_BASE}/api/token/refresh`, {
-            refresh: refreshToken
-          })
+          // Request new access token using refresh token (try with and without trailing slash)
+          let refreshResponse
+          try {
+            refreshResponse = await axios.post(`${API_BASE}/api/token/refresh/`, {
+              refresh: refreshToken
+            })
+          } catch {
+            refreshResponse = await axios.post(`${API_BASE}/api/token/refresh`, {
+              refresh: refreshToken
+            })
+          }
           
           const newAccessToken = refreshResponse.data.access
           localStorage.setItem('access_token', newAccessToken)

@@ -410,11 +410,11 @@ export default function DealsKanban() {
 
   const deals = dealsData?.items || []
   const dealsByStage = stages.reduce<Record<string, Deal[]>>((acc, stage) => {
-    acc[stage.id] = deals.filter(deal => deal.stage.id === stage.id)
+    acc[stage.id] = deals.filter(deal => deal?.stage?.id === stage.id)
     return acc
   }, {})
 
-  const totalPipelineValue = dealsData?.items.reduce((sum, d) => sum + Number(d.value), 0) || 0
+  const totalPipelineValue = dealsData?.items?.reduce((sum, d) => sum + Number(d?.value || 0), 0) || 0
 
   if (loadingStages || loadingDeals) {
     return (
@@ -759,7 +759,7 @@ export default function DealsKanban() {
 
                               {/* Association details */}
                               <div className="mt-2.5 space-y-1 block">
-                                {deal.company && (
+                                {deal.company?.name && (
                                   <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
                                     <Building className="h-3 w-3 text-slate-400" />
                                     <span className="line-clamp-1">{deal.company.name}</span>
@@ -768,7 +768,7 @@ export default function DealsKanban() {
                                 {deal.contact && (
                                   <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
                                     <UserIcon className="h-3 w-3 text-slate-400" />
-                                    <span>{deal.contact.first_name} {deal.contact.last_name}</span>
+                                    <span>{(deal.contact.first_name || '') + ' ' + (deal.contact.last_name || '')}</span>
                                   </div>
                                 )}
                                 {deal.expected_close_date && (
