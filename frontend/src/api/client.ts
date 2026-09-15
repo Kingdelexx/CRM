@@ -26,7 +26,17 @@ apiClient.interceptors.request.use(
 
 // Response Interceptor: Automatically Refresh Token on Expiry
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Detect if API returned HTML fallback page (e.g. from static host rewrite)
+    if (typeof response.data === 'string' && response.data.trim().toLowerCase().startsWith('<!doctype')) {
+      return Promise.reject({
+        message: 'API returned HTML instead of JSON. Ensure VITE_API_BASE_URL points to the backend server.',
+        status: 502,
+        response,
+      })
+    }
+    return response
+  },
   async (error) => {
     const originalRequest = error.config
     
