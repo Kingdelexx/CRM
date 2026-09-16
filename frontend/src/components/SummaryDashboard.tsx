@@ -90,16 +90,21 @@ export default function SummaryDashboard() {
   const currentYear = now.getFullYear()
 
   // Chart data calculations
-  const stageData = stages.map(stage => {
-    const stageDeals = deals.filter(d => d.stage?.id === stage.id && d.status === 'OPEN')
-    const value = stageDeals.reduce((sum, d) => sum + Number(d.value), 0)
-    return {
-      name: stage.name,
-      count: stageDeals.length,
-      value,
-      winProbability: stage.win_probability
-    }
-  })
+  const stageData = stages
+    .filter(stage => {
+      const lowerName = (stage.name || '').toLowerCase()
+      return !lowerName.includes('proposal') && !lowerName.includes('demo') && !lowerName.includes('negotiation')
+    })
+    .map(stage => {
+      const stageDeals = deals.filter(d => d.stage?.id === stage.id && d.status === 'OPEN')
+      const value = stageDeals.reduce((sum, d) => sum + Number(d.value), 0)
+      return {
+        name: stage.name,
+        count: stageDeals.length,
+        value,
+        winProbability: stage.win_probability
+      }
+    })
 
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
   const monthlyData = monthNames.map((name, idx) => {

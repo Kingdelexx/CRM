@@ -42,7 +42,8 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
   const receiverAddress = activeInvoice?.receiver_address || 'N/A';
   const totalValueItems = activeInvoice?.total_value_items || 0;
   const expectedParcelNo = activeInvoice?.expected_parcel_no || 'N/A';
-  const parcelHandler = activeInvoice?.parcel_handler || 'Mintana Express';
+  const rawParcelHandler = activeInvoice?.parcel_handler || '';
+  const parcelHandler = rawParcelHandler.replace(/^Mintana Express\s*\(?/i, '').replace(/\)$/, '').trim();
 
   const items = activeInvoice?.items || [];
   const services = activeInvoice?.services || [

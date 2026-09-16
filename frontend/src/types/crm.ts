@@ -20,6 +20,7 @@ export interface Organization extends BaseEntity {
   parcel_rate?: number;
   doorstep_rate?: number;
   per_kg_price?: number;
+  partner_per_kg_price?: number;
 }
 
 export interface CustomRole extends BaseEntity {

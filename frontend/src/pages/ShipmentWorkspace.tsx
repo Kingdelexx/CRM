@@ -109,7 +109,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       receiver_address: shipment.receiver_address || shipment.sender_address || 'N/A',
       total_value_items: Number(shipment.value) || 0,
       expected_parcel_no: shipment.tracking_id || shipment.invoice_number || 'N/A',
-      parcel_handler: shipment.packager ? `Mintana Express (${shipment.packager})` : 'Mintana Express',
+      parcel_handler: shipment.recorded_by
+        ? ([shipment.recorded_by.first_name, shipment.recorded_by.last_name].filter(Boolean).join(' ') || shipment.recorded_by.email || '')
+        : (shipment.packager || ''),
       items: [
         {
           dos: shipment.shipment_date || shipment.date || new Date().toISOString().split('T')[0],
@@ -205,10 +207,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       return response.data
     }
   })
-  const orgExchangeRate = meData?.organization?.gbp_to_ngn_rate || 2000
-  const orgParcelRate = meData?.organization?.parcel_rate || 0
-  const orgDoorstepRate = meData?.organization?.doorstep_rate || 0
-  const orgPerKgPrice = meData?.organization?.per_kg_price || 0
+  const orgExchangeRate = Number(meData?.organization?.gbp_to_ngn_rate) || 2000
+  const orgParcelRate = Number(meData?.organization?.parcel_rate) || 0
+  const orgDoorstepRate = Number(meData?.organization?.doorstep_rate) || 0
+  const orgPerKgPrice = Number(meData?.organization?.per_kg_price) || 0
+  const orgPartnerPerKgPrice = Number(meData?.organization?.partner_per_kg_price) || 0
 
   // Set default "Recorded By (Staff)" to current logged-in account owner
   useEffect(() => {
@@ -229,7 +232,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     parcelCountStr: string,
     currentHasDoorstep: 'YES' | 'NO',
     weightKgStr?: string,
-    discountStr?: string
+    discountStr?: string,
+    partnerIdOverride?: string,
+    partnerNameOverride?: string
   ) => {
     const numParcels = parseInt(parcelCountStr) || 0
     const parcelFee = currentHasPackaging === 'YES' ? (numParcels * orgParcelRate) : 0
@@ -241,8 +246,18 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
 
     const weightKg = parseFloat(weightKgStr !== undefined ? weightKgStr : formData.weight_kg) || 0
-    const weightFee = weightKg * orgPerKgPrice * orgExchangeRate
 
+    // Determine partner pricing
+    const pId = partnerIdOverride !== undefined ? partnerIdOverride : formData.partner_id
+    const pName = partnerNameOverride !== undefined ? partnerNameOverride : formData.partner_name
+    const isPartner = Boolean((pId && pId.trim() !== '') || (pName && pName.trim() !== ''))
+
+    let effectivePerKgPrice = orgPerKgPrice
+    if (isPartner && orgPartnerPerKgPrice > 0) {
+      effectivePerKgPrice = orgPartnerPerKgPrice
+    }
+
+    const weightFee = weightKg * effectivePerKgPrice * orgExchangeRate
     const subtotalNgn = parcelFee + doorstepFee + weightFee
 
     const discountPct = parseFloat(discountStr !== undefined ? discountStr : formData.discount_percentage) || 0
@@ -847,6 +862,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, value)
     } else if (name === 'discount_percentage') {
       recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, value)
+    } else if (name === 'partner_name') {
+      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, undefined, value)
     }
   }
 
@@ -916,8 +933,10 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         partner_id: partnerId,
         partner_name: fullName
       }))
+      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, partnerId, fullName)
     } else {
       setFormData(prev => ({ ...prev, partner_id: '', partner_name: '' }))
+      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, '', '')
     }
   }
 
@@ -2161,47 +2180,53 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {(hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || (parseFloat(formData.weight_kg) || 0) > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
-                    <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
-                      <div className="text-xs text-zinc-300 space-y-1 pt-1">
-                        {hasPackaging === 'YES' && orgParcelRate > 0 && (
-                          <div className="flex justify-between text-purple-400 font-medium">
-                            <span>Packaging Fee ({(parseInt(formData.number_of_carton) || 0)} × ₦{orgParcelRate.toLocaleString()}):</span>
-                            <span>₦{((parseInt(formData.number_of_carton) || 0) * orgParcelRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  {(() => {
+                    const isPartner = Boolean((formData.partner_id && formData.partner_id !== '') || (formData.partner_name && formData.partner_name.trim() !== ''))
+                    const currentPerKgRate = (isPartner && orgPartnerPerKgPrice > 0) ? orgPartnerPerKgPrice : orgPerKgPrice
+                    const weightVal = parseFloat(formData.weight_kg) || 0
+                    const weightFeeVal = weightVal * currentPerKgRate * orgExchangeRate
+                    const packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
+                    const doorstepFeeVal = hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0
+                    const subtotalVal = packagingFeeVal + doorstepFeeVal + weightFeeVal
+                    const discountVal = (subtotalVal * (parseFloat(formData.discount_percentage) || 0)) / 100
+
+                    return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
+                      <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
+                        <div className="text-xs text-zinc-300 space-y-1 pt-1">
+                          {hasPackaging === 'YES' && orgParcelRate > 0 && (
+                            <div className="flex justify-between text-purple-400 font-medium">
+                              <span>Packaging Fee ({(parseInt(formData.number_of_carton) || 0)} × ₦{orgParcelRate.toLocaleString()}):</span>
+                              <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {hasDoorstepDelivery === 'YES' && orgDoorstepRate > 0 && (
+                            <div className="flex justify-between text-sky-400 font-medium">
+                              <span>Doorstep Delivery Fee ({(parseInt(formData.number_of_carton) || 1)} parcel(s) × £{orgDoorstepRate.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                              <span>₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {weightVal > 0 && currentPerKgRate > 0 && (
+                            <div className="flex justify-between text-emerald-400 font-medium">
+                              <span>
+                                Weight Fee ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {isPartner && orgPartnerPerKgPrice > 0 ? '(Partner Rate)' : ''} @ ₦{orgExchangeRate.toLocaleString()}/£):
+                              </span>
+                              <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {(parseFloat(formData.discount_percentage) || 0) > 0 && (
+                            <div className="flex justify-between text-rose-400 font-medium border-t border-zinc-800/80 pt-1">
+                              <span>Discount ({formData.discount_percentage}%):</span>
+                              <span>-₦{discountVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between text-amber-300 font-bold pt-1 border-t border-zinc-800 text-xs uppercase tracking-wider">
+                            <span>Total Calculation:</span>
+                            <span>₦{amountNgn} NGN</span>
                           </div>
-                        )}
-                        {hasDoorstepDelivery === 'YES' && orgDoorstepRate > 0 && (
-                          <div className="flex justify-between text-sky-400 font-medium">
-                            <span>Doorstep Delivery Fee ({(parseInt(formData.number_of_carton) || 1)} parcel(s) × £{orgDoorstepRate.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
-                            <span>₦{((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          </div>
-                        )}
-                        {(parseFloat(formData.weight_kg) || 0) > 0 && orgPerKgPrice > 0 && (
-                          <div className="flex justify-between text-emerald-400 font-medium">
-                            <span>Weight Fee ({formData.weight_kg} kg × £{orgPerKgPrice.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
-                            <span>₦{((parseFloat(formData.weight_kg) || 0) * orgPerKgPrice * orgExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          </div>
-                        )}
-                        {(parseFloat(formData.discount_percentage) || 0) > 0 && (
-                          <div className="flex justify-between text-rose-400 font-medium border-t border-zinc-800/80 pt-1">
-                            <span>Discount ({formData.discount_percentage}%):</span>
-                            <span>
-                              -₦{(
-                                (((hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0) +
-                                  (hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0) +
-                                  ((parseFloat(formData.weight_kg) || 0) * orgPerKgPrice * orgExchangeRate)) *
-                                  (parseFloat(formData.discount_percentage) || 0)) / 100
-                              ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between text-amber-300 font-bold pt-1 border-t border-zinc-800 text-xs uppercase tracking-wider">
-                          <span>Total Calculation:</span>
-                          <span>₦{amountNgn} NGN</span>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">

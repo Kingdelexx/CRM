@@ -536,15 +536,12 @@ export default function ContactsDirectory() {
       setFormError('First name and last name are required.')
       return
     }
-    if (!formData.email.trim()) {
-      setFormError('Email is required.')
-      return
-    }
-    // Simple email regex validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.email)) {
-      setFormError('Please enter a valid email address.')
-      return
+    if (formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email.trim())) {
+        setFormError('Please enter a valid email address.')
+        return
+      }
     }
     createContactMutation.mutate(formData)
   }
@@ -858,14 +855,13 @@ export default function ContactsDirectory() {
               {/* Email & Phone */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs text-zinc-400 font-semibold">Email *</label>
+                  <label className="text-xs text-zinc-400 font-semibold">Email</label>
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleInputChange}
                     placeholder="wile@acme.com"
-                    required
                     className="w-full bg-zinc-905 border border-zinc-800 focus:border-indigo-650 focus:outline-none rounded-lg p-2 text-sm text-zinc-250 placeholder-zinc-650"
                   />
                 </div>

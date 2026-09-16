@@ -307,7 +307,7 @@ def shipment_post_save(sender, instance, created, **kwargs):
             'receiver_address': r_address,
             'total_value_items': instance.value or 0.00,
             'expected_parcel_no': str(instance.number_of_carton) if instance.number_of_carton else "1",
-            'parcel_handler': instance.partner_name or "Mintana Express",
+            'parcel_handler': f"{instance.recorded_by.first_name} {instance.recorded_by.last_name}".strip() or instance.recorded_by.email if instance.recorded_by else (instance.packager or instance.partner_name or ""),
             'items': items,
             'services': services,
             'total_ngn': total_ngn,

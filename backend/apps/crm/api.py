@@ -2431,6 +2431,16 @@ def sync_shipment_invoice(shipment):
     inv_status = Invoice.PAID if shipment.payment_status == 'PAID' else Invoice.DRAFT
     issue_date = shipment.shipment_date or shipment.date or timezone.localdate()
 
+    recorded_by_name = ""
+    if shipment.recorded_by:
+        recorded_by_name = f"{shipment.recorded_by.first_name or ''} {shipment.recorded_by.last_name or ''}".strip() or shipment.recorded_by.email
+    elif shipment.packager:
+        recorded_by_name = shipment.packager
+    elif shipment.partner_name:
+        recorded_by_name = shipment.partner_name
+
+    parcel_handler_val = recorded_by_name or ""
+
     inv, created = Invoice.objects.get_or_create(
         organization=shipment.organization,
         invoice_number=shipment.invoice_number,
@@ -2442,7 +2452,7 @@ def sync_shipment_invoice(shipment):
             'receiver_address': rec_addr,
             'total_value_items': shipment.value or 0,
             'expected_parcel_no': shipment.tracking_id or shipment.invoice_number,
-            'parcel_handler': f"Mintana Express ({shipment.packager})" if shipment.packager else "Mintana Express",
+            'parcel_handler': parcel_handler_val,
             'items': items,
             'services': services,
             'total_ngn': round(total_ngn, 2),
@@ -2463,7 +2473,7 @@ def sync_shipment_invoice(shipment):
         inv.receiver_address = rec_addr
         inv.total_value_items = shipment.value or 0
         inv.expected_parcel_no = shipment.tracking_id or shipment.invoice_number
-        inv.parcel_handler = f"Mintana Express ({shipment.packager})" if shipment.packager else "Mintana Express"
+        inv.parcel_handler = parcel_handler_val
         inv.items = items
         inv.services = services
         inv.total_ngn = round(total_ngn, 2)

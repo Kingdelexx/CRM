@@ -26,6 +26,7 @@ class Organization(TimeStampedModel):
     parcel_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, null=True, blank=True)
     doorstep_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, null=True, blank=True)
     per_kg_price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, null=True, blank=True)
+    partner_per_kg_price = models.DecimalField(max_digits=12, decimal_places=2, default=0.00, null=True, blank=True)
 
 
     def __str__(self):

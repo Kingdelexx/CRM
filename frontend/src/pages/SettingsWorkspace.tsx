@@ -22,7 +22,9 @@ import {
   Save,
   Grid,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 
 export default function SettingsWorkspace() {
@@ -154,6 +156,8 @@ export default function SettingsWorkspace() {
   // Selected User for configuration
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [editUserPassword, setEditUserPassword] = useState('')
+  const [showInvitePassword, setShowInvitePassword] = useState(true)
+  const [showEditPassword, setShowEditPassword] = useState(false)
   const [inviteForm, setInviteForm] = useState({
     email: '',
     password: '',
@@ -189,7 +193,8 @@ export default function SettingsWorkspace() {
     gbp_to_ngn_rate: 2000.00,
     parcel_rate: 0.00,
     doorstep_rate: 0.00,
-    per_kg_price: 0.00
+    per_kg_price: 0.00,
+    partner_per_kg_price: 0.00
   })
 
   // Populate Org form when me is loaded
@@ -208,7 +213,8 @@ export default function SettingsWorkspace() {
         gbp_to_ngn_rate: org.gbp_to_ngn_rate ?? 2000.00,
         parcel_rate: org.parcel_rate ?? 0.00,
         doorstep_rate: org.doorstep_rate ?? 0.00,
-        per_kg_price: org.per_kg_price ?? 0.00
+        per_kg_price: org.per_kg_price ?? 0.00,
+        partner_per_kg_price: org.partner_per_kg_price ?? 0.00
       })
     }
   }, [me])
@@ -470,7 +476,7 @@ export default function SettingsWorkspace() {
         {activeTab === 'general' && (
           <div className="space-y-6">
             <div className="border-b border-zinc-900 pb-3">
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <h2 className="text-sm font-extrabold text-black uppercase tracking-wider flex items-center gap-2">
                 <Settings className="h-4.5 w-4.5 text-indigo-400" /> Organization Configurations
               </h2>
               <span className="text-[11px] text-zinc-500 italic">Manage company parameters, currency models, and branding values.</span>
@@ -581,6 +587,19 @@ export default function SettingsWorkspace() {
                     onChange={(e) => setOrgForm(prev => ({ ...prev, per_kg_price: parseFloat(e.target.value) || 0 }))}
                     placeholder="0.00"
                     className="w-full bg-zinc-900 border border-purple-500/40 rounded p-2 text-xs text-purple-300 font-bold focus:outline-none focus:border-purple-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-pink-400 font-bold uppercase">Default Per KG Price for Partners (£ GBP)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={!isUserAdmin}
+                    value={orgForm.partner_per_kg_price}
+                    onChange={(e) => setOrgForm(prev => ({ ...prev, partner_per_kg_price: parseFloat(e.target.value) || 0 }))}
+                    placeholder="0.00"
+                    className="w-full bg-zinc-900 border border-pink-500/40 rounded p-2 text-xs text-pink-300 font-bold focus:outline-none focus:border-pink-400"
                   />
                 </div>
 
@@ -969,16 +988,36 @@ export default function SettingsWorkspace() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-zinc-400 font-bold uppercase">Set Password *</label>
-                      <input
-                        type="password"
-                        required
-                        minLength={6}
-                        placeholder="Min 6 characters"
-                        value={inviteForm.password}
-                        onChange={(e) => setInviteForm(prev => ({ ...prev, password: e.target.value }))}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
-                      />
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase">Set Password *</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowInvitePassword(!showInvitePassword)}
+                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          {showInvitePassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                          <span>{showInvitePassword ? 'Hide' : 'Show'}</span>
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type={showInvitePassword ? 'text' : 'password'}
+                          required
+                          minLength={6}
+                          placeholder="Min 6 characters"
+                          value={inviteForm.password}
+                          onChange={(e) => setInviteForm(prev => ({ ...prev, password: e.target.value }))}
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 pr-8 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowInvitePassword(!showInvitePassword)}
+                          className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                          title={showInvitePassword ? 'Hide password' : 'Show password'}
+                        >
+                          {showInvitePassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -1574,14 +1613,34 @@ export default function SettingsWorkspace() {
 
               {/* Reset Password */}
               <div className="space-y-1 border-t border-zinc-900 pt-3">
-                <label className="text-[10px] text-zinc-500 font-bold uppercase">Reset Password (Optional)</label>
-                <input
-                  type="password"
-                  placeholder="Enter new password to reset"
-                  value={editUserPassword}
-                  onChange={(e) => setEditUserPassword(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-850 rounded p-2 text-xs text-zinc-250 focus:outline-none placeholder:text-zinc-600"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] text-zinc-500 font-bold uppercase">Reset Password (Optional)</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(!showEditPassword)}
+                    className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    {showEditPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    <span>{showEditPassword ? 'Hide' : 'Show'}</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showEditPassword ? 'text' : 'password'}
+                    placeholder="Enter new password to reset"
+                    value={editUserPassword}
+                    onChange={(e) => setEditUserPassword(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-850 rounded p-2 pr-8 text-xs text-zinc-250 focus:outline-none placeholder:text-zinc-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(!showEditPassword)}
+                    className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                    title={showEditPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showEditPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </div>
 
               {/* Toggle isActive button */}

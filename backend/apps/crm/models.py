@@ -63,7 +63,7 @@ class Contact(TimeStampedModel):
     )
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
-    email = models.EmailField(db_index=True)
+    email = models.EmailField(db_index=True, null=True, blank=True)
     phone = models.CharField(max_length=20, null=True, blank=True)
     job_title = models.CharField(max_length=150, null=True, blank=True)
     status = models.CharField(max_length=100, choices=STATUS_CHOICES, default=LEAD, db_index=True)

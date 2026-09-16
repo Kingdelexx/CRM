@@ -18,6 +18,7 @@ class OrganizationSchema(BaseModel):
     parcel_rate: Optional[float] = 0.0
     doorstep_rate: Optional[float] = 0.0
     per_kg_price: Optional[float] = 0.0
+    partner_per_kg_price: Optional[float] = 0.0
 
     class Config:
         from_attributes = True
@@ -88,6 +89,7 @@ class OrgUpdateSchema(BaseModel):
     parcel_rate: Optional[float] = None
     doorstep_rate: Optional[float] = None
     per_kg_price: Optional[float] = None
+    partner_per_kg_price: Optional[float] = None
 
 class UserCreateSchema(BaseModel):
     email: EmailStr

@@ -25,7 +25,8 @@ import {
   TrendingUp,
   UserCheck,
   Building,
-  Target
+  Target,
+  Edit2
 } from 'lucide-react'
 import DetailDrawer from '@/components/DetailDrawer'
 
@@ -68,6 +69,24 @@ export default function LeadsWorkspace() {
     status: 'LEAD'
   })
   const [formError, setFormError] = useState('')
+
+  // Edit Lead State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editingLeadId, setEditingLeadId] = useState<string | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    whatsapp_number: '',
+    lead_acquisition_cost: '',
+    job_title: '',
+    city: '',
+    state: '',
+    address: '',
+    assigned_to_id: ''
+  })
+  const [editFormError, setEditFormError] = useState('')
 
   // 1. Fetch leads (status = LEAD)
   const limit = pagination.pageSize
@@ -151,6 +170,109 @@ export default function LeadsWorkspace() {
       setFormError(errMsg)
     }
   })
+
+  // 4. Update Lead mutation
+  const updateLeadMutation = useMutation({
+    mutationFn: async (payload: typeof editFormData) => {
+      if (!editingLeadId) return
+      const formattedPayload = {
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        email: payload.email || '',
+        phone: payload.phone || null,
+        whatsapp_number: payload.whatsapp_number || null,
+        job_title: payload.job_title || null,
+        address: payload.address || null,
+        city: payload.city || null,
+        state: payload.state || null,
+        lead_acquisition_cost: payload.lead_acquisition_cost ? parseFloat(payload.lead_acquisition_cost) : 0,
+        status: 'LEAD',
+        assigned_to_id: payload.assigned_to_id || null
+      }
+      return apiClient.put(`/contacts/${editingLeadId}`, formattedPayload)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads-workspace'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+      setIsEditModalOpen(false)
+      setEditingLeadId(null)
+      setEditFormError('')
+    },
+    onError: (err: any) => {
+      setEditFormError(err?.response?.data?.detail || err?.message || 'Failed to update lead')
+    }
+  })
+
+  // 5. Convert Lead to Contact mutation
+  const convertLeadMutation = useMutation({
+    mutationFn: async (lead: Contact) => {
+      const payload = {
+        first_name: lead.first_name,
+        last_name: lead.last_name,
+        email: lead.email || '',
+        phone: lead.phone || null,
+        whatsapp_number: lead.whatsapp_number || null,
+        job_title: lead.job_title || null,
+        address: lead.address || null,
+        city: lead.city || null,
+        state: lead.state || null,
+        lead_acquisition_cost: Number(lead.lead_acquisition_cost || 0),
+        status: 'CONTACT',
+        company_id: lead.company?.id || null,
+        assigned_to_id: lead.assigned_to?.id || null,
+        custom_fields: lead.custom_fields || {}
+      }
+      return apiClient.put(`/contacts/${lead.id}`, payload)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads-workspace'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+    },
+    onError: (err: any) => {
+      alert(`Failed to convert lead: ${err?.response?.data?.detail || err.message}`)
+    }
+  })
+
+  const handleConvertLeadToContact = (lead: Contact) => {
+    if (window.confirm(`Are you sure you want to convert "${lead.first_name} ${lead.last_name}" to a registered Contact?`)) {
+      convertLeadMutation.mutate(lead)
+    }
+  }
+
+  const handleOpenEditModal = (lead: Contact) => {
+    setEditingLeadId(lead.id)
+    setEditFormData({
+      first_name: lead.first_name || '',
+      last_name: lead.last_name || '',
+      email: lead.email || '',
+      phone: lead.phone || '',
+      whatsapp_number: lead.whatsapp_number || '',
+      lead_acquisition_cost: lead.lead_acquisition_cost !== undefined && lead.lead_acquisition_cost !== null ? String(lead.lead_acquisition_cost) : '',
+      job_title: lead.job_title || '',
+      city: lead.city || '',
+      state: lead.state || '',
+      address: lead.address || '',
+      assigned_to_id: lead.assigned_to?.id || ''
+    })
+    setEditFormError('')
+    setIsEditModalOpen(true)
+  }
+
+  const handleEditFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editFormData.first_name.trim() || !editFormData.last_name.trim()) {
+      setEditFormError('First name and last name are required.')
+      return
+    }
+    if (editFormData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(editFormData.email.trim())) {
+        setEditFormError('Please enter a valid email address.')
+        return
+      }
+    }
+    updateLeadMutation.mutate(editFormData)
+  }
 
   // Table columns setup
   const columns = useMemo(() => [
@@ -252,8 +374,36 @@ export default function LeadsWorkspace() {
           })}
         </span>
       )
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: (info: any) => {
+        const lead = info.row.original
+        return (
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => handleConvertLeadToContact(lead)}
+              title="Convert Lead to Contact"
+              disabled={convertLeadMutation.isPending}
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-600 border border-emerald-500/20 hover:border-emerald-500 text-emerald-400 hover:text-white rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm disabled:opacity-50"
+            >
+              <UserCheck className="h-3.5 w-3.5" />
+              <span>Convert to Contact</span>
+            </button>
+            <button
+              onClick={() => handleOpenEditModal(lead)}
+              title="Edit Lead"
+              className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 hover:bg-indigo-600 border border-indigo-500/20 hover:border-indigo-500 text-indigo-400 hover:text-white rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+              <span>Edit</span>
+            </button>
+          </div>
+        )
+      }
     }
-  ], [])
+  ], [convertLeadMutation.isPending])
 
   // Table hook instance
   const table = useReactTable({
@@ -276,14 +426,12 @@ export default function LeadsWorkspace() {
       setFormError('First name and last name are required.')
       return
     }
-    if (!formData.email.trim()) {
-      setFormError('Email address is required.')
-      return
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.email)) {
-      setFormError('Please enter a valid email address.')
-      return
+    if (formData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.email.trim())) {
+        setFormError('Please enter a valid email address.')
+        return
+      }
     }
     createLeadMutation.mutate(formData)
   }
@@ -297,7 +445,7 @@ export default function LeadsWorkspace() {
       {/* Workspace Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight text-black flex items-center gap-2">
             <Target className="h-6 w-6 text-sky-400" />
             Leads Management
           </h1>
@@ -596,7 +744,7 @@ export default function LeadsWorkspace() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                    <Mail className="h-3.5 w-3.5 text-zinc-400" /> Email *
+                    <Mail className="h-3.5 w-3.5 text-zinc-400" /> Email
                   </label>
                   <input
                     type="email"
@@ -604,7 +752,6 @@ export default function LeadsWorkspace() {
                     value={formData.email}
                     onChange={handleInputChange}
                     placeholder="john.doe@example.com"
-                    required
                     className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
                   />
                 </div>
@@ -686,6 +833,211 @@ export default function LeadsWorkspace() {
                     <span className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin"></span>
                   )}
                   Save Lead
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT LEAD MODAL FORM */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/70 p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/40">
+              <div className="flex items-center gap-2">
+                <Edit2 className="h-5 w-5 text-indigo-400" />
+                <h3 className="text-md font-bold text-white">Edit Lead Details</h3>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleEditFormSubmit} className="p-6 space-y-4 flex-1 overflow-y-auto max-h-[80vh]">
+              {editFormError && (
+                <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="h-4.5 w-4.5 flex-shrink-0" />
+                  <span>{editFormError}</span>
+                </div>
+              )}
+
+              {/* 1. Lead Owner */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                  <UserIcon className="h-3.5 w-3.5 text-indigo-400" /> Lead Owner
+                </label>
+                <select
+                  name="assigned_to_id"
+                  value={editFormData.assigned_to_id}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, assigned_to_id: e.target.value }))}
+                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                >
+                  <option value="" className="bg-zinc-950">Select Lead Owner (Staff Member)</option>
+                  {usersData?.map((user) => (
+                    <option key={user.id} value={user.id} className="bg-zinc-950">
+                      {user.first_name} {user.last_name} ({user.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Name (First Name & Last Name) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold">First Name *</label>
+                  <input
+                    type="text"
+                    name="first_name"
+                    value={editFormData.first_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, first_name: e.target.value }))}
+                    placeholder="John"
+                    required
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold">Last Name *</label>
+                  <input
+                    type="text"
+                    name="last_name"
+                    value={editFormData.last_name}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, last_name: e.target.value }))}
+                    placeholder="Doe"
+                    required
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+              </div>
+
+              {/* 3. Phone & WhatsApp Number */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <Phone className="h-3.5 w-3.5 text-zinc-400" /> Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    name="phone"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="+234 801 234 5678"
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <MessageSquare className="h-3.5 w-3.5 text-emerald-400" /> WhatsApp Number
+                  </label>
+                  <input
+                    type="text"
+                    name="whatsapp_number"
+                    value={editFormData.whatsapp_number}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, whatsapp_number: e.target.value }))}
+                    placeholder="+234 801 234 5678"
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+              </div>
+
+              {/* 4. Lead Acquisition Cost & Email */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <Mail className="h-3.5 w-3.5 text-zinc-400" /> Email
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="john.doe@example.com"
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <DollarSign className="h-3.5 w-3.5 text-emerald-400" /> Lead Acquisition Cost
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    name="lead_acquisition_cost"
+                    value={editFormData.lead_acquisition_cost}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, lead_acquisition_cost: e.target.value }))}
+                    placeholder="5000.00"
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+              </div>
+
+              {/* 5. Address (City, State & Street Address) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-sky-400" /> City
+                  </label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={editFormData.city}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
+                    placeholder="Lagos"
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-sky-400" /> State
+                  </label>
+                  <input
+                    type="text"
+                    name="state"
+                    value={editFormData.state}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, state: e.target.value }))}
+                    placeholder="Lagos State"
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                  <MapPin className="h-3.5 w-3.5 text-sky-400" /> Street Address
+                </label>
+                <input
+                  type="text"
+                  name="address"
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Street address..."
+                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                />
+              </div>
+
+              {/* Form Action Buttons */}
+              <div className="pt-4 border-t border-zinc-900 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updateLeadMutation.isPending}
+                  className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                >
+                  {updateLeadMutation.isPending && (
+                    <span className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin"></span>
+                  )}
+                  Update Lead
                 </button>
               </div>
             </form>

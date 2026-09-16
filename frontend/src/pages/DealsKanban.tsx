@@ -494,7 +494,7 @@ export default function DealsKanban() {
       </div>
 
       {/* 2. DAILY STAFF CREATION & ACTIVITY TRACKER CARD */}
-      <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 shadow-2xl relative overflow-hidden">
+      <div className="bg-black border border-zinc-800 rounded-xl p-5 shadow-2xl relative overflow-hidden">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3 mb-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4.5 w-4.5 text-yellow-400" />
