@@ -89,7 +89,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
   const shipmentToInvoice = (shipment: Shipment): Invoice => {
     const isGbp = shipment.currency === 'GBP'
-    const conversionRate = Number(shipment.conversion_rate) || 2000
+    const rate = orgExchangeRate > 0 ? orgExchangeRate : 2000
+    const rawRate = Number(shipment.conversion_rate)
+    const conversionRate = (!isNaN(rawRate) && rawRate > 1) ? rawRate : rate
     const amountNum = Number(shipment.amount) || 0
     
     const totalNgn = isGbp ? amountNum * conversionRate : amountNum
@@ -291,7 +293,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       if (formData.currency === 'GBP') {
         setFormData(prev => ({ ...prev, amount: convGbp, conversion_rate: String(orgExchangeRate) }))
       } else {
-        setFormData(prev => ({ ...prev, amount: val, conversion_rate: '1.0000' }))
+        setFormData(prev => ({ ...prev, amount: val, conversion_rate: String(orgExchangeRate) }))
       }
     } else {
       setAmountGbp('')

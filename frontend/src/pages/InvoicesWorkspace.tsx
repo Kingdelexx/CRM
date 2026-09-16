@@ -263,12 +263,19 @@ export const InvoicesWorkspace: React.FC = () => {
         price_gbp: Number(s.price_gbp) || 0,
       }));
 
+      const rate = exchangeRate > 0 ? exchangeRate : 2000;
+      const finalNgn = Number(formData.total_ngn) > 0 ? Number(formData.total_ngn) : calcNgn;
+      let finalGbp = Number(formData.total_gbp) > 0 ? Number(formData.total_gbp) : calcGbp;
+      if ((finalGbp === finalNgn || finalGbp <= 0) && finalNgn > 0) {
+        finalGbp = Number((finalNgn / rate).toFixed(2));
+      }
+
       const payload = {
         ...formData,
         contact_id: formData.contact_id || undefined,
         total_value_items: Number(formData.total_value_items) || 0,
-        total_ngn: Number(formData.total_ngn) > 0 ? Number(formData.total_ngn) : calcNgn,
-        total_gbp: Number(formData.total_gbp) > 0 ? Number(formData.total_gbp) : calcGbp,
+        total_ngn: finalNgn,
+        total_gbp: finalGbp,
         issue_date: new Date().toISOString().split('T')[0],
         status: 'DRAFT',
         items: cleanedItems,
@@ -354,12 +361,19 @@ export const InvoicesWorkspace: React.FC = () => {
         price_gbp: Number(s.price_gbp) || 0,
       }));
 
+      const rate = exchangeRate > 0 ? exchangeRate : 2000;
+      const finalNgn = Number(formData.total_ngn) > 0 ? Number(formData.total_ngn) : calcNgn;
+      let finalGbp = Number(formData.total_gbp) > 0 ? Number(formData.total_gbp) : calcGbp;
+      if ((finalGbp === finalNgn || finalGbp <= 0) && finalNgn > 0) {
+        finalGbp = Number((finalNgn / rate).toFixed(2));
+      }
+
       const payload = {
         ...formData,
         contact_id: formData.contact_id || undefined,
         total_value_items: Number(formData.total_value_items) || 0,
-        total_ngn: Number(formData.total_ngn) > 0 ? Number(formData.total_ngn) : calcNgn,
-        total_gbp: Number(formData.total_gbp) > 0 ? Number(formData.total_gbp) : calcGbp,
+        total_ngn: finalNgn,
+        total_gbp: finalGbp,
         items: cleanedItems,
         services: cleanedServices,
       };

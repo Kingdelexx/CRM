@@ -64,13 +64,24 @@ export default function DealsKanban() {
   const currentUserId = me?.id
 
   // 2. Fetch Stages & Deals
-  const { data: stages = [], isLoading: loadingStages, isError: errorStages } = useQuery({
+  const { data: rawStages = [], isLoading: loadingStages, isError: errorStages } = useQuery({
     queryKey: ['stages'],
     queryFn: async () => {
       const response = await apiClient.get<Stage[]>('/stages/')
       return response.data
     }
   })
+
+  const stages = useMemo(() => {
+    return rawStages.filter(stage => {
+      const lowerName = (stage.name || '').toLowerCase().trim()
+      return (
+        !lowerName.includes('demo') &&
+        !lowerName.includes('proposal') &&
+        !lowerName.includes('negotiation')
+      )
+    })
+  }, [rawStages])
 
   const { data: dealsData, isLoading: loadingDeals, isError: errorDeals } = useQuery({
     queryKey: ['deals'],

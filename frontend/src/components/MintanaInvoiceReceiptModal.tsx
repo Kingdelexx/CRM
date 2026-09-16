@@ -51,20 +51,34 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
     { sn: 2, service_name: 'Doorstep Delivery', price_ngn: 0, price_gbp: 0 },
   ];
 
+  const fallbackRate = 2000;
+
   const itemsTotalNgn = items.reduce((acc, i) => acc + (Number(i.total_ngn) || Number(i.price_ngn) || 0), 0);
-  const itemsTotalGbp = items.reduce((acc, i) => acc + (Number(i.total_gbp) || Number(i.price_gbp) || 0), 0);
+  let itemsTotalGbp = items.reduce((acc, i) => acc + (Number(i.total_gbp) || Number(i.price_gbp) || 0), 0);
+  if ((itemsTotalGbp === itemsTotalNgn || itemsTotalGbp <= 0) && itemsTotalNgn > 0) {
+    itemsTotalGbp = itemsTotalNgn / fallbackRate;
+  }
 
   const servicesTotalNgn = services.reduce((acc, s) => acc + (Number(s.price_ngn) || 0), 0);
-  const servicesTotalGbp = services.reduce((acc, s) => acc + (Number(s.price_gbp) || 0), 0);
+  let servicesTotalGbp = services.reduce((acc, s) => acc + (Number(s.price_gbp) || 0), 0);
+  if ((servicesTotalGbp === servicesTotalNgn || servicesTotalGbp <= 0) && servicesTotalNgn > 0) {
+    servicesTotalGbp = servicesTotalNgn / fallbackRate;
+  }
 
   const calculatedTotalNgn = itemsTotalNgn + servicesTotalNgn;
   const calculatedTotalGbp = itemsTotalGbp + servicesTotalGbp;
 
   const baseTotalNgn = receipt ? Number(receipt.amount_paid_ngn) : Number(activeInvoice?.total_ngn || 0);
-  const baseTotalGbp = receipt ? Number(receipt.amount_paid_gbp) : Number(activeInvoice?.total_gbp || 0);
+  let baseTotalGbp = receipt ? Number(receipt.amount_paid_gbp) : Number(activeInvoice?.total_gbp || 0);
+  if ((baseTotalGbp === baseTotalNgn || baseTotalGbp <= 0) && baseTotalNgn > 0) {
+    baseTotalGbp = baseTotalNgn / fallbackRate;
+  }
 
   const totalNgn = calculatedTotalNgn > 0 ? calculatedTotalNgn : baseTotalNgn;
-  const totalGbp = calculatedTotalGbp > 0 ? calculatedTotalGbp : baseTotalGbp;
+  let totalGbp = calculatedTotalGbp > 0 ? calculatedTotalGbp : baseTotalGbp;
+  if ((totalGbp === totalNgn || totalGbp <= 0) && totalNgn > 0) {
+    totalGbp = totalNgn / fallbackRate;
+  }
 
   const slaUrl = activeInvoice?.sla_terms_url || 'https://www.mintana.co.uk/terms-and-conditions';
 

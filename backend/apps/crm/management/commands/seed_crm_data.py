@@ -80,11 +80,8 @@ class Command(BaseCommand):
                 stage_data = [
                     ('Lead In', 1, 10, 'SALES'),
                     ('Contact Made', 2, 30, 'SALES'),
-                    ('Demo Scheduled', 3, 50, 'SALES'),
-                    ('Proposal Sent', 4, 70, 'SALES'),
-                    ('Negotiation', 5, 90, 'SALES'),
-                    ('Closed Won', 6, 100, 'SALES'),
-                    ('Closed Lost', 7, 0, 'SALES'),
+                    ('Closed Won', 3, 100, 'SALES'),
+                    ('Closed Lost', 4, 0, 'SALES'),
                 ]
                 
                 stages = {}
@@ -214,7 +211,7 @@ class Command(BaseCommand):
                     title='Power Plant Digital Twin',
                     value=180000.00,
                     currency='USD',
-                    stage=stages['Negotiation'],
+                    stage=stages['Contact Made'],
                     contact=scorpio,
                     company=companies[1],
                     expected_close_date=timezone.now().date() + timedelta(days=30),
@@ -240,7 +237,7 @@ class Command(BaseCommand):
                     title='Office Supply Modernization',
                     value=8000.00,
                     currency='USD',
-                    stage=stages['Demo Scheduled'],
+                    stage=stages['Lead In'],
                     contact=waddams,
                     company=companies[2],
                     expected_close_date=timezone.now().date() + timedelta(days=90),

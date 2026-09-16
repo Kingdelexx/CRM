@@ -42,11 +42,8 @@ def signup(request, data: SignUpInputSchema):
             stage_data = [
                 ('Lead In', 1, 10),
                 ('Contact Made', 2, 30),
-                ('Demo Scheduled', 3, 50),
-                ('Proposal Sent', 4, 70),
-                ('Negotiation', 5, 90),
-                ('Closed Won', 6, 100),
-                ('Closed Lost', 7, 0),
+                ('Closed Won', 3, 100),
+                ('Closed Lost', 4, 0),
             ]
             for name, order, prob in stage_data:
                 Stage.objects.create(
