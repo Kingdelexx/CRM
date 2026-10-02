@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { apiClient } from '@/api/client'
-import { Building2, Mail, KeyRound, User, Phone, Loader2, ArrowRight } from 'lucide-react'
+import { Building2, Mail, KeyRound, User, Phone, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react'
 
 export default function SignUp() {
   const navigate = useNavigate()
+  const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
     org_name: '',
     org_domain: '',
@@ -169,14 +170,26 @@ export default function SignUp() {
                 <div className="relative">
                   <KeyRound className="absolute left-3 top-3 h-4 w-4 text-zinc-500" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     minLength={8}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     placeholder="••••••••"
-                    className="w-full pl-10 pr-4 py-2 bg-zinc-900/50 border border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg text-sm text-zinc-200 outline-none transition-all placeholder-zinc-650"
+                    className="w-full pl-10 pr-10 py-2 bg-zinc-900/50 border border-zinc-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg text-sm text-zinc-200 outline-none transition-all placeholder-zinc-650"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300 focus:outline-none cursor-pointer"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
               </div>
 

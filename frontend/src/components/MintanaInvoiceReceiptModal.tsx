@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Invoice, Receipt } from '../types/crm';
 import { X, Printer, Share2, ExternalLink, CheckCircle, FileText } from 'lucide-react';
 
@@ -22,6 +22,16 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
   // Determine active dataset
   const activeInvoice = invoice || receipt?.invoice;
   const isPaid = receipt || activeInvoice?.status === 'PAID';
+
+  // Currency display toggle state (NGN vs GBP)
+  const initialCurrency = (activeInvoice?.currency === 'GBP' || (activeInvoice as any)?.currency === 'GBP') ? 'GBP' : 'NGN';
+  const [displayCurrency, setDisplayCurrency] = useState<'NGN' | 'GBP'>(initialCurrency);
+
+  useEffect(() => {
+    if (activeInvoice?.currency) {
+      setDisplayCurrency(activeInvoice.currency === 'GBP' ? 'GBP' : 'NGN');
+    }
+  }, [activeInvoice?.currency, isOpen]);
 
   const docNumber = receipt
     ? receipt.receipt_number
@@ -126,6 +136,10 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
     const rawPhone = receiverTel.replace(/[^0-9]/g, '');
     const cleanPhone = rawPhone.startsWith('0') ? '234' + rawPhone.slice(1) : rawPhone;
     
+    const formattedAmount = displayCurrency === 'GBP'
+      ? `*Total Payable (GBP):* £${totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
+      : `*Total Payable (NGN):* ₦${totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
     const message = `*MINTANA GLOBAL LOGISTICS - ${receipt ? 'OFFICIAL RECEIPT' : 'INVOICE'}*\n` +
       `----------------------------------------\n` +
       `*${receipt ? 'Receipt No' : 'Invoice No'}:* #${docNumber}\n` +
@@ -133,8 +147,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
       `*Client:* ${receiverName}\n` +
       `*Parcel No:* ${expectedParcelNo}\n` +
       `----------------------------------------\n` +
-      `*Total Payable (NGN):* ₦${totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2 })}\n` +
-      `*Total Payable (GBP):* £${totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2 })}\n` +
+      `${formattedAmount}\n` +
       `*Status:* ${isPaid ? '✅ PAID' : '⏳ PENDING PAYMENT'}\n` +
       `----------------------------------------\n` +
       `Shipping Terms & SLA: ${slaUrl}\n\n` +
@@ -237,31 +250,59 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 bg-slate-900 text-white print:hidden">
               <div className="flex items-center space-x-2">
                 <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-sky-400 flex-shrink-0" />
-                <h3 className="text-sm sm:text-lg font-semibold text-white truncate">
+                <h3 className="text-sm sm:text-base font-semibold text-white truncate">
                   {receipt ? 'Official Payment Receipt' : 'Logistics Invoice'}: <span className="text-sky-300 font-mono font-bold">{cleanReceiverName} ({last4Numbers})</span>
                 </h3>
               </div>
+
+              {/* Currency Selector & Controls */}
               <div className="flex items-center flex-wrap gap-2">
+                {/* Currency Switcher Toggle */}
+                <div className="flex items-center bg-slate-800 p-1 rounded-lg border border-slate-700 mr-1">
+                  <span className="text-[11px] text-slate-300 font-semibold px-1.5 hidden sm:inline">Currency:</span>
+                  <button
+                    type="button"
+                    onClick={() => setDisplayCurrency('NGN')}
+                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                      displayCurrency === 'NGN'
+                        ? 'bg-sky-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    ₦ Naira (NGN)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDisplayCurrency('GBP')}
+                    className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                      displayCurrency === 'GBP'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    £ Pounds (GBP)
+                  </button>
+                </div>
+
                 <button
                   onClick={handleWhatsAppShare}
-                  className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium transition text-xs sm:text-sm shadow-md"
+                  className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-medium transition text-xs sm:text-sm shadow-md cursor-pointer"
                 >
-                  <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span>Share via WhatsApp</span>
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Share via WhatsApp</span>
                 </button>
                 <button
                   onClick={handlePrint}
-                  className="flex items-center space-x-1.5 bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-medium transition text-xs sm:text-sm shadow-md"
+                  className="flex items-center space-x-1.5 bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded-lg font-medium transition text-xs sm:text-sm shadow-md cursor-pointer"
                 >
-                  <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <Printer className="w-3.5 h-3.5" />
                   <span>Print / PDF</span>
                 </button>
                 <button
                   onClick={onClose}
-                  className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-lg font-medium transition text-xs sm:text-sm border border-slate-700"
+                  className="flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg font-medium transition text-xs sm:text-sm border border-slate-700 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
-                  <span className="hidden sm:inline">Close</span>
                 </button>
               </div>
             </div>
@@ -333,31 +374,31 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </p>
               </div>
 
-              {/* Bank Payment Account Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left text-[11px]">
-                {/* Pounds Account */}
-                <div className="border border-sky-300 bg-white rounded overflow-hidden">
-                  <div className="bg-sky-600 text-white font-bold px-2 py-0.5 text-center text-[10px] tracking-wider">
-                    POUNDS
+              {/* Bank Payment Account Card matching displayCurrency */}
+              <div className="text-left text-[11px] w-full max-w-[220px] sm:ml-auto">
+                {displayCurrency === 'GBP' ? (
+                  <div className="border-2 border-sky-500 bg-white rounded overflow-hidden shadow-sm">
+                    <div className="bg-sky-600 text-white font-bold px-2 py-0.5 text-center text-[10px] tracking-wider">
+                      POUNDS PAYMENT ACCOUNT
+                    </div>
+                    <div className="p-1.5 space-y-0.5 text-slate-700">
+                      <p><span className="font-medium">Account:</span> Mintana Limited</p>
+                      <p><span className="font-medium">Sort Code:</span> 20-18-17</p>
+                      <p><span className="font-medium">Account No:</span> <strong className="text-slate-900 font-mono">53798267</strong></p>
+                    </div>
                   </div>
-                  <div className="p-1.5 space-y-0.5 text-slate-700">
-                    <p><span className="font-medium">Account:</span> Mintana Limited</p>
-                    <p><span className="font-medium">Sort Code:</span> 20-18-17</p>
-                    <p><span className="font-medium">Account No:</span> <strong className="text-slate-900">53798267</strong></p>
+                ) : (
+                  <div className="border-2 border-blue-900 bg-white rounded overflow-hidden shadow-sm">
+                    <div className="bg-blue-900 text-white font-bold px-2 py-0.5 text-center text-[10px] tracking-wider">
+                      NAIRA PAYMENT ACCOUNT
+                    </div>
+                    <div className="p-1.5 space-y-0.5 text-slate-700">
+                      <p><span className="font-medium">Account:</span> Mintana Logistics</p>
+                      <p><span className="font-medium">Bank:</span> UBA</p>
+                      <p><span className="font-medium">Account No:</span> <strong className="text-slate-900 font-mono">1027269922</strong></p>
+                    </div>
                   </div>
-                </div>
-
-                {/* Naira Account */}
-                <div className="border border-blue-300 bg-white rounded overflow-hidden">
-                  <div className="bg-blue-900 text-white font-bold px-2 py-0.5 text-center text-[10px] tracking-wider">
-                    NAIRA
-                  </div>
-                  <div className="p-1.5 space-y-0.5 text-slate-700">
-                    <p><span className="font-medium">Account:</span> Mintana Logistics</p>
-                    <p><span className="font-medium">Bank:</span> UBA</p>
-                    <p><span className="font-medium">Account No:</span> <strong className="text-slate-900">1027269922</strong></p>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -404,16 +445,23 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
 
           {/* Item Breakdown Table */}
           <div className="mb-6 overflow-x-auto rounded-lg border border-sky-200">
-            <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+            <table className="w-full text-left text-xs border-collapse min-w-[450px]">
               <thead>
                 <tr className="bg-sky-500 text-white font-bold text-[11px] uppercase">
                   <th className="py-2 px-3 border-r border-sky-400">D.O.S</th>
                   <th className="py-2 px-3 border-r border-sky-400">Nature of Item</th>
                   <th className="py-2 px-3 border-r border-sky-400 text-center">Weight (Kg)</th>
-                  <th className="py-2 px-3 border-r border-sky-400 text-right">Price (NGN)</th>
-                  <th className="py-2 px-3 border-r border-sky-400 text-right">Price (GBP)</th>
-                  <th className="py-2 px-3 border-r border-sky-400 text-right">Total (NGN)</th>
-                  <th className="py-2 px-3 text-right">Total (GBP)</th>
+                  {displayCurrency === 'NGN' ? (
+                    <>
+                      <th className="py-2 px-3 border-r border-sky-400 text-right">Price (NGN)</th>
+                      <th className="py-2 px-3 text-right">Total (NGN)</th>
+                    </>
+                  ) : (
+                    <>
+                      <th className="py-2 px-3 border-r border-sky-400 text-right">Price (GBP)</th>
+                      <th className="py-2 px-3 text-right">Total (GBP)</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -427,18 +475,25 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                       <td className="py-2 px-3 border-r border-slate-200 text-center font-medium">
                         {item.weight_kg ? `${item.weight_kg} kg` : '-'}
                       </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-right">
-                        ₦{(Number(item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-right">
-                        £{(Number(item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-right font-semibold">
-                        ₦{(Number(item.total_ngn || item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
-                      <td className="py-2 px-3 text-right font-semibold">
-                        £{(Number(item.total_gbp || item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
+                      {displayCurrency === 'NGN' ? (
+                        <>
+                          <td className="py-2 px-3 border-r border-slate-200 text-right">
+                            ₦{(Number(item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-3 text-right font-semibold">
+                            ₦{(Number(item.total_ngn || item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-2 px-3 border-r border-slate-200 text-right">
+                            £{(Number(item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-3 text-right font-semibold">
+                            £{(Number(item.total_gbp || item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))
                 ) : (
@@ -448,22 +503,28 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                       CLOTHES AND BEADS
                     </td>
                     <td className="py-2 px-3 border-r border-slate-200 text-center">-</td>
-                    <td className="py-2 px-3 border-r border-slate-200 text-right">₦0.00</td>
-                    <td className="py-2 px-3 border-r border-slate-200 text-right">£0.00</td>
-                    <td className="py-2 px-3 border-r border-slate-200 text-right font-semibold">₦0.00</td>
-                    <td className="py-2 px-3 text-right font-semibold">£0.00</td>
+                    {displayCurrency === 'NGN' ? (
+                      <>
+                        <td className="py-2 px-3 border-r border-slate-200 text-right">₦0.00</td>
+                        <td className="py-2 px-3 text-right font-semibold">₦0.00</td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 px-3 border-r border-slate-200 text-right">£0.00</td>
+                        <td className="py-2 px-3 text-right font-semibold">£0.00</td>
+                      </>
+                    )}
                   </tr>
                 )}
                 {/* Total Row */}
                 <tr className="bg-sky-100 font-bold text-sky-950">
-                  <td colSpan={5} className="py-2 px-3 text-center uppercase tracking-wider">
+                  <td colSpan={3} className="py-2 px-3 text-center uppercase tracking-wider">
                     TOTAL
                   </td>
-                  <td className="py-2 px-3 text-right border-r border-sky-200">
-                    ₦{itemsTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="py-2 px-3 text-right">
-                    £{itemsTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <td colSpan={2} className="py-2 px-3 text-right">
+                    {displayCurrency === 'NGN'
+                      ? `₦${itemsTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `£${itemsTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </td>
                 </tr>
               </tbody>
@@ -472,13 +533,14 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
 
           {/* Additional Services Table */}
           <div className="mb-6 overflow-x-auto rounded-lg border border-sky-200">
-            <table className="w-full text-left text-xs border-collapse min-w-[400px]">
+            <table className="w-full text-left text-xs border-collapse min-w-[350px]">
               <thead>
                 <tr className="bg-blue-600 text-white font-bold text-[11px] uppercase">
                   <th className="py-2 px-3 border-r border-blue-500 w-12 text-center">S/N</th>
                   <th className="py-2 px-3 border-r border-blue-500">Services</th>
-                  <th className="py-2 px-3 border-r border-blue-500 text-right">Price (NGN)</th>
-                  <th className="py-2 px-3 text-right">Price (GBP)</th>
+                  <th className="py-2 px-3 text-right">
+                    {displayCurrency === 'NGN' ? 'Price (NGN)' : 'Price (GBP)'}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -490,11 +552,10 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                     <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-800">
                       {srv.service_name}
                     </td>
-                    <td className="py-2 px-3 border-r border-slate-200 text-right">
-                      ₦{(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
                     <td className="py-2 px-3 text-right">
-                      £{(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {displayCurrency === 'NGN'
+                        ? `₦${(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : `£${(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </td>
                   </tr>
                 ))}
@@ -503,11 +564,10 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                   <td colSpan={2} className="py-2 px-3 text-center uppercase tracking-wider">
                     TOTAL
                   </td>
-                  <td className="py-2 px-3 text-right border-r border-sky-200">
-                    ₦{servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
                   <td className="py-2 px-3 text-right">
-                    £{servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {displayCurrency === 'NGN'
+                      ? `₦${servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `£${servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                   </td>
                 </tr>
               </tbody>
@@ -516,15 +576,18 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
 
           {/* Grand Totals Display */}
           <div className="flex justify-end mb-8">
-            <div className="w-full sm:w-80 space-y-2">
-              <div className="flex justify-between items-center bg-sky-200 text-sky-950 font-extrabold px-4 py-2.5 rounded-lg text-sm border border-sky-300">
-                <span>Total (NGN)</span>
-                <span>₦{totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between items-center bg-blue-900 text-white font-extrabold px-4 py-2.5 rounded-lg text-sm shadow-md">
-                <span>Total (GBP)</span>
-                <span>£{totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-              </div>
+            <div className="w-full sm:w-80">
+              {displayCurrency === 'NGN' ? (
+                <div className="flex justify-between items-center bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md">
+                  <span>Total (NGN)</span>
+                  <span>₦{totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md">
+                  <span>Total (GBP)</span>
+                  <span>£{totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -582,7 +645,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
         <div className="flex items-center justify-between px-6 py-4 bg-slate-100 border-t border-slate-200 print:hidden">
           <button
             onClick={onClose}
-            className="flex items-center space-x-2 bg-slate-200 hover:bg-slate-300 text-slate-800 px-5 py-2 rounded-xl font-semibold transition text-sm"
+            className="flex items-center space-x-2 bg-slate-200 hover:bg-slate-300 text-slate-800 px-5 py-2 rounded-xl font-semibold transition text-sm cursor-pointer"
           >
             <X className="w-4 h-4" />
             <span>Close Document</span>
@@ -591,14 +654,14 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
           <div className="flex items-center space-x-3">
             <button
               onClick={handleWhatsAppShare}
-              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-medium transition text-sm shadow"
+              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-medium transition text-sm shadow cursor-pointer"
             >
               <Share2 className="w-4 h-4" />
               <span>Share via WhatsApp</span>
             </button>
             <button
               onClick={handlePrint}
-              className="flex items-center space-x-2 bg-sky-600 hover:bg-sky-500 text-white px-5 py-2 rounded-xl font-semibold transition text-sm shadow"
+              className="flex items-center space-x-2 bg-sky-600 hover:bg-sky-500 text-white px-5 py-2 rounded-xl font-semibold transition text-sm shadow cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>Download PDF / Print</span>
