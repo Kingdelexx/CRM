@@ -1,3 +1,5 @@
+import secrets
+import string
 from typing import List, Optional
 from uuid import UUID
 from django.db import transaction
@@ -13,7 +15,10 @@ from apps.accounts.models import Organization, Role, Department, Team
 from apps.accounts.schemas import (
     SignUpInputSchema, UserSchema, OrgUpdateSchema, UserUpdateSchema, UserCreateSchema,
     DepartmentSchema, DepartmentCreateSchema, TeamSchema, TeamCreateSchema,
-    RoleSchema, RoleCreateSchema
+    RoleSchema, RoleCreateSchema, ChangePasswordSchema
+)
+from apps.accounts.services import (
+    send_new_staff_welcome_email, send_staff_password_updated_email, dispatch_async
 )
 
 router = Router()
@@ -62,7 +67,8 @@ def signup(request, data: SignUpInputSchema):
                 last_name=data.last_name,
                 role=User.ADMIN,
                 organization=org,
-                phone=data.phone if data.phone else None
+                phone=data.phone if data.phone else None,
+                must_change_password=False
             )
             return 201, user
     except Exception as e:
@@ -72,6 +78,17 @@ def signup(request, data: SignUpInputSchema):
 @router.get("/me/", response=UserSchema, auth=JWTAuth())
 def get_me(request):
     return request.user
+
+@router.post("/change-password", response=UserSchema, auth=JWTAuth())
+@router.post("/change-password/", response=UserSchema, auth=JWTAuth())
+def change_password(request, data: ChangePasswordSchema):
+    user = request.user
+    if data.old_password and not user.check_password(data.old_password):
+        raise HttpError(400, "Current password is incorrect.")
+    user.set_password(data.new_password)
+    user.must_change_password = False
+    user.save()
+    return user
 
 @router.get("", response=List[UserSchema], auth=JWTAuth())
 @router.get("/", response=List[UserSchema], auth=JWTAuth())
@@ -112,10 +129,16 @@ def invite_user(request, data: UserCreateSchema):
     custom_role = Role.objects.filter(id=data.custom_role_id, organization=request.user.organization).first() if data.custom_role_id else None
     manager = User.objects.filter(id=data.manager_id, organization=request.user.organization).first() if data.manager_id else None
 
+    # Generate a random temporary password if not provided
+    assigned_password = (data.password or '').strip()
+    if not assigned_password:
+        alphabet = string.ascii_letters + string.digits + "!@#$%"
+        assigned_password = "".join(secrets.choice(alphabet) for _ in range(12))
+
     user = User.objects.create_user(
         username=data.email,
         email=data.email,
-        password=data.password,
+        password=assigned_password,
         first_name=data.first_name,
         last_name=data.last_name,
         role=data.role,
@@ -125,8 +148,13 @@ def invite_user(request, data: UserCreateSchema):
         team=team,
         custom_role=custom_role,
         manager=manager,
-        is_active=True
+        is_active=True,
+        must_change_password=True
     )
+    
+    # Dispatch welcome email with assigned temporary credentials & change password notice
+    dispatch_async(send_new_staff_welcome_email, user, assigned_password, request.user)
+
     return 201, user
 
 @router.put("/users/{user_id}", response=UserSchema, auth=JWTAuth())
@@ -141,12 +169,16 @@ def update_user(request, user_id: UUID, data: UserUpdateSchema):
         raise HttpError(404, "User not found within your organization.")
         
     payload = data.dict(exclude_unset=True)
+    password_updated = False
     if 'role' in payload:
         user.role = payload['role']
     if 'is_active' in payload:
         user.is_active = payload['is_active']
+    if 'must_change_password' in payload:
+        user.must_change_password = payload['must_change_password']
     if 'password' in payload and payload['password']:
         user.set_password(payload['password'])
+        password_updated = True
         
     if 'custom_role_id' in payload:
         role_id = payload['custom_role_id']
@@ -165,6 +197,10 @@ def update_user(request, user_id: UUID, data: UserUpdateSchema):
         user.manager = User.objects.filter(id=mgr_id, organization=request.user.organization).first() if mgr_id else None
         
     user.save()
+
+    if password_updated:
+        dispatch_async(send_staff_password_updated_email, user, payload['password'], request.user)
+
     return user
 
 # -- Department CRUD --

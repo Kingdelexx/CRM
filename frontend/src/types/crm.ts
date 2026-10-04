@@ -51,6 +51,7 @@ export interface User extends BaseEntity {
   manager?: User;
   custom_role?: CustomRole;
   is_active: boolean;
+  must_change_password?: boolean;
 }
 
 export interface Company extends BaseEntity {

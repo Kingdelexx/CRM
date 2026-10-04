@@ -61,6 +61,7 @@ class UserSchema(BaseModel):
     team: Optional[TeamSchema] = None
     manager_id: Optional[UUID] = None
     is_active: bool = True
+    must_change_password: bool = False
 
     class Config:
         from_attributes = True
@@ -93,7 +94,7 @@ class OrgUpdateSchema(BaseModel):
 
 class UserCreateSchema(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: Optional[str] = None
     first_name: str
     last_name: str
     role: str = 'SALES_REP'
@@ -111,6 +112,11 @@ class UserUpdateSchema(BaseModel):
     manager_id: Optional[UUID] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None
+    must_change_password: Optional[bool] = None
+
+class ChangePasswordSchema(BaseModel):
+    old_password: Optional[str] = None
+    new_password: str = Field(..., min_length=6)
 
 class DepartmentCreateSchema(BaseModel):
     name: str

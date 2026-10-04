@@ -81,6 +81,7 @@ class User(AbstractUser, TimeStampedModel):
     team = models.ForeignKey(Team, on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
     manager = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='subordinates')
     phone = models.CharField(max_length=20, null=True, blank=True)
+    must_change_password = models.BooleanField(default=False)
 
     # We need to resolve field conflicts with standard User groups/permissions due to inheriting from both AbstractUser and having TimeStampedModel's UUID PK
     class Meta:

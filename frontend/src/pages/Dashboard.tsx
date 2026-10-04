@@ -19,6 +19,7 @@ import PartnersWorkspace from './PartnersWorkspace'
 import ShipmentWorkspace from './ShipmentWorkspace'
 import TasksWorkspace from './TasksWorkspace'
 import DetailDrawer from '@/components/DetailDrawer'
+import ChangePasswordModal from '@/components/ChangePasswordModal'
 import {
   LogOut,
   Users,
@@ -627,6 +628,14 @@ export default function Dashboard() {
         onClose={() => {
           setDrawerType(null)
           setDrawerId(null)
+        }}
+      />
+      {/* Mandatory Password Change Modal for First Sign-In */}
+      <ChangePasswordModal
+        isOpen={Boolean(currentUser?.must_change_password)}
+        onSuccess={(updatedUser) => {
+          setCurrentUser(updatedUser)
+          localStorage.setItem('current_user', JSON.stringify(updatedUser))
         }}
       />
     </div>

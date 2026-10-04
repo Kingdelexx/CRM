@@ -292,7 +292,7 @@ export default function SettingsWorkspace() {
         custom_role_id: '',
         manager_id: ''
       })
-      alert("Staff member created successfully.")
+      alert("Staff member created successfully! A welcome email containing their login email and temporary password has been sent.")
     },
     onError: (err: any) => {
       alert(`Error creating staff member: ${err?.response?.data?.detail || err.message}`)
@@ -989,25 +989,40 @@ export default function SettingsWorkspace() {
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <label className="text-[10px] text-zinc-400 font-bold uppercase">Set Password *</label>
-                        <button
-                          type="button"
-                          onClick={() => setShowInvitePassword(!showInvitePassword)}
-                          className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 cursor-pointer"
-                        >
-                          {showInvitePassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
-                          <span>{showInvitePassword ? 'Hide' : 'Show'}</span>
-                        </button>
+                        <label className="text-[10px] text-zinc-400 font-bold uppercase">Temporary Password</label>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'
+                              let pass = ''
+                              for (let i = 0; i < 12; i++) {
+                                pass += chars.charAt(Math.floor(Math.random() * chars.length))
+                              }
+                              setInviteForm(prev => ({ ...prev, password: pass }))
+                              setShowInvitePassword(true)
+                            }}
+                            className="text-[10px] text-amber-400 hover:text-amber-300 font-bold flex items-center gap-0.5 cursor-pointer"
+                          >
+                            <span>⚡ Auto-Generate</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowInvitePassword(!showInvitePassword)}
+                            className="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 cursor-pointer"
+                          >
+                            {showInvitePassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                            <span>{showInvitePassword ? 'Hide' : 'Show'}</span>
+                          </button>
+                        </div>
                       </div>
                       <div className="relative">
                         <input
                           type={showInvitePassword ? 'text' : 'password'}
-                          required
-                          minLength={6}
-                          placeholder="Min 6 characters"
+                          placeholder="Auto-generated if left blank"
                           value={inviteForm.password}
                           onChange={(e) => setInviteForm(prev => ({ ...prev, password: e.target.value }))}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 pr-8 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded p-2 pr-8 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
                         />
                         <button
                           type="button"
@@ -1018,6 +1033,7 @@ export default function SettingsWorkspace() {
                           {showInvitePassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                         </button>
                       </div>
+                      <span className="text-[9px] text-zinc-500 block">User will be prompted to set a permanent password on 1st login.</span>
                     </div>
                   </div>
 
