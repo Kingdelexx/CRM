@@ -17,7 +17,7 @@ from apps.planning.models import Task, Activity
 from .models import (
     Company, Stage, Contact, Deal, Project, LeadLifecycleRule, CustomerList, CustomModule, CustomModuleRecord,
     Pipeline, CustomFieldDefinition, Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
-    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt, Shipment, ShipmentEscalation,
+    AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest, Document, Invoice, Receipt, Shipment, DailyManifest, ShipmentEscalation,
     CSRReport, PerformanceScorecard
 )
 from .schemas import (
@@ -44,7 +44,7 @@ from .schemas import (
     DocumentSchema, DocumentCreateSchema,
     InvoiceSchema, InvoiceCreateSchema,
     ReceiptSchema, ReceiptCreateSchema,
-    ShipmentSchema, ShipmentCreateSchema,
+    ShipmentSchema, ShipmentCreateSchema, DailyManifestSchema, DailyManifestItemSchema, DailyManifestLookupResponseSchema,
     ShipmentEscalationSchema, ShipmentEscalationCreateSchema,
     CSRReportSchema, CSRReportCreateSchema,
     PerformanceScorecardSchema, PerformanceScorecardCreateSchema
@@ -2371,8 +2371,12 @@ def create_shipment(request, data: ShipmentCreateSchema):
     if not payload.get('tracking_id'):
         payload['tracking_id'] = payload['invoice_number']
 
+    target_d = payload.get('shipment_date') or payload.get('date')
+    manifest = get_or_create_daily_manifest(request.user.organization, target_d)
+
     shipment = Shipment.objects.create(
         organization=request.user.organization,
+        manifest=manifest,
         sender_id=sender_id,
         receiver_id=receiver_id,
         partner_id=partner_id,
@@ -2385,6 +2389,24 @@ def create_shipment(request, data: ShipmentCreateSchema):
         print(f"Failed to auto-sync invoice for shipment {shipment.id}: {e}")
 
     return 201, shipment
+
+
+def get_or_create_daily_manifest(organization, shipment_date_val):
+    if not shipment_date_val:
+        target_date = timezone.localdate()
+    elif isinstance(shipment_date_val, (date, datetime)):
+        target_date = shipment_date_val if isinstance(shipment_date_val, date) else shipment_date_val.date()
+    else:
+        try:
+            target_date = datetime.strptime(str(shipment_date_val).strip(), '%Y-%m-%d').date()
+        except Exception:
+            target_date = timezone.localdate()
+
+    manifest, _ = DailyManifest.objects.get_or_create(
+        organization=organization,
+        date=target_date
+    )
+    return manifest
 
 def sync_shipment_invoice(shipment):
     if not shipment or not shipment.invoice_number:
@@ -2487,6 +2509,70 @@ def sync_shipment_invoice(shipment):
 
     return inv
 
+@shipments_router.get("/manifest/{access_code}", response=DailyManifestLookupResponseSchema, auth=None)
+@shipments_router.get("/manifest/{access_code}/", response=DailyManifestLookupResponseSchema, auth=None)
+def get_daily_manifest_by_access_code(request, access_code: str):
+    manifest = DailyManifest.objects.filter(access_code=access_code).first()
+    if not manifest:
+        raise HttpError(404, f"Manifest with access code '{access_code}' not found.")
+
+    shipments_qs = Shipment.objects.filter(manifest=manifest).select_related('receiver').order_by('created_at')
+
+    formatted_shipments = []
+    for idx, s in enumerate(shipments_qs, start=1):
+        receiver_name = s.receiver_name or (
+            f"{s.receiver.first_name} {s.receiver.last_name}".strip() if s.receiver else None
+        )
+        item_shipped = s.items_shipped or s.item_received or s.items_recieved
+        quantity = s.number_of_carton or 1
+        weight = float(s.weight_kg or 0.0)
+        phone_number = s.receiver_phone or (s.receiver.phone if s.receiver else None)
+        delivery_address = s.receiver_address or (s.receiver.address if s.receiver else None)
+
+        formatted_shipments.append(
+            DailyManifestItemSchema(
+                id=s.id,
+                sn=idx,
+                receiver_name=receiver_name,
+                item_shipped=item_shipped,
+                quantity=quantity,
+                weight=weight,
+                phone_number=phone_number,
+                delivery_address=delivery_address,
+                is_received_by_customer=getattr(s, 'is_received_by_customer', False),
+                shipment_status=s.shipment_status or 'PENDING'
+            )
+        )
+
+    return {
+        "date": str(manifest.date),
+        "access_code": manifest.access_code,
+        "shipments": formatted_shipments
+    }
+
+@shipments_router.patch("/manifest/shipment/{id}/toggle-received", response=dict, auth=None)
+@shipments_router.patch("/manifest/shipment/{id}/toggle-received/", response=dict, auth=None)
+def toggle_shipment_received_status(request, id: UUID):
+    shipment = Shipment.objects.filter(id=id).first()
+    if not shipment:
+        raise HttpError(404, "Shipment not found.")
+
+    new_state = not getattr(shipment, 'is_received_by_customer', False)
+    shipment.is_received_by_customer = new_state
+    if new_state:
+        shipment.shipment_status = 'DELIVERED'
+    else:
+        if shipment.shipment_status == 'DELIVERED':
+            shipment.shipment_status = 'PENDING'
+
+    shipment.save(update_fields=['is_received_by_customer', 'shipment_status', 'updated_at'])
+
+    return {
+        "id": str(shipment.id),
+        "is_received_by_customer": shipment.is_received_by_customer,
+        "shipment_status": shipment.shipment_status
+    }
+
 @shipments_router.get("/{id}", response=ShipmentSchema)
 @shipments_router.get("/{id}/", response=ShipmentSchema)
 def get_shipment(request, id: UUID):
@@ -2509,9 +2595,11 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
             c_date = str(s_date).strip()
             payload['date'] = c_date
             payload['shipment_date'] = c_date
+            shipment.manifest = get_or_create_daily_manifest(request.user.organization, c_date)
         else:
             payload['date'] = None
             payload['shipment_date'] = None
+            shipment.manifest = get_or_create_daily_manifest(request.user.organization, None)
 
     for attr, val in payload.items():
         setattr(shipment, attr, val)
@@ -2621,6 +2709,14 @@ def create_shipment_escalation(request, data: ShipmentEscalationCreateSchema):
         created_by=request.user,
         **payload
     )
+
+    try:
+        from apps.crm.notifications import send_escalation_initial_alert_email
+        from apps.accounts.services import dispatch_async
+        dispatch_async(send_escalation_initial_alert_email, escalation)
+    except Exception as err:
+        print(f"[Escalation Alert Email Error] Failed dispatching alert email: {err}")
+
     return 201, escalation
 
 @shipment_escalations_router.get("/{id}", response=ShipmentEscalationSchema)
@@ -2693,6 +2789,13 @@ def delete_shipment_escalation(request, id: UUID):
         raise HttpError(404, "Shipment escalation not found.")
     escalation.delete()
     return 204, None
+
+@shipment_escalations_router.post("/process-reminders", response={200: dict})
+@shipment_escalations_router.post("/process-reminders/", response={200: dict})
+def process_escalation_reminders_endpoint(request):
+    from apps.crm.notifications import run_escalation_reminder_job
+    result = run_escalation_reminder_job(hours_threshold=6)
+    return 200, result
 
 
 # ----------------- CSR REPORTS API -----------------

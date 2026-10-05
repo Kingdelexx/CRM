@@ -5,6 +5,7 @@ import { X, Printer, Share2, ExternalLink, CheckCircle, FileText } from 'lucide-
 interface MintanaInvoiceReceiptModalProps {
   invoice?: Invoice | null;
   receipt?: Receipt | null;
+  manifestCode?: string | null;
   isOpen: boolean;
   autoPrint?: boolean;
   onClose: () => void;
@@ -13,6 +14,7 @@ interface MintanaInvoiceReceiptModalProps {
 export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProps> = ({
   invoice,
   receipt,
+  manifestCode,
   isOpen,
   autoPrint = false,
   onClose,
@@ -306,6 +308,42 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </button>
               </div>
             </div>
+
+            {/* Daily Manifest Link Banner (Hidden on print) */}
+            {manifestCode && (
+              <div className="bg-indigo-950 text-white px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-indigo-800 print:hidden">
+                <div className="flex items-center space-x-2.5">
+                  <div className="h-7 w-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-xs">
+                    📋
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider block">Daily Shipment Manifest Access Code</span>
+                    <span className="text-xs font-mono font-extrabold text-indigo-100">{manifestCode}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(manifestCode)
+                      alert(`Manifest access code '${manifestCode}' copied!`)
+                    }}
+                    className="px-2.5 py-1 bg-indigo-900 hover:bg-indigo-800 text-indigo-200 rounded-md text-xs font-semibold transition border border-indigo-700/60 cursor-pointer"
+                  >
+                    Copy Code
+                  </button>
+                  <a
+                    href={`/manifest/${manifestCode}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-bold transition flex items-center gap-1 shadow cursor-pointer"
+                  >
+                    <span>View Day's Manifest</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            )}
 
             {/* Printable Document Body */}
             <div className="p-6 sm:p-8 bg-white text-slate-800 text-sm relative pt-8" id="printable-invoice-document">

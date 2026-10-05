@@ -424,6 +424,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   })
 
+  // Shipment Creation Success Modal State
+  const [createdShipmentSuccessData, setCreatedShipmentSuccessData] = useState<{
+    shipment: Shipment;
+    manifestCode?: string;
+  } | null>(null)
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false)
+
   // Edit Shipment State & Mutation
   const [editingShipment, setEditingShipment] = useState<Shipment | null>(null)
   const [isEditShipmentModalOpen, setIsEditShipmentModalOpen] = useState(false)
@@ -771,26 +778,35 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       setFormError('')
       resetForm()
 
-      const invNumber = res?.data?.invoice_number || formData.invoice_number
+      const savedShipment = res?.data
+      const mCode = savedShipment?.manifest?.access_code || null
+
+      const invNumber = savedShipment?.invoice_number || formData.invoice_number
       if (invNumber) {
         try {
           const invRes = await apiClient.get<any>(`/invoices/?search=${encodeURIComponent(invNumber)}`)
           const items = invRes.data?.items || (Array.isArray(invRes.data) ? invRes.data : [])
           let matched = items.find((i: any) => i.invoice_number === invNumber) || items[0]
-          if (!matched && res?.data) {
-            matched = shipmentToInvoice(res.data)
+          if (!matched && savedShipment) {
+            matched = shipmentToInvoice(savedShipment)
           }
           if (matched) {
             setSelectedInvoiceForModal(matched)
-            setIsInvoiceReceiptModalOpen(true)
           }
         } catch (err) {
           console.error("Error fetching invoice modal after shipment creation:", err)
-          if (res?.data) {
-            setSelectedInvoiceForModal(shipmentToInvoice(res.data))
-            setIsInvoiceReceiptModalOpen(true)
+          if (savedShipment) {
+            setSelectedInvoiceForModal(shipmentToInvoice(savedShipment))
           }
         }
+      }
+
+      if (savedShipment) {
+        setCreatedShipmentSuccessData({
+          shipment: savedShipment,
+          manifestCode: mCode
+        })
+        setIsSuccessModalOpen(true)
       }
     },
     onError: (err: any) => {
@@ -1382,16 +1398,25 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           </div>
 
           {workspaceTab === 'shipments' ? (
-            <button
-              onClick={() => {
-                resetForm()
-                setFormError('')
-                setIsModalOpen(true)
-              }}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
-            >
-              <Plus className="h-4 w-4" /> Create Shipment
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.open('/manifest', '_blank')}
+                className="flex items-center justify-center gap-2 px-3.5 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                title="Open Daily Shipment Manifest Portal"
+              >
+                <FileText className="h-4 w-4 text-indigo-400" /> Daily Manifest Portal
+              </button>
+              <button
+                onClick={() => {
+                  resetForm()
+                  setFormError('')
+                  setIsModalOpen(true)
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" /> Create Shipment
+              </button>
+            </div>
           ) : (
             <button
               onClick={() => {
@@ -3948,9 +3973,122 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
       </div>
 
+      {/* Shipment Saved Success & Daily Manifest Modal */}
+      {isSuccessModalOpen && createdShipmentSuccessData && (
+        <div
+          onClick={() => setIsSuccessModalOpen(false)}
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-sm p-4 flex items-center justify-center animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-zinc-950 border border-zinc-800 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden p-6 space-y-5 relative"
+          >
+            {/* Top Header */}
+            <div className="flex items-start gap-3.5">
+              <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 className="h-7 w-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-white tracking-tight">Shipment Saved Successfully!</h3>
+                <p className="text-xs text-zinc-400">
+                  Shipment for <span className="font-semibold text-zinc-200">{createdShipmentSuccessData.shipment.receiver_name}</span> has been processed.
+                </p>
+              </div>
+            </div>
+
+            {/* Shipment Overview Card */}
+            <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Invoice / Tracking ID</span>
+                <span className="font-mono font-bold text-emerald-400">{createdShipmentSuccessData.shipment.invoice_number || createdShipmentSuccessData.shipment.tracking_id}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Shipment Date</span>
+                <span className="font-medium text-zinc-300">{createdShipmentSuccessData.shipment.shipment_date || createdShipmentSuccessData.shipment.date || 'Today'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-zinc-500 font-semibold uppercase tracking-wider text-[10px]">Parcels & Weight</span>
+                <span className="font-medium text-zinc-300">{createdShipmentSuccessData.shipment.number_of_carton || 1} Parcel(s) • {createdShipmentSuccessData.shipment.weight_kg || 0} kg</span>
+              </div>
+            </div>
+
+            {/* Daily Manifest Section */}
+            {createdShipmentSuccessData.manifestCode ? (
+              <div className="bg-gradient-to-br from-indigo-950/80 to-purple-950/80 border border-indigo-500/30 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-indigo-400" />
+                    <span className="text-xs font-bold text-indigo-200">Daily Shipment Manifest Code</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase">Linked</span>
+                </div>
+
+                <div className="flex items-center justify-between bg-black/50 border border-indigo-500/30 rounded-lg p-2.5">
+                  <span className="font-mono text-sm font-black text-indigo-100 tracking-wider">
+                    {createdShipmentSuccessData.manifestCode}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(createdShipmentSuccessData.manifestCode!)
+                      alert(`Manifest access code '${createdShipmentSuccessData.manifestCode}' copied!`)
+                    }}
+                    className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 rounded text-xs font-semibold transition cursor-pointer"
+                  >
+                    Copy Code
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-indigo-300/80 leading-relaxed">
+                  Shipments sharing date ({createdShipmentSuccessData.shipment.shipment_date || createdShipmentSuccessData.shipment.date}) belong to this daily manifest.
+                </p>
+
+                <a
+                  href={`/manifest/${createdShipmentSuccessData.manifestCode}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 cursor-pointer"
+                >
+                  <span>Open Day's Manifest Tracking Page</span>
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </div>
+            ) : (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400">
+                Generating daily manifest access code...
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              {selectedInvoiceForModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSuccessModalOpen(false)
+                    setIsInvoiceReceiptModalOpen(true)
+                  }}
+                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <FileText className="h-3.5 w-3.5 text-sky-400" /> View Invoice / Receipt
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setIsSuccessModalOpen(false)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-600/20 cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mintana Printable Invoice / Receipt Modal */}
       <MintanaInvoiceReceiptModal
         invoice={selectedInvoiceForModal}
+        manifestCode={createdShipmentSuccessData?.manifestCode || (selectedInvoiceForModal as any)?.manifest?.access_code || null}
         isOpen={isInvoiceReceiptModalOpen}
         autoPrint={autoPrintInvoiceModal}
         onClose={() => {

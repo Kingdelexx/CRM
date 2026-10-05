@@ -33,6 +33,8 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+import ManifestLookupPage from '@/pages/ManifestLookupPage'
+
 export default function App() {
   useEffect(() => {
     // Intercept API event dispatch when session expires
@@ -70,6 +72,10 @@ export default function App() {
               </AuthRoute>
             }
           />
+
+          {/* Public Manifest Lookup Routes */}
+          <Route path="/manifest" element={<ManifestLookupPage />} />
+          <Route path="/manifest/:code" element={<ManifestLookupPage />} />
 
           {/* Protected Business App Routes */}
           <Route

@@ -6,7 +6,7 @@ from .models import (
     Company, Stage, Contact, Deal, Project, Pipeline, CustomFieldDefinition,
     Report, EmailAccount, WhatsAppAccount, WhatsAppConversation, WhatsAppMessage,
     AutomationRule, Notification, NotificationPreference, ApprovalWorkflow, ApprovalRequest,
-    Document, CustomModuleRecord, Invoice, Receipt, Shipment, ShipmentEscalation,
+    Document, CustomModuleRecord, Invoice, Receipt, Shipment, DailyManifest, ShipmentEscalation,
     CSRReport, PerformanceScorecard
 )
 from apps.accounts.schemas import UserSchema, OrganizationSchema
@@ -385,11 +385,18 @@ class ReceiptCreateSchema(Schema):
     notes: Optional[str] = None
 
 
+class DailyManifestSchema(ModelSchema):
+    class Meta:
+        model = DailyManifest
+        fields = ['id', 'date', 'access_code', 'created_at', 'updated_at']
+
+
 class ShipmentSchema(ModelSchema):
     sender: Optional[ContactSchema] = None
     receiver: Optional[ContactSchema] = None
     partner: Optional[ContactSchema] = None
     recorded_by: Optional[UserSchema] = None
+    manifest: Optional[DailyManifestSchema] = None
 
     class Meta:
         model = Shipment
@@ -398,7 +405,7 @@ class ShipmentSchema(ModelSchema):
             'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
             'date', 'shipment_date', 'shipment_status', 'payment_status', 'shipping_type', 'currency', 'conversion_rate', 'amount',
             'discount_percentage', 'invoice_number', 'number_of_carton', 'has_doorstep_delivery', 'dpd', 'packager', 'partner_name', 'item_received', 'items_shipped',
-            'items_recieved', 'weight_kg', 'tracking_id', 'value', 'note', 'created_at', 'updated_at'
+            'items_recieved', 'weight_kg', 'tracking_id', 'value', 'note', 'manifest', 'created_at', 'updated_at'
         ]
 
 
@@ -439,6 +446,26 @@ class ShipmentCreateSchema(Schema):
     recorded_by_id: Optional[str] = None
 
 
+
+class DailyManifestItemSchema(Schema):
+    id: UUID
+    sn: int
+    receiver_name: Optional[str] = None
+    item_shipped: Optional[str] = None
+    quantity: int = 1
+    weight: float = 0.0
+    phone_number: Optional[str] = None
+    delivery_address: Optional[str] = None
+    is_received_by_customer: bool = False
+    shipment_status: str = 'PENDING'
+
+
+class DailyManifestLookupResponseSchema(Schema):
+    date: str
+    access_code: str
+    shipments: List[DailyManifestItemSchema]
+
+
 class ShipmentEscalationSchema(ModelSchema):
     shipment: Optional[ShipmentSchema] = None
     customer: Optional[ContactSchema] = None
@@ -450,7 +477,7 @@ class ShipmentEscalationSchema(ModelSchema):
         fields = [
             'id', 'date', 'customer_name', 'escalation_type', 'priority',
             'complaint_summary', 'status', 'internal', 'resolution',
-            'resolution_date', 'created_at', 'updated_at'
+            'resolution_date', 'last_reminder_sent_at', 'created_at', 'updated_at'
         ]
 
 

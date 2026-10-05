@@ -470,6 +470,11 @@ export interface Shipment extends BaseEntity {
   value: number;
   note?: string;
   recorded_by?: User;
+  manifest?: {
+    id: string;
+    date: string;
+    access_code: string;
+  };
 }
 
 export type EscalationType = 'DELAY' | 'DAMAGED_GOODS' | 'MISSING_ITEM' | 'BILLING_ISSUE' | 'CUSTOMS_HOLD' | 'WRONG_DELIVERY' | 'OTHER';

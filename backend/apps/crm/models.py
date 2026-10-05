@@ -1,3 +1,5 @@
+import secrets
+from django.utils import timezone
 from django.db import models
 from apps.common.models import TimeStampedModel
 from apps.accounts.models import Organization, User
@@ -705,6 +707,29 @@ class Receipt(TimeStampedModel):
         return f"Receipt {self.receipt_number} ({self.amount_paid_ngn} NGN / {self.amount_paid_gbp} GBP)"
 
 
+class DailyManifest(TimeStampedModel):
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='daily_manifests'
+    )
+    date = models.DateField(db_index=True)
+    access_code = models.CharField(max_length=100, unique=True, db_index=True)
+
+    class Meta:
+        unique_together = ('organization', 'date')
+
+    def save(self, *args, **kwargs):
+        if not self.access_code:
+            date_str = self.date.strftime("%Y%m%d") if self.date else timezone.now().strftime("%Y%m%d")
+            rand_suffix = secrets.token_hex(2).upper()
+            self.access_code = f"MANIFEST-{date_str}-{rand_suffix}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Daily Manifest {self.access_code} ({self.date})"
+
+
 class Shipment(TimeStampedModel):
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
@@ -734,6 +759,13 @@ class Shipment(TimeStampedModel):
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
+        related_name='shipments'
+    )
+    manifest = models.ForeignKey(
+        DailyManifest,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='shipments'
     )
     
@@ -766,6 +798,7 @@ class Shipment(TimeStampedModel):
     date = models.DateField(null=True, blank=True)
     shipment_date = models.DateField(null=True, blank=True)
     shipment_status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='PENDING', db_index=True)
+    is_received_by_customer = models.BooleanField(default=False)
     payment_status = models.CharField(max_length=50, choices=PAYMENT_STATUS_CHOICES, default='UNPAID')
     shipping_type = models.CharField(max_length=20, choices=SHIPPING_TYPE_CHOICES, default='AIR', null=True, blank=True)
     
@@ -886,6 +919,7 @@ class ShipmentEscalation(TimeStampedModel):
         blank=True,
         related_name='created_shipment_escalations'
     )
+    last_reminder_sent_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Escalation for {self.customer_name or 'Customer'} - Status: {self.status}"
