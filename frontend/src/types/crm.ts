@@ -303,6 +303,8 @@ export interface LogisticsItem {
   price_gbp?: number;
   total_ngn?: number;
   total_gbp?: number;
+  original_price_ngn?: number;
+  original_price_gbp?: number;
 }
 
 export interface LogisticsService {
@@ -310,6 +312,8 @@ export interface LogisticsService {
   service_name: string;
   price_ngn?: number;
   price_gbp?: number;
+  original_price_ngn?: number;
+  original_price_gbp?: number;
 }
 
 export interface Invoice extends BaseEntity {
@@ -331,6 +335,8 @@ export interface Invoice extends BaseEntity {
   services?: LogisticsService[];
   total_ngn: number;
   total_gbp: number;
+  original_total_ngn?: number;
+  original_total_gbp?: number;
   amount_paid: number;
   currency: string;
   sla_terms_url?: string;
@@ -462,6 +468,8 @@ export interface Shipment extends BaseEntity {
   has_doorstep_delivery?: boolean;
   dpd?: boolean;
   is_promo?: boolean;
+  promo_packaging_fee?: number;
+  promo_doorstep_fee?: number;
   packager?: string;
   partner?: Contact;
   partner_name?: string;

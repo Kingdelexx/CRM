@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
-import type { Shipment, Invoice, Contact, User, ShipmentEscalation, EscalationType, EscalationPriority, EscalationStatus } from '@/types/crm'
+import type { Shipment, Invoice, Contact, User, ShipmentEscalation, EscalationType, EscalationPriority, EscalationStatus, LogisticsItem, LogisticsService } from '@/types/crm'
 import { MintanaInvoiceReceiptModal } from '../components/MintanaInvoiceReceiptModal'
 import {
   useLegacyTable as useReactTable,
@@ -98,27 +98,71 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const totalNgn = isGbp ? amountNum * conversionRate : amountNum
     const totalGbp = isGbp ? amountNum : (conversionRate > 0 ? amountNum / conversionRate : 0)
 
-    let dsGbp = 0
-    let dsNgn = 0
+    const isPromo = Boolean(shipment.is_promo)
+    const parcels = Number(shipment.number_of_carton) || 1
+    const doorstepRateGbp = Number(meData?.organization?.doorstep_rate) || 0
+    const stdDsGbp = shipment.has_doorstep_delivery ? parcels * doorstepRateGbp : 0
+    const stdDsNgn = stdDsGbp * conversionRate
+
+    let dsGbp = stdDsGbp
+    let dsNgn = stdDsNgn
     if (shipment.has_doorstep_delivery) {
-      const doorstepRateGbp = Number(meData?.organization?.doorstep_rate) || 0
-      const parcels = Number(shipment.number_of_carton) || 1
-      dsGbp = parcels * doorstepRateGbp
-      dsNgn = dsGbp * conversionRate
+      if (isPromo && shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null && String(shipment.promo_doorstep_fee) !== '') {
+        dsGbp = Number(shipment.promo_doorstep_fee)
+        dsNgn = dsGbp * conversionRate
+      }
     }
 
-    let pkgNgn = 0
-    let pkgGbp = 0
     const parcelRateNgn = Number(meData?.organization?.parcel_rate) || 0
-    if (shipment.number_of_carton && parcelRateNgn > 0) {
-      pkgNgn = Number(shipment.number_of_carton) * parcelRateNgn
-      pkgGbp = conversionRate > 0 ? pkgNgn / conversionRate : 0
+    const stdPkgNgn = (shipment.number_of_carton && parcelRateNgn > 0) ? Number(shipment.number_of_carton) * parcelRateNgn : 0
+    const stdPkgGbp = conversionRate > 0 ? stdPkgNgn / conversionRate : 0
+
+    let pkgNgn = stdPkgNgn
+    let pkgGbp = stdPkgGbp
+    if (shipment.number_of_carton && (parcelRateNgn > 0 || shipment.promo_packaging_fee !== undefined)) {
+      if (isPromo && shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null && String(shipment.promo_packaging_fee) !== '') {
+        pkgNgn = Number(shipment.promo_packaging_fee)
+        pkgGbp = conversionRate > 0 ? pkgNgn / conversionRate : 0
+      }
+    }
+
+    const pkgService: LogisticsService = { sn: 1, service_name: 'Packaging', price_ngn: pkgNgn, price_gbp: pkgGbp }
+    if (stdPkgNgn > pkgNgn) {
+      pkgService.original_price_ngn = stdPkgNgn
+      pkgService.original_price_gbp = stdPkgGbp
+    }
+
+    const dsService: LogisticsService = { sn: 2, service_name: 'Doorstep Delivery', price_ngn: dsNgn, price_gbp: dsGbp }
+    if (stdDsNgn > dsNgn) {
+      dsService.original_price_ngn = stdDsNgn
+      dsService.original_price_gbp = stdDsGbp
     }
 
     const itemsNgn = Math.max(0, totalNgn - dsNgn - pkgNgn)
     const itemsGbp = Math.max(0, totalGbp - dsGbp - pkgGbp)
 
+    const stdPerKg = Number(meData?.organization?.per_kg_price) || 0
+    const stdItemsNgn = (Number(shipment.weight_kg) || 0) * stdPerKg * conversionRate
+    const stdItemsGbp = conversionRate > 0 ? stdItemsNgn / conversionRate : 0
+
     const itemNature = shipment.item_received || shipment.items_shipped || 'CARGO / PARCEL'
+
+    const itemObj: LogisticsItem = {
+      dos: shipment.shipment_date || shipment.date || new Date().toISOString().split('T')[0],
+      nature_of_item: itemNature.toUpperCase(),
+      weight_kg: Number(shipment.weight_kg) || 0,
+      price_ngn: itemsNgn,
+      price_gbp: itemsGbp,
+      total_ngn: itemsNgn,
+      total_gbp: itemsGbp
+    }
+    if (isPromo && stdItemsNgn > itemsNgn) {
+      itemObj.original_price_ngn = stdItemsNgn
+      itemObj.original_price_gbp = stdItemsGbp
+    }
+
+    const stdTotalNgn = stdItemsNgn + stdPkgNgn + stdDsNgn
+    const stdTotalGbp = stdItemsGbp + stdPkgGbp + stdDsGbp
 
     return {
       id: shipment.id || 'temp-id',
@@ -135,23 +179,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       parcel_handler: shipment.recorded_by
         ? ([shipment.recorded_by.first_name, shipment.recorded_by.last_name].filter(Boolean).join(' ') || shipment.recorded_by.email || '')
         : (shipment.packager || ''),
-      items: [
-        {
-          dos: shipment.shipment_date || shipment.date || new Date().toISOString().split('T')[0],
-          nature_of_item: itemNature.toUpperCase(),
-          weight_kg: Number(shipment.weight_kg) || 0,
-          price_ngn: itemsNgn,
-          price_gbp: itemsGbp,
-          total_ngn: itemsNgn,
-          total_gbp: itemsGbp
-        }
-      ],
-      services: [
-        { sn: 1, service_name: 'Packaging', price_ngn: pkgNgn, price_gbp: pkgGbp },
-        { sn: 2, service_name: 'Doorstep Delivery', price_ngn: dsNgn, price_gbp: dsGbp }
-      ],
+      items: [itemObj],
+      services: [pkgService, dsService],
       total_ngn: totalNgn,
       total_gbp: totalGbp,
+      original_total_ngn: (isPromo && stdTotalNgn > totalNgn) ? stdTotalNgn : undefined,
+      original_total_gbp: (isPromo && stdTotalGbp > totalGbp) ? stdTotalGbp : undefined,
       amount_paid: shipment.payment_status === 'PAID' ? totalNgn : 0,
       currency: shipment.currency || 'NGN',
       sla_terms_url: 'https://www.mintana.co.uk/terms-and-conditions',
@@ -220,7 +253,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     value: '',
     note: '',
     recorded_by_id: '',
-    is_promo: false
+    is_promo: false,
+    promo_packaging_fee: '',
+    promo_doorstep_fee: ''
   })
   const [formError, setFormError] = useState('')
   const [amountNgn, setAmountNgn] = useState('')
@@ -256,6 +291,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const [hasDoorstepDelivery, setHasDoorstepDelivery] = useState<'NO' | 'YES'>('NO')
   const [dpd, setDpd] = useState<'NO' | 'YES'>('NO')
 
+  const createPromoPkgRef = useRef<HTMLInputElement>(null)
+  const editPromoPkgRef = useRef<HTMLInputElement>(null)
+
   const recalculateTotalAmount = (
     currentHasPackaging: 'YES' | 'NO',
     parcelCountStr: string,
@@ -265,17 +303,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     partnerIdOverride?: string,
     partnerNameOverride?: string,
     shippingTypeOverride?: string,
-    isPromoOverride?: boolean
+    isPromoOverride?: boolean,
+    promoPackagingFeeOverride?: string,
+    promoDoorstepFeeOverride?: string
   ) => {
     const numParcels = parseInt(parcelCountStr) || 0
-    const parcelFee = currentHasPackaging === 'YES' ? (numParcels * orgParcelRate) : 0
-
-    let doorstepFee = 0
-    if (currentHasDoorstep === 'YES') {
-      const parcelsForDoorstep = numParcels > 0 ? numParcels : 1
-      doorstepFee = parcelsForDoorstep * orgDoorstepRate * orgExchangeRate
-    }
-
     const weightKg = parseFloat(weightKgStr !== undefined ? weightKgStr : formData.weight_kg) || 0
 
     // Determine partner, promo & shipping type pricing
@@ -284,6 +316,23 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const isPartner = Boolean((pId && pId.trim() !== '') || (pName && pName.trim() !== ''))
     const shipType = shippingTypeOverride !== undefined ? shippingTypeOverride : formData.shipping_type
     const isPromo = isPromoOverride !== undefined ? isPromoOverride : Boolean(formData.is_promo)
+    const promoPkgFeeStr = promoPackagingFeeOverride !== undefined ? promoPackagingFeeOverride : String(formData.promo_packaging_fee ?? '')
+    const promoDsFeeStr = promoDoorstepFeeOverride !== undefined ? promoDoorstepFeeOverride : String(formData.promo_doorstep_fee ?? '')
+
+    let parcelFee = currentHasPackaging === 'YES' ? (numParcels * orgParcelRate) : 0
+    if (isPromo && currentHasPackaging === 'YES' && promoPkgFeeStr !== '' && !isNaN(parseFloat(promoPkgFeeStr))) {
+      parcelFee = parseFloat(promoPkgFeeStr)
+    }
+
+    let doorstepFee = 0
+    if (currentHasDoorstep === 'YES') {
+      const parcelsForDoorstep = numParcels > 0 ? numParcels : 1
+      if (isPromo && promoDsFeeStr !== '' && !isNaN(parseFloat(promoDsFeeStr))) {
+        doorstepFee = parseFloat(promoDsFeeStr) * orgExchangeRate
+      } else {
+        doorstepFee = parcelsForDoorstep * orgDoorstepRate * orgExchangeRate
+      }
+    }
 
     let effectivePerKgPrice = orgPerKgPrice
     if (isPromo && orgPromoRate > 0) {
@@ -321,6 +370,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       )
       return next
     })
+    if (isPromo) {
+      setTimeout(() => {
+        createPromoPkgRef.current?.focus()
+        editPromoPkgRef.current?.focus()
+      }, 50)
+    }
   }
 
   const handleHasPackagingToggle = (val: 'YES' | 'NO') => {
@@ -518,6 +573,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         dpd: dpd === 'YES',
         is_promo: Boolean(payload.is_promo),
+        promo_packaging_fee: (payload.is_promo && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
+        promo_doorstep_fee: (payload.is_promo && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
@@ -605,7 +662,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       value: shipment.value ? String(shipment.value) : '',
       note: shipment.note || '',
       recorded_by_id: shipment.recorded_by?.id || '',
-      is_promo: Boolean(shipment.is_promo)
+      is_promo: Boolean(shipment.is_promo),
+      promo_packaging_fee: shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null ? String(shipment.promo_packaging_fee) : '',
+      promo_doorstep_fee: shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null ? String(shipment.promo_doorstep_fee) : ''
     })
     const amt = shipment.amount ? Number(shipment.amount) : 0
     const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
@@ -836,6 +895,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         dpd: dpd === 'YES',
         is_promo: Boolean(payload.is_promo),
+        promo_packaging_fee: (payload.is_promo && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
+        promo_doorstep_fee: (payload.is_promo && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
@@ -947,7 +1008,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       value: '',
       note: '',
       recorded_by_id: meData?.id || '',
-      is_promo: false
+      is_promo: false,
+      promo_packaging_fee: '',
+      promo_doorstep_fee: ''
     })
     setAmountNgn('')
     setAmountGbp('')
@@ -964,7 +1027,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       if (name === 'dpd_tracking_number') {
         next.tracking_id = value
       }
-      if (['weight_kg', 'discount_percentage', 'partner_name', 'partner_id', 'shipping_type', 'is_promo'].includes(name)) {
+      if (['weight_kg', 'discount_percentage', 'partner_name', 'partner_id', 'shipping_type', 'is_promo', 'promo_packaging_fee', 'promo_doorstep_fee'].includes(name)) {
         recalculateTotalAmount(
           hasPackaging,
           next.number_of_carton,
@@ -974,7 +1037,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           next.partner_id,
           next.partner_name,
           next.shipping_type,
-          Boolean(next.is_promo)
+          Boolean(next.is_promo),
+          String(next.promo_packaging_fee ?? ''),
+          String(next.promo_doorstep_fee ?? '')
         )
       }
       return next
@@ -2323,6 +2388,44 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
+                  {/* Manual Promo Fee Overrides when Promo Pricing is active */}
+                  {formData.is_promo && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-black text-white p-4 rounded-xl border border-zinc-700 shadow-xl">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-white font-bold flex items-center gap-1.5 uppercase tracking-wider">
+                          <Package className="h-3.5 w-3.5 text-amber-400" /> Promo Packaging Fee (₦ NGN)
+                        </label>
+                        <input
+                          ref={createPromoPkgRef}
+                          autoFocus
+                          type="text"
+                          inputMode="decimal"
+                          name="promo_packaging_fee"
+                          value={formData.promo_packaging_fee ?? ''}
+                          onChange={handleInputChange}
+                          onFocus={(e) => e.target.select()}
+                          placeholder={`Std: ₦${((parseInt(formData.number_of_carton) || 0) * orgParcelRate).toLocaleString()}`}
+                          className="w-full bg-white text-black font-bold border border-zinc-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-400 focus:outline-none rounded-lg p-2.5 text-sm placeholder-zinc-400 shadow-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-white font-bold flex items-center gap-1.5 uppercase tracking-wider">
+                          <Truck className="h-3.5 w-3.5 text-amber-400" /> Promo Doorstep Delivery Fee (£ GBP)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          name="promo_doorstep_fee"
+                          value={formData.promo_doorstep_fee ?? ''}
+                          onChange={handleInputChange}
+                          onFocus={(e) => e.target.select()}
+                          placeholder={`Std: £${((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate).toLocaleString()}`}
+                          className="w-full bg-white text-black font-bold border border-zinc-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-400 focus:outline-none rounded-lg p-2.5 text-sm placeholder-zinc-400 shadow-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {(() => {
                     const isPartner = Boolean((formData.partner_id && formData.partner_id !== '') || (formData.partner_name && formData.partner_name.trim() !== ''))
                     const isSea = formData.shipping_type === 'SEA'
@@ -2342,23 +2445,32 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
                     const weightVal = parseFloat(formData.weight_kg) || 0
                     const weightFeeVal = weightVal * currentPerKgRate * orgExchangeRate
-                    const packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
-                    const doorstepFeeVal = hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0
+
+                    let packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
+                    if (isPromo && hasPackaging === 'YES' && formData.promo_packaging_fee !== undefined && formData.promo_packaging_fee !== null && String(formData.promo_packaging_fee) !== '') {
+                      packagingFeeVal = parseFloat(String(formData.promo_packaging_fee)) || 0
+                    }
+
+                    let doorstepFeeVal = hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0
+                    if (isPromo && hasDoorstepDelivery === 'YES' && formData.promo_doorstep_fee !== undefined && formData.promo_doorstep_fee !== null && String(formData.promo_doorstep_fee) !== '') {
+                      doorstepFeeVal = (parseFloat(String(formData.promo_doorstep_fee)) || 0) * orgExchangeRate
+                    }
+
                     const subtotalVal = packagingFeeVal + doorstepFeeVal + weightFeeVal
                     const discountVal = (subtotalVal * (parseFloat(formData.discount_percentage) || 0)) / 100
 
                     return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
                       <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
                         <div className="text-xs text-zinc-300 space-y-1 pt-1">
-                          {hasPackaging === 'YES' && orgParcelRate > 0 && (
+                          {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo) && (
                             <div className="flex justify-between text-purple-400 font-medium">
-                              <span>Packaging Fee ({(parseInt(formData.number_of_carton) || 0)} × ₦{orgParcelRate.toLocaleString()}):</span>
+                              <span>Packaging Fee {isPromo && formData.promo_packaging_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 0)} × ₦${orgParcelRate.toLocaleString()})`}:</span>
                               <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
-                          {hasDoorstepDelivery === 'YES' && orgDoorstepRate > 0 && (
+                          {hasDoorstepDelivery === 'YES' && (doorstepFeeVal > 0 || isPromo) && (
                             <div className="flex justify-between text-sky-400 font-medium">
-                              <span>Doorstep Delivery Fee ({(parseInt(formData.number_of_carton) || 1)} parcel(s) × £{orgDoorstepRate.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                              <span>Doorstep Delivery Fee {isPromo && formData.promo_doorstep_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${orgDoorstepRate.toLocaleString()} @ ₦${orgExchangeRate.toLocaleString()}/£)`}:</span>
                               <span>₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
@@ -3709,6 +3821,44 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
+                  {/* Manual Promo Fee Overrides when Promo Pricing is active */}
+                  {formData.is_promo && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-black text-white p-4 rounded-xl border border-zinc-700 shadow-xl">
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-white font-bold flex items-center gap-1.5 uppercase tracking-wider">
+                          <Package className="h-3.5 w-3.5 text-amber-400" /> Promo Packaging Fee (₦ NGN)
+                        </label>
+                        <input
+                          ref={editPromoPkgRef}
+                          autoFocus
+                          type="text"
+                          inputMode="decimal"
+                          name="promo_packaging_fee"
+                          value={formData.promo_packaging_fee ?? ''}
+                          onChange={handleInputChange}
+                          onFocus={(e) => e.target.select()}
+                          placeholder={`Std: ₦${((parseInt(formData.number_of_carton) || 0) * orgParcelRate).toLocaleString()}`}
+                          className="w-full bg-white text-black font-bold border border-zinc-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-400 focus:outline-none rounded-lg p-2.5 text-sm placeholder-zinc-400 shadow-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-white font-bold flex items-center gap-1.5 uppercase tracking-wider">
+                          <Truck className="h-3.5 w-3.5 text-amber-400" /> Promo Doorstep Delivery Fee (£ GBP)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          name="promo_doorstep_fee"
+                          value={formData.promo_doorstep_fee ?? ''}
+                          onChange={handleInputChange}
+                          onFocus={(e) => e.target.select()}
+                          placeholder={`Std: £${((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate).toLocaleString()}`}
+                          className="w-full bg-white text-black font-bold border border-zinc-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-400 focus:outline-none rounded-lg p-2.5 text-sm placeholder-zinc-400 shadow-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {(() => {
                     const isPartner = Boolean((formData.partner_id && formData.partner_id !== '') || (formData.partner_name && formData.partner_name.trim() !== ''))
                     const isSea = formData.shipping_type === 'SEA'
@@ -3728,23 +3878,32 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
                     const weightVal = parseFloat(formData.weight_kg) || 0
                     const weightFeeVal = weightVal * currentPerKgRate * orgExchangeRate
-                    const packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
-                    const doorstepFeeVal = hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0
+
+                    let packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
+                    if (isPromo && hasPackaging === 'YES' && formData.promo_packaging_fee !== undefined && formData.promo_packaging_fee !== null && String(formData.promo_packaging_fee) !== '') {
+                      packagingFeeVal = parseFloat(String(formData.promo_packaging_fee)) || 0
+                    }
+
+                    let doorstepFeeVal = hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0
+                    if (isPromo && hasDoorstepDelivery === 'YES' && formData.promo_doorstep_fee !== undefined && formData.promo_doorstep_fee !== null && String(formData.promo_doorstep_fee) !== '') {
+                      doorstepFeeVal = (parseFloat(String(formData.promo_doorstep_fee)) || 0) * orgExchangeRate
+                    }
+
                     const subtotalVal = packagingFeeVal + doorstepFeeVal + weightFeeVal
                     const discountVal = (subtotalVal * (parseFloat(formData.discount_percentage) || 0)) / 100
 
                     return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
                       <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
                         <div className="text-xs text-zinc-300 space-y-1 pt-1">
-                          {hasPackaging === 'YES' && orgParcelRate > 0 && (
+                          {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo) && (
                             <div className="flex justify-between text-purple-400 font-medium">
-                              <span>Packaging Fee ({(parseInt(formData.number_of_carton) || 0)} × ₦{orgParcelRate.toLocaleString()}):</span>
+                              <span>Packaging Fee {isPromo && formData.promo_packaging_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 0)} × ₦${orgParcelRate.toLocaleString()})`}:</span>
                               <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
-                          {hasDoorstepDelivery === 'YES' && orgDoorstepRate > 0 && (
+                          {hasDoorstepDelivery === 'YES' && (doorstepFeeVal > 0 || isPromo) && (
                             <div className="flex justify-between text-sky-400 font-medium">
-                              <span>Doorstep Delivery Fee ({(parseInt(formData.number_of_carton) || 1)} parcel(s) × £{orgDoorstepRate.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                              <span>Doorstep Delivery Fee {isPromo && formData.promo_doorstep_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${orgDoorstepRate.toLocaleString()} @ ₦${orgExchangeRate.toLocaleString()}/£)`}:</span>
                               <span>₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}

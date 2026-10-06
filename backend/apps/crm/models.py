@@ -663,6 +663,8 @@ class Invoice(TimeStampedModel):
     # Financial Totals
     total_ngn = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     total_gbp = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    original_total_ngn = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    original_total_gbp = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     currency = models.CharField(max_length=10, default='NGN')
     
@@ -814,6 +816,8 @@ class Shipment(TimeStampedModel):
     has_doorstep_delivery = models.BooleanField(default=False)
     dpd = models.BooleanField(default=False)
     is_promo = models.BooleanField(default=False)
+    promo_packaging_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    promo_doorstep_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     packager = models.CharField(max_length=255, null=True, blank=True)
     partner = models.ForeignKey(
         Contact,

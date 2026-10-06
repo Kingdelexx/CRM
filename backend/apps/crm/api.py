@@ -2491,51 +2491,87 @@ def sync_shipment_invoice(shipment):
     dos_date = str(shipment.shipment_date or shipment.date or timezone.localdate())
 
     org = shipment.organization
-    ds_gbp = 0.0
-    ds_ngn = 0.0
-    if shipment.has_doorstep_delivery and org:
-        doorstep_rate_gbp = float(getattr(org, 'doorstep_rate', 0.0) or 0.0)
-        ds_parcels = shipment.number_of_carton if shipment.number_of_carton else 1
-        ds_gbp = round(ds_parcels * doorstep_rate_gbp, 2)
-        ds_ngn = round(ds_gbp * conversion_rate, 2)
+    ds_parcels = shipment.number_of_carton if shipment.number_of_carton else 1
 
-    pkg_ngn = 0.0
-    pkg_gbp = 0.0
-    if org:
-        parcel_rate_ngn = float(getattr(org, 'parcel_rate', 0.0) or 0.0)
-        if shipment.number_of_carton and parcel_rate_ngn > 0:
-            pkg_ngn = round(shipment.number_of_carton * parcel_rate_ngn, 2)
+    doorstep_rate_gbp = float(getattr(org, 'doorstep_rate', 0.0) or 0.0) if org else 0.0
+    std_ds_gbp = round(ds_parcels * doorstep_rate_gbp, 2) if shipment.has_doorstep_delivery else 0.0
+    std_ds_ngn = round(std_ds_gbp * conversion_rate, 2)
+
+    if shipment.has_doorstep_delivery:
+        if shipment.is_promo and shipment.promo_doorstep_fee is not None:
+            ds_gbp = round(float(shipment.promo_doorstep_fee), 2)
+            ds_ngn = round(ds_gbp * conversion_rate, 2)
+        else:
+            ds_gbp = std_ds_gbp
+            ds_ngn = std_ds_ngn
+    else:
+        ds_gbp = 0.0
+        ds_ngn = 0.0
+
+    parcel_rate_ngn = float(getattr(org, 'parcel_rate', 0.0) or 0.0) if org else 0.0
+    std_pkg_ngn = round((shipment.number_of_carton or 0) * parcel_rate_ngn, 2) if shipment.number_of_carton else 0.0
+    std_pkg_gbp = round(std_pkg_ngn / conversion_rate, 2) if (conversion_rate > 0 and std_pkg_ngn > 0) else 0.0
+
+    if shipment.number_of_carton and (parcel_rate_ngn > 0 or shipment.promo_packaging_fee is not None):
+        if shipment.is_promo and shipment.promo_packaging_fee is not None:
+            pkg_ngn = round(float(shipment.promo_packaging_fee), 2)
             pkg_gbp = round(pkg_ngn / conversion_rate, 2) if conversion_rate > 0 else 0.0
+        else:
+            pkg_ngn = std_pkg_ngn
+            pkg_gbp = std_pkg_gbp
+    else:
+        pkg_ngn = 0.0
+        pkg_gbp = 0.0
 
-    services = [
-        {
-            'sn': 1,
-            'service_name': 'Packaging',
-            'price_ngn': round(pkg_ngn, 2),
-            'price_gbp': round(pkg_gbp, 2)
-        },
-        {
-            'sn': 2,
-            'service_name': 'Doorstep Delivery',
-            'price_ngn': round(ds_ngn, 2),
-            'price_gbp': round(ds_gbp, 2)
-        }
-    ]
+    pkg_service = {
+        'sn': 1,
+        'service_name': 'Packaging',
+        'price_ngn': round(pkg_ngn, 2),
+        'price_gbp': round(pkg_gbp, 2)
+    }
+    if std_pkg_ngn > pkg_ngn:
+        pkg_service['original_price_ngn'] = std_pkg_ngn
+        pkg_service['original_price_gbp'] = std_pkg_gbp
+
+    ds_service = {
+        'sn': 2,
+        'service_name': 'Doorstep Delivery',
+        'price_ngn': round(ds_ngn, 2),
+        'price_gbp': round(ds_gbp, 2)
+    }
+    if std_ds_ngn > ds_ngn:
+        ds_service['original_price_ngn'] = std_ds_ngn
+        ds_service['original_price_gbp'] = std_ds_gbp
+
+    services = [pkg_service, ds_service]
 
     items_ngn = max(0.0, round(total_ngn - (pkg_ngn + ds_ngn), 2))
     items_gbp = max(0.0, round(total_gbp - (pkg_gbp + ds_gbp), 2))
 
-    items = [
-        {
-            'dos': dos_date,
-            'nature_of_item': item_nature.upper(),
-            'weight_kg': float(shipment.weight_kg or 0),
-            'price_ngn': items_ngn,
-            'price_gbp': items_gbp,
-            'total_ngn': items_ngn,
-            'total_gbp': items_gbp
-        }
-    ]
+    std_per_kg = float(getattr(org, 'per_kg_price', 0.0) or 0.0) if org else 0.0
+    std_items_ngn = round(float(shipment.weight_kg or 0) * std_per_kg * conversion_rate, 2)
+    std_items_gbp = round(std_items_ngn / conversion_rate, 2) if conversion_rate > 0 else 0.0
+
+    item_dict = {
+        'dos': dos_date,
+        'nature_of_item': item_nature.upper(),
+        'weight_kg': float(shipment.weight_kg or 0),
+        'price_ngn': items_ngn,
+        'price_gbp': items_gbp,
+        'total_ngn': items_ngn,
+        'total_gbp': items_gbp
+    }
+    if shipment.is_promo and std_items_ngn > items_ngn:
+        item_dict['original_price_ngn'] = std_items_ngn
+        item_dict['original_price_gbp'] = std_items_gbp
+
+    items = [item_dict]
+
+    std_total_ngn = round(std_items_ngn + std_pkg_ngn + std_ds_ngn, 2)
+    std_total_gbp = round(std_items_gbp + std_pkg_gbp + std_ds_gbp, 2)
+
+    orig_total_ngn = std_total_ngn if (shipment.is_promo and std_total_ngn > total_ngn) else None
+    orig_total_gbp = std_total_gbp if (shipment.is_promo and std_total_gbp > total_gbp) else None
 
     inv_status = Invoice.PAID if shipment.payment_status == 'PAID' else Invoice.DRAFT
     issue_date = shipment.shipment_date or shipment.date or timezone.localdate()
@@ -2566,6 +2602,8 @@ def sync_shipment_invoice(shipment):
             'services': services,
             'total_ngn': round(total_ngn, 2),
             'total_gbp': round(total_gbp, 2),
+            'original_total_ngn': orig_total_ngn,
+            'original_total_gbp': orig_total_gbp,
             'amount_paid': round(total_ngn, 2) if inv_status == Invoice.PAID else 0,
             'currency': shipment.currency or 'NGN',
             'issue_date': issue_date,
@@ -2587,6 +2625,8 @@ def sync_shipment_invoice(shipment):
         inv.services = services
         inv.total_ngn = round(total_ngn, 2)
         inv.total_gbp = round(total_gbp, 2)
+        inv.original_total_ngn = orig_total_ngn
+        inv.original_total_gbp = orig_total_gbp
         inv.status = inv_status
         if inv_status == Invoice.PAID:
             inv.amount_paid = round(total_ngn, 2)

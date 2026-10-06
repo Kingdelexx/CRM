@@ -71,14 +71,29 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
     itemsTotalGbp = itemsTotalNgn / fallbackRate;
   }
 
+  const itemsOriginalTotalNgn = items.reduce((acc, i) => acc + (Number(i.original_price_ngn) || Number(i.total_ngn) || Number(i.price_ngn) || 0), 0);
+  let itemsOriginalTotalGbp = items.reduce((acc, i) => acc + (Number(i.original_price_gbp) || Number(i.total_gbp) || Number(i.price_gbp) || 0), 0);
+  if ((itemsOriginalTotalGbp === itemsOriginalTotalNgn || itemsOriginalTotalGbp <= 0) && itemsOriginalTotalNgn > 0) {
+    itemsOriginalTotalGbp = itemsOriginalTotalNgn / fallbackRate;
+  }
+
   const servicesTotalNgn = services.reduce((acc, s) => acc + (Number(s.price_ngn) || 0), 0);
   let servicesTotalGbp = services.reduce((acc, s) => acc + (Number(s.price_gbp) || 0), 0);
   if ((servicesTotalGbp === servicesTotalNgn || servicesTotalGbp <= 0) && servicesTotalNgn > 0) {
     servicesTotalGbp = servicesTotalNgn / fallbackRate;
   }
 
+  const servicesOriginalTotalNgn = services.reduce((acc, s) => acc + (Number(s.original_price_ngn) || Number(s.price_ngn) || 0), 0);
+  let servicesOriginalTotalGbp = services.reduce((acc, s) => acc + (Number(s.original_price_gbp) || Number(s.price_gbp) || 0), 0);
+  if ((servicesOriginalTotalGbp === servicesOriginalTotalNgn || servicesOriginalTotalGbp <= 0) && servicesOriginalTotalNgn > 0) {
+    servicesOriginalTotalGbp = servicesOriginalTotalNgn / fallbackRate;
+  }
+
   const calculatedTotalNgn = itemsTotalNgn + servicesTotalNgn;
   const calculatedTotalGbp = itemsTotalGbp + servicesTotalGbp;
+
+  const calculatedOriginalTotalNgn = itemsOriginalTotalNgn + servicesOriginalTotalNgn;
+  const calculatedOriginalTotalGbp = itemsOriginalTotalGbp + servicesOriginalTotalGbp;
 
   const baseTotalNgn = receipt ? Number(receipt.amount_paid_ngn) : Number(activeInvoice?.total_ngn || 0);
   let baseTotalGbp = receipt ? Number(receipt.amount_paid_gbp) : Number(activeInvoice?.total_gbp || 0);
@@ -90,6 +105,12 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
   let totalGbp = calculatedTotalGbp > 0 ? calculatedTotalGbp : baseTotalGbp;
   if ((totalGbp === totalNgn || totalGbp <= 0) && totalNgn > 0) {
     totalGbp = totalNgn / fallbackRate;
+  }
+
+  const originalTotalNgn = Number(activeInvoice?.original_total_ngn) || calculatedOriginalTotalNgn;
+  let originalTotalGbp = Number(activeInvoice?.original_total_gbp) || calculatedOriginalTotalGbp;
+  if ((originalTotalGbp === originalTotalNgn || originalTotalGbp <= 0) && originalTotalNgn > 0) {
+    originalTotalGbp = originalTotalNgn / fallbackRate;
   }
 
   const slaUrl = activeInvoice?.sla_terms_url || 'https://www.mintana.co.uk/terms-and-conditions';
@@ -516,19 +537,47 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                       {displayCurrency === 'NGN' ? (
                         <>
                           <td className="py-2 px-3 border-r border-slate-200 text-right">
-                            ₦{(Number(item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {item.original_price_ngn && item.original_price_ngn > (item.price_ngn || 0) ? (
+                              <span className="line-through text-slate-400 font-normal mr-1.5">
+                                ₦{item.weight_kg ? (item.original_price_ngn / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(item.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            ) : null}
+                            <span>
+                              ₦{item.weight_kg ? ((Number(item.price_ngn) || 0) / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                           </td>
                           <td className="py-2 px-3 text-right font-semibold">
-                            ₦{(Number(item.total_ngn || item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {item.original_price_ngn && item.original_price_ngn > (item.price_ngn || 0) ? (
+                              <span className="line-through text-slate-400 font-normal mr-1.5">
+                                ₦{Number(item.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            ) : null}
+                            <span className={item.original_price_ngn && item.original_price_ngn > (item.price_ngn || 0) ? "text-emerald-700 font-bold" : ""}>
+                              ₦{(Number(item.total_ngn || item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                           </td>
                         </>
                       ) : (
                         <>
                           <td className="py-2 px-3 border-r border-slate-200 text-right">
-                            £{(Number(item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {item.original_price_gbp && item.original_price_gbp > (item.price_gbp || 0) ? (
+                              <span className="line-through text-slate-400 font-normal mr-1.5">
+                                £{item.weight_kg ? (item.original_price_gbp / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(item.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            ) : null}
+                            <span>
+                              £{item.weight_kg ? ((Number(item.price_gbp) || 0) / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                           </td>
                           <td className="py-2 px-3 text-right font-semibold">
-                            £{(Number(item.total_gbp || item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {item.original_price_gbp && item.original_price_gbp > (item.price_gbp || 0) ? (
+                              <span className="line-through text-slate-400 font-normal mr-1.5">
+                                £{Number(item.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            ) : null}
+                            <span className={item.original_price_gbp && item.original_price_gbp > (item.price_gbp || 0) ? "text-emerald-700 font-bold" : ""}>
+                              £{(Number(item.total_gbp || item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
                           </td>
                         </>
                       )}
@@ -560,9 +609,33 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                     TOTAL
                   </td>
                   <td colSpan={2} className="py-2 px-3 text-right">
-                    {displayCurrency === 'NGN'
-                      ? `₦${itemsTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : `£${itemsTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    {displayCurrency === 'NGN' ? (
+                      itemsOriginalTotalNgn > itemsTotalNgn ? (
+                        <span>
+                          <span className="line-through text-slate-400 font-normal mr-2">
+                            ₦{itemsOriginalTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-emerald-700 font-bold">
+                            ₦{itemsTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </span>
+                      ) : (
+                        `₦${itemsTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      )
+                    ) : (
+                      itemsOriginalTotalGbp > itemsTotalGbp ? (
+                        <span>
+                          <span className="line-through text-slate-400 font-normal mr-2">
+                            £{itemsOriginalTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-emerald-700 font-bold">
+                            £{itemsTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </span>
+                      ) : (
+                        `£${itemsTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      )
+                    )}
                   </td>
                 </tr>
               </tbody>
@@ -590,10 +663,34 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                     <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-800">
                       {srv.service_name}
                     </td>
-                    <td className="py-2 px-3 text-right">
-                      {displayCurrency === 'NGN'
-                        ? `₦${(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : `£${(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    <td className="py-2 px-3 text-right font-medium">
+                      {displayCurrency === 'NGN' ? (
+                        srv.original_price_ngn && srv.original_price_ngn > (srv.price_ngn || 0) ? (
+                          <div className="flex items-center justify-end space-x-1.5">
+                            <span className="line-through text-slate-400 font-normal">
+                              ₦{Number(srv.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className="font-bold text-emerald-700">
+                              ₦{(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        ) : (
+                          `₦${(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        )
+                      ) : (
+                        srv.original_price_gbp && srv.original_price_gbp > (srv.price_gbp || 0) ? (
+                          <div className="flex items-center justify-end space-x-1.5">
+                            <span className="line-through text-slate-400 font-normal">
+                              £{Number(srv.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className="font-bold text-emerald-700">
+                              £{(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        ) : (
+                          `£${(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        )
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -603,9 +700,33 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                     TOTAL
                   </td>
                   <td className="py-2 px-3 text-right">
-                    {displayCurrency === 'NGN'
-                      ? `₦${servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : `£${servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    {displayCurrency === 'NGN' ? (
+                      servicesOriginalTotalNgn > servicesTotalNgn ? (
+                        <span>
+                          <span className="line-through text-slate-400 font-normal mr-2">
+                            ₦{servicesOriginalTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-emerald-700 font-bold">
+                            ₦{servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </span>
+                      ) : (
+                        `₦${servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      )
+                    ) : (
+                      servicesOriginalTotalGbp > servicesTotalGbp ? (
+                        <span>
+                          <span className="line-through text-slate-400 font-normal mr-2">
+                            £{servicesOriginalTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-emerald-700 font-bold">
+                            £{servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </span>
+                      ) : (
+                        `£${servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      )
+                    )}
                   </td>
                 </tr>
               </tbody>
@@ -616,15 +737,55 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
           <div className="flex justify-end mb-8">
             <div className="w-full sm:w-80">
               {displayCurrency === 'NGN' ? (
-                <div className="flex justify-between items-center bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md">
-                  <span>Total (NGN)</span>
-                  <span>₦{totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                </div>
+                originalTotalNgn > totalNgn ? (
+                  <div className="flex flex-col bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl shadow-md space-y-1">
+                    <div className="flex justify-between items-center text-xs opacity-90 border-b border-sky-400/50 pb-1">
+                      <span>Standard Rate Total (NGN)</span>
+                      <span className="line-through text-sky-200">
+                        ₦{originalTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-0.5">
+                      <span className="flex items-center gap-1.5">
+                        <span>Total Payable (NGN)</span>
+                        <span className="bg-amber-400 text-sky-950 text-[9px] font-black uppercase px-1.5 py-0.5 rounded tracking-wide">PROMO</span>
+                      </span>
+                      <span className="text-amber-300 font-black text-lg">
+                        ₦{totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md">
+                    <span>Total (NGN)</span>
+                    <span>₦{totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )
               ) : (
-                <div className="flex justify-between items-center bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md">
-                  <span>Total (GBP)</span>
-                  <span>£{totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                </div>
+                originalTotalGbp > totalGbp ? (
+                  <div className="flex flex-col bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl shadow-md space-y-1">
+                    <div className="flex justify-between items-center text-xs opacity-90 border-b border-blue-700/50 pb-1">
+                      <span>Standard Rate Total (GBP)</span>
+                      <span className="line-through text-blue-200">
+                        £{originalTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-0.5">
+                      <span className="flex items-center gap-1.5">
+                        <span>Total Payable (GBP)</span>
+                        <span className="bg-amber-400 text-blue-950 text-[9px] font-black uppercase px-1.5 py-0.5 rounded tracking-wide">PROMO</span>
+                      </span>
+                      <span className="text-amber-300 font-black text-lg">
+                        £{totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md">
+                    <span>Total (GBP)</span>
+                    <span>£{totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+                )
               )}
             </div>
           </div>

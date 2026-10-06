@@ -331,7 +331,7 @@ class InvoiceSchema(ModelSchema):
             'id', 'invoice_number', 'issue_date', 'due_date', 'status',
             'receiver_name', 'receiver_tel', 'receiver_email', 'receiver_address',
             'total_value_items', 'expected_parcel_no', 'parcel_handler',
-            'items', 'services', 'total_ngn', 'total_gbp', 'amount_paid',
+            'items', 'services', 'total_ngn', 'total_gbp', 'original_total_ngn', 'original_total_gbp', 'amount_paid',
             'currency', 'sla_terms_url', 'notes', 'created_at', 'updated_at'
         ]
 
@@ -404,7 +404,7 @@ class ShipmentSchema(ModelSchema):
             'id', 'sender_name', 'sender_phone', 'sender_email', 'sender_address',
             'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
             'date', 'shipment_date', 'shipment_status', 'payment_status', 'shipping_type', 'currency', 'conversion_rate', 'amount',
-            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_doorstep_delivery', 'dpd', 'is_promo', 'packager', 'partner_name', 'item_received', 'items_shipped',
+            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_doorstep_delivery', 'dpd', 'is_promo', 'promo_packaging_fee', 'promo_doorstep_fee', 'packager', 'partner_name', 'item_received', 'items_shipped',
             'items_recieved', 'weight_kg', 'tracking_id', 'dpd_tracking_number', 'payment_reference_number', 'value', 'note', 'manifest', 'created_at', 'updated_at'
         ]
 
@@ -434,6 +434,8 @@ class ShipmentCreateSchema(Schema):
     has_doorstep_delivery: Optional[bool] = False
     dpd: Optional[bool] = False
     is_promo: Optional[bool] = False
+    promo_packaging_fee: Optional[float] = None
+    promo_doorstep_fee: Optional[float] = None
     packager: Optional[str] = None
     partner_id: Optional[str] = None
     partner_name: Optional[str] = None
