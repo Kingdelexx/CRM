@@ -194,7 +194,9 @@ export default function SettingsWorkspace() {
     parcel_rate: 0.00,
     doorstep_rate: 0.00,
     per_kg_price: 0.00,
-    partner_per_kg_price: 0.00
+    partner_per_kg_price: 0.00,
+    sea_shipping_rate: 0.00,
+    promo_rate: 0.00
   })
 
   // Populate Org form when me is loaded
@@ -214,7 +216,9 @@ export default function SettingsWorkspace() {
         parcel_rate: org.parcel_rate ?? 0.00,
         doorstep_rate: org.doorstep_rate ?? 0.00,
         per_kg_price: org.per_kg_price ?? 0.00,
-        partner_per_kg_price: org.partner_per_kg_price ?? 0.00
+        partner_per_kg_price: org.partner_per_kg_price ?? 0.00,
+        sea_shipping_rate: org.sea_shipping_rate ?? 0.00,
+        promo_rate: org.promo_rate ?? 0.00
       })
     }
   }, [me])
@@ -600,6 +604,32 @@ export default function SettingsWorkspace() {
                     onChange={(e) => setOrgForm(prev => ({ ...prev, partner_per_kg_price: parseFloat(e.target.value) || 0 }))}
                     placeholder="0.00"
                     className="w-full bg-zinc-900 border border-pink-500/40 rounded p-2 text-xs text-pink-300 font-bold focus:outline-none focus:border-pink-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-cyan-400 font-bold uppercase">Sea Shipping Rate (£ GBP)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={!isUserAdmin}
+                    value={orgForm.sea_shipping_rate}
+                    onChange={(e) => setOrgForm(prev => ({ ...prev, sea_shipping_rate: parseFloat(e.target.value) || 0 }))}
+                    placeholder="0.00"
+                    className="w-full bg-zinc-900 border border-cyan-500/40 rounded p-2 text-xs text-cyan-300 font-bold focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-purple-400 font-bold uppercase">Promo Price / Rate (£ GBP)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    disabled={!isUserAdmin}
+                    value={orgForm.promo_rate}
+                    onChange={(e) => setOrgForm(prev => ({ ...prev, promo_rate: parseFloat(e.target.value) || 0 }))}
+                    placeholder="0.00"
+                    className="w-full bg-zinc-900 border border-purple-500/40 rounded p-2 text-xs text-purple-300 font-bold focus:outline-none focus:border-purple-400"
                   />
                 </div>
 

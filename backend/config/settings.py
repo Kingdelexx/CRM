@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 
 import environ
+import django.urls.converters
+django.urls.converters.DEFAULT_CONVERTERS.pop("uuid", None)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -72,8 +74,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/stable/ref/settings/#databases
+db_url = env('DATABASE_URL', default=f'sqlite:///{os.path.join(BASE_DIR, "db.sqlite3")}')
+if db_url.startswith('sqlite:///') and not os.path.isabs(db_url.replace('sqlite:///', '')):
+    db_filename = os.path.basename(db_url.replace('sqlite:///', ''))
+    db_url = f'sqlite:///{os.path.join(BASE_DIR, db_filename)}'
+
 DATABASES = {
-    'default': env.db('DATABASE_URL', default=f'sqlite:///{os.path.join(BASE_DIR, "db.sqlite3")}')
+    'default': env.db_url_config(db_url)
 }
 
 # Password validation

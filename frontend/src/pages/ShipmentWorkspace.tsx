@@ -41,7 +41,8 @@ import {
   Plane,
   Anchor,
   Percent,
-  Download
+  Download,
+  CreditCard
 } from 'lucide-react'
 
 interface ShipmentWorkspaceProps {
@@ -193,9 +194,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     items_recieved: '',
     weight_kg: '',
     tracking_id: '',
+    dpd_tracking_number: '',
+    payment_reference_number: '',
     value: '',
     note: '',
-    recorded_by_id: ''
+    recorded_by_id: '',
+    is_promo: false
   })
   const [formError, setFormError] = useState('')
   const [amountNgn, setAmountNgn] = useState('')
@@ -214,6 +218,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const orgDoorstepRate = Number(meData?.organization?.doorstep_rate) || 0
   const orgPerKgPrice = Number(meData?.organization?.per_kg_price) || 0
   const orgPartnerPerKgPrice = Number(meData?.organization?.partner_per_kg_price) || 0
+  const orgSeaShippingRate = Number(meData?.organization?.sea_shipping_rate) || 0
+  const orgPromoRate = Number(meData?.organization?.promo_rate) || 0
 
   // Set default "Recorded By (Staff)" to current logged-in account owner
   useEffect(() => {
@@ -236,7 +242,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     weightKgStr?: string,
     discountStr?: string,
     partnerIdOverride?: string,
-    partnerNameOverride?: string
+    partnerNameOverride?: string,
+    shippingTypeOverride?: string,
+    isPromoOverride?: boolean
   ) => {
     const numParcels = parseInt(parcelCountStr) || 0
     const parcelFee = currentHasPackaging === 'YES' ? (numParcels * orgParcelRate) : 0
@@ -249,13 +257,19 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
     const weightKg = parseFloat(weightKgStr !== undefined ? weightKgStr : formData.weight_kg) || 0
 
-    // Determine partner pricing
+    // Determine partner, promo & shipping type pricing
     const pId = partnerIdOverride !== undefined ? partnerIdOverride : formData.partner_id
     const pName = partnerNameOverride !== undefined ? partnerNameOverride : formData.partner_name
     const isPartner = Boolean((pId && pId.trim() !== '') || (pName && pName.trim() !== ''))
+    const shipType = shippingTypeOverride !== undefined ? shippingTypeOverride : formData.shipping_type
+    const isPromo = isPromoOverride !== undefined ? isPromoOverride : Boolean(formData.is_promo)
 
     let effectivePerKgPrice = orgPerKgPrice
-    if (isPartner && orgPartnerPerKgPrice > 0) {
+    if (isPromo && orgPromoRate > 0) {
+      effectivePerKgPrice = orgPromoRate
+    } else if (shipType === 'SEA' && orgSeaShippingRate > 0) {
+      effectivePerKgPrice = orgSeaShippingRate
+    } else if (isPartner && orgPartnerPerKgPrice > 0) {
       effectivePerKgPrice = orgPartnerPerKgPrice
     }
 
@@ -267,6 +281,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
     const finalTotalNgn = Math.max(0, subtotalNgn - discountNgn).toFixed(2)
     handleAmountNgnChange(finalTotalNgn)
+  }
+
+  const handlePromoToggle = (val: 'YES' | 'NO') => {
+    const isPromo = val === 'YES'
+    setFormData(prev => ({ ...prev, is_promo: isPromo }))
+    recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, undefined, undefined, undefined, isPromo)
   }
 
   const handleHasPackagingToggle = (val: 'YES' | 'NO') => {
@@ -463,6 +483,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         number_of_carton: parseInt(payload.number_of_carton) || 1,
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         dpd: dpd === 'YES',
+        is_promo: Boolean(payload.is_promo),
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
@@ -471,6 +492,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         items_recieved: payload.items_recieved || null,
         weight_kg: parseFloat(payload.weight_kg) || 0.0,
         tracking_id: payload.tracking_id || null,
+        dpd_tracking_number: payload.dpd_tracking_number || null,
+        payment_reference_number: payload.payment_reference_number || null,
         value: parseFloat(payload.value) || 0.0,
         note: payload.note || null,
         recorded_by_id: payload.recorded_by_id || null
@@ -506,8 +529,26 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       receiver_phone: shipment.receiver_phone || '',
       receiver_email: shipment.receiver_email || '',
       receiver_address: shipment.receiver_address || '',
-      date: shipment.shipment_date || shipment.date ? new Date(shipment.shipment_date || shipment.date || '').toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      shipment_date: shipment.shipment_date || shipment.date ? new Date(shipment.shipment_date || shipment.date || '').toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      date: (() => {
+        const raw = shipment.shipment_date || shipment.date
+        if (!raw) return new Date().toISOString().split('T')[0]
+        try {
+          const d = new Date(raw)
+          return isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0]
+        } catch {
+          return new Date().toISOString().split('T')[0]
+        }
+      })(),
+      shipment_date: (() => {
+        const raw = shipment.shipment_date || shipment.date
+        if (!raw) return new Date().toISOString().split('T')[0]
+        try {
+          const d = new Date(raw)
+          return isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0]
+        } catch {
+          return new Date().toISOString().split('T')[0]
+        }
+      })(),
       shipment_status: shipment.shipment_status || 'PENDING',
       payment_status: shipment.payment_status || 'UNPAID',
       shipping_type: shipment.shipping_type || 'AIR',
@@ -524,10 +565,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       items_shipped: shipment.items_shipped || '',
       items_recieved: shipment.items_recieved || '',
       weight_kg: shipment.weight_kg ? String(shipment.weight_kg) : '',
-      tracking_id: shipment.tracking_id || '',
+      tracking_id: shipment.tracking_id || shipment.dpd_tracking_number || '',
+      dpd_tracking_number: shipment.dpd_tracking_number || shipment.tracking_id || '',
+      payment_reference_number: shipment.payment_reference_number || '',
       value: shipment.value ? String(shipment.value) : '',
       note: shipment.note || '',
-      recorded_by_id: shipment.recorded_by?.id || ''
+      recorded_by_id: shipment.recorded_by?.id || '',
+      is_promo: Boolean(shipment.is_promo)
     })
     const amt = shipment.amount ? Number(shipment.amount) : 0
     const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
@@ -757,6 +801,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         number_of_carton: parseInt(payload.number_of_carton) || 1,
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         dpd: dpd === 'YES',
+        is_promo: Boolean(payload.is_promo),
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
@@ -765,6 +810,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         items_recieved: payload.items_recieved || null,
         weight_kg: parseFloat(payload.weight_kg) || 0.0,
         tracking_id: payload.tracking_id || null,
+        dpd_tracking_number: payload.dpd_tracking_number || null,
+        payment_reference_number: payload.payment_reference_number || null,
         value: parseFloat(payload.value) || 0.0,
         note: payload.note || null,
         recorded_by_id: payload.recorded_by_id || null
@@ -861,9 +908,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       items_recieved: '',
       weight_kg: '',
       tracking_id: '',
+      dpd_tracking_number: '',
+      payment_reference_number: '',
       value: '',
       note: '',
-      recorded_by_id: meData?.id || ''
+      recorded_by_id: meData?.id || '',
+      is_promo: false
     })
     setAmountNgn('')
     setAmountGbp('')
@@ -875,13 +925,19 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    if (name === 'dpd_tracking_number') {
+      setFormData(prev => ({ ...prev, dpd_tracking_number: value, tracking_id: value }))
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }))
+    }
     if (name === 'weight_kg') {
       recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, value)
     } else if (name === 'discount_percentage') {
       recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, value)
     } else if (name === 'partner_name') {
       recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, undefined, value)
+    } else if (name === 'shipping_type') {
+      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, undefined, undefined, value)
     }
   }
 
@@ -1036,18 +1092,24 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   }
 
-  const getShippingTypeBadge = (type?: string) => {
-    if (type === 'SEA') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-          <Anchor className="h-3 w-3" /> Sea Shipping
-        </span>
-      )
-    }
+  const getShippingTypeBadge = (type?: string, isPromo?: boolean) => {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-        <Plane className="h-3 w-3" /> Air Freight
-      </span>
+      <div className="flex flex-wrap items-center gap-1">
+        {type === 'SEA' ? (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+            <Anchor className="h-3 w-3" /> Sea Shipping
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+            <Plane className="h-3 w-3" /> Air Freight
+          </span>
+        )}
+        {isPromo && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30 uppercase tracking-wider">
+            <Tag className="h-2.5 w-2.5" /> PROMO
+          </span>
+        )}
+      </div>
     )
   }
 
@@ -2176,8 +2238,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* DPD (Yes/No Dropdown) & Packager (Manual Text Input) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
+                  {/* DPD, Packager & Promo Toggle */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
                         <Truck className="h-3.5 w-3.5 text-amber-400" /> DPD
@@ -2189,6 +2251,20 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       >
                         <option value="NO" className="bg-zinc-950">No</option>
                         <option value="YES" className="bg-zinc-950">Yes</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-purple-300 font-semibold flex items-center gap-1">
+                        <Tag className="h-3.5 w-3.5 text-purple-400" /> Promo Pricing?
+                      </label>
+                      <select
+                        value={formData.is_promo ? 'YES' : 'NO'}
+                        onChange={(e) => handlePromoToggle(e.target.value as 'YES' | 'NO')}
+                        className="w-full bg-zinc-900 border border-purple-500/40 focus:border-purple-500 focus:outline-none rounded-lg p-2.5 text-sm text-purple-300 cursor-pointer font-bold"
+                      >
+                        <option value="NO" className="bg-zinc-950">No (Standard Rate)</option>
+                        <option value="YES" className="bg-zinc-950">Yes (Promo Rate)</option>
                       </select>
                     </div>
 
@@ -2209,7 +2285,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
                   {(() => {
                     const isPartner = Boolean((formData.partner_id && formData.partner_id !== '') || (formData.partner_name && formData.partner_name.trim() !== ''))
-                    const currentPerKgRate = (isPartner && orgPartnerPerKgPrice > 0) ? orgPartnerPerKgPrice : orgPerKgPrice
+                    const isSea = formData.shipping_type === 'SEA'
+                    const isPromo = Boolean(formData.is_promo)
+                    let currentPerKgRate = orgPerKgPrice
+                    let rateLabel = ''
+                    if (isPromo && orgPromoRate > 0) {
+                      currentPerKgRate = orgPromoRate
+                      rateLabel = '(Promo Rate)'
+                    } else if (isSea && orgSeaShippingRate > 0) {
+                      currentPerKgRate = orgSeaShippingRate
+                      rateLabel = '(Sea Shipping Rate)'
+                    } else if (isPartner && orgPartnerPerKgPrice > 0) {
+                      currentPerKgRate = orgPartnerPerKgPrice
+                      rateLabel = '(Partner Rate)'
+                    }
+
                     const weightVal = parseFloat(formData.weight_kg) || 0
                     const weightFeeVal = weightVal * currentPerKgRate * orgExchangeRate
                     const packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
@@ -2235,7 +2325,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                           {weightVal > 0 && currentPerKgRate > 0 && (
                             <div className="flex justify-between text-emerald-400 font-medium">
                               <span>
-                                Weight Fee ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {isPartner && orgPartnerPerKgPrice > 0 ? '(Partner Rate)' : ''} @ ₦{orgExchangeRate.toLocaleString()}/£):
+                                {isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {rateLabel} @ ₦{orgExchangeRate.toLocaleString()}/£):
                               </span>
                               <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
@@ -2255,7 +2345,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     )
                   })()}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Invoice Number</label>
                       <input
@@ -2264,6 +2354,34 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         value={formData.invoice_number}
                         onChange={handleInputChange}
                         placeholder="e.g. MINT/SEP/FRI/1001 (Auto if blank)"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> DPD Tracking Number
+                      </label>
+                      <input
+                        type="text"
+                        name="dpd_tracking_number"
+                        value={formData.dpd_tracking_number || formData.tracking_id}
+                        onChange={handleInputChange}
+                        placeholder="e.g. DPD-987654"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Tag className="h-3.5 w-3.5 text-blue-400" /> Payment Reference Number
+                      </label>
+                      <input
+                        type="text"
+                        name="payment_reference_number"
+                        value={formData.payment_reference_number}
+                        onChange={handleInputChange}
+                        placeholder="e.g. PAY-REF-9988"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>
@@ -2318,8 +2436,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* Items Received at Destination & Tracking ID */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Items Received at Destination & DPD Tracking & Payment Ref */}
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Items Recieved (At Destination)</label>
                       <textarea
@@ -2332,6 +2450,33 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       />
                     </div>
 
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> DPD Tracking Number
+                      </label>
+                      <input
+                        type="text"
+                        name="dpd_tracking_number"
+                        value={formData.dpd_tracking_number || formData.tracking_id}
+                        onChange={handleInputChange}
+                        placeholder="e.g. DPD-987654"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Tag className="h-3.5 w-3.5 text-blue-400" /> Payment Reference Number
+                      </label>
+                      <input
+                        type="text"
+                        name="payment_reference_number"
+                        value={formData.payment_reference_number}
+                        onChange={handleInputChange}
+                        placeholder="e.g. PAY-REF-9988"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
+                    </div>
                   </div>
 
                   {/* Weight (kg), Declared Value & Recorded By */}
@@ -3552,7 +3697,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Invoice Number</label>
                       <input
@@ -3561,6 +3706,34 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         value={formData.invoice_number}
                         onChange={handleInputChange}
                         placeholder="e.g. MINT/SEP/FRI/1001 (Auto if blank)"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> DPD Tracking Number
+                      </label>
+                      <input
+                        type="text"
+                        name="dpd_tracking_number"
+                        value={formData.dpd_tracking_number}
+                        onChange={handleInputChange}
+                        placeholder="e.g. DPD-883920"
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                        <CreditCard className="h-3.5 w-3.5 text-amber-400" /> Payment Reference Number
+                      </label>
+                      <input
+                        type="text"
+                        name="payment_reference_number"
+                        value={formData.payment_reference_number}
+                        onChange={handleInputChange}
+                        placeholder="e.g. PAY-998823"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>

@@ -3,6 +3,9 @@
 import os
 import sys
 
+import django.urls.converters
+django.urls.converters.DEFAULT_CONVERTERS.pop("uuid", None)
+
 
 def main():
     """Run administrative tasks."""

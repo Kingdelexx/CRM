@@ -21,6 +21,8 @@ export interface Organization extends BaseEntity {
   doorstep_rate?: number;
   per_kg_price?: number;
   partner_per_kg_price?: number;
+  sea_shipping_rate?: number;
+  promo_rate?: number;
 }
 
 export interface CustomRole extends BaseEntity {
@@ -459,6 +461,7 @@ export interface Shipment extends BaseEntity {
   number_of_carton: number;
   has_doorstep_delivery?: boolean;
   dpd?: boolean;
+  is_promo?: boolean;
   packager?: string;
   partner?: Contact;
   partner_name?: string;
@@ -466,7 +469,9 @@ export interface Shipment extends BaseEntity {
   items_shipped?: string;
   items_recieved?: string;
   weight_kg: number;
-  tracking_id: string;
+  tracking_id?: string;
+  dpd_tracking_number?: string;
+  payment_reference_number?: string;
   value: number;
   note?: string;
   recorded_by?: User;
@@ -475,6 +480,25 @@ export interface Shipment extends BaseEntity {
     date: string;
     access_code: string;
   };
+}
+
+export interface DailyManifestItem {
+  id: string;
+  sn: number;
+  tracking_number?: string | null;
+  dpd_tracking_number?: string | null;
+  payment_reference_number?: string | null;
+  sender_name?: string | null;
+  sender_address?: string | null;
+  receiver_name?: string | null;
+  item_shipped?: string | null;
+  quantity: number;
+  weight: number;
+  phone_number?: string | null;
+  receiver_address?: string | null;
+  delivery_address?: string | null;
+  is_received_by_customer: boolean;
+  shipment_status: string;
 }
 
 export type EscalationType = 'DELAY' | 'DAMAGED_GOODS' | 'MISSING_ITEM' | 'BILLING_ISSUE' | 'CUSTOMS_HOLD' | 'WRONG_DELIVERY' | 'OTHER';

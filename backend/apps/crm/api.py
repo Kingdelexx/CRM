@@ -2347,7 +2347,8 @@ def create_shipment(request, data: ShipmentCreateSchema):
     for field in ['sender_name', 'sender_phone', 'sender_email', 'sender_address',
                   'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
                   'invoice_number', 'partner_name', 'item_received',
-                  'items_shipped', 'items_recieved', 'tracking_id', 'note', 'packager']:
+                  'items_shipped', 'items_recieved', 'tracking_id', 'dpd_tracking_number',
+                  'payment_reference_number', 'note', 'packager']:
         if field in payload and payload[field] is not None and str(payload[field]).strip() == '':
             payload[field] = None
 
@@ -2367,9 +2368,9 @@ def create_shipment(request, data: ShipmentCreateSchema):
         count = Shipment.objects.filter(organization=request.user.organization).count() + 1001
         payload['invoice_number'] = f"MINT/{month_str}/{day_str}/{count}"
 
-    # Auto-fill tracking_id silently if not supplied
-    if not payload.get('tracking_id'):
-        payload['tracking_id'] = payload['invoice_number']
+    # Synchronize dpd_tracking_number with tracking_id if present
+    if payload.get('dpd_tracking_number') and not payload.get('tracking_id'):
+        payload['tracking_id'] = payload['dpd_tracking_number']
 
     target_d = payload.get('shipment_date') or payload.get('date')
     manifest = get_or_create_daily_manifest(request.user.organization, target_d)
@@ -2389,6 +2390,66 @@ def create_shipment(request, data: ShipmentCreateSchema):
         print(f"Failed to auto-sync invoice for shipment {shipment.id}: {e}")
 
     return 201, shipment
+
+
+@shipments_router.put("/{id}", response=ShipmentSchema)
+@shipments_router.put("/{id}/", response=ShipmentSchema)
+def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
+    shipment = Shipment.objects.filter(id=id, organization=request.user.organization).first()
+    if not shipment:
+        raise HttpError(404, "Shipment not found.")
+
+    payload = data.dict(exclude_unset=True)
+
+    def parse_uuid(val):
+        if val and str(val).strip():
+            try:
+                return UUID(str(val).strip())
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    if 'sender_id' in payload:
+        shipment.sender_id = parse_uuid(payload.pop('sender_id'))
+    if 'receiver_id' in payload:
+        shipment.receiver_id = parse_uuid(payload.pop('receiver_id'))
+    if 'partner_id' in payload:
+        shipment.partner_id = parse_uuid(payload.pop('partner_id'))
+    if 'recorded_by_id' in payload:
+        rec_id = parse_uuid(payload.pop('recorded_by_id'))
+        if rec_id:
+            shipment.recorded_by_id = rec_id
+
+    shipment_date_val = payload.pop('shipment_date', None)
+    date_val = payload.pop('date', None)
+    effective_date = shipment_date_val or date_val
+    if effective_date and str(effective_date).strip():
+        c_date = str(effective_date).strip()
+        payload['date'] = c_date
+        payload['shipment_date'] = c_date
+
+    for field in ['sender_name', 'sender_phone', 'sender_email', 'sender_address',
+                  'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
+                  'invoice_number', 'partner_name', 'item_received',
+                  'items_shipped', 'items_recieved', 'tracking_id', 'dpd_tracking_number',
+                  'payment_reference_number', 'note', 'packager']:
+        if field in payload and payload[field] is not None and str(payload[field]).strip() == '':
+            payload[field] = None
+
+    if payload.get('dpd_tracking_number') and not payload.get('tracking_id'):
+        payload['tracking_id'] = payload['dpd_tracking_number']
+
+    for attr, value in payload.items():
+        setattr(shipment, attr, value)
+
+    shipment.save()
+
+    try:
+        sync_shipment_invoice(shipment)
+    except Exception as e:
+        print(f"Failed to auto-sync invoice for updated shipment {shipment.id}: {e}")
+
+    return shipment
 
 
 def get_or_create_daily_manifest(organization, shipment_date_val):
@@ -2444,11 +2505,18 @@ def sync_shipment_invoice(shipment):
     services = [
         {
             'sn': 1,
-            'service_name': 'Doorstep Delivery' if shipment.has_doorstep_delivery else 'Standard Shipping',
-            'price_ngn': 0,
-            'price_gbp': 0
+            'service_name': 'Freight & Freight Logistics',
+            'price_ngn': round(total_ngn, 2),
+            'price_gbp': round(total_gbp, 2)
         }
     ]
+    if shipment.has_doorstep_delivery:
+        services.append({
+            'sn': len(services) + 1,
+            'service_name': 'Doorstep Delivery',
+            'price_ngn': 0,
+            'price_gbp': 0
+        })
 
     inv_status = Invoice.PAID if shipment.payment_status == 'PAID' else Invoice.DRAFT
     issue_date = shipment.shipment_date or shipment.date or timezone.localdate()
@@ -2473,7 +2541,7 @@ def sync_shipment_invoice(shipment):
             'receiver_email': rec_email,
             'receiver_address': rec_addr,
             'total_value_items': shipment.value or 0,
-            'expected_parcel_no': shipment.tracking_id or shipment.invoice_number,
+            'expected_parcel_no': shipment.dpd_tracking_number or shipment.tracking_id or shipment.invoice_number,
             'parcel_handler': parcel_handler_val,
             'items': items,
             'services': services,
@@ -2494,7 +2562,7 @@ def sync_shipment_invoice(shipment):
         inv.receiver_email = rec_email
         inv.receiver_address = rec_addr
         inv.total_value_items = shipment.value or 0
-        inv.expected_parcel_no = shipment.tracking_id or shipment.invoice_number
+        inv.expected_parcel_no = shipment.dpd_tracking_number or shipment.tracking_id or shipment.invoice_number
         inv.parcel_handler = parcel_handler_val
         inv.items = items
         inv.services = services
@@ -2516,29 +2584,41 @@ def get_daily_manifest_by_access_code(request, access_code: str):
     if not manifest:
         raise HttpError(404, f"Manifest with access code '{access_code}' not found.")
 
-    shipments_qs = Shipment.objects.filter(manifest=manifest).select_related('receiver').order_by('created_at')
+    shipments_qs = Shipment.objects.filter(manifest=manifest).select_related('receiver', 'sender').order_by('created_at')
 
     formatted_shipments = []
     for idx, s in enumerate(shipments_qs, start=1):
+        sender_name = s.sender_name or (
+            f"{s.sender.first_name} {s.sender.last_name}".strip() if s.sender else None
+        )
+        sender_address = s.sender_address or (s.sender.address if s.sender else None)
         receiver_name = s.receiver_name or (
             f"{s.receiver.first_name} {s.receiver.last_name}".strip() if s.receiver else None
         )
+        receiver_address = s.receiver_address or (s.receiver.address if s.receiver else None)
         item_shipped = s.items_shipped or s.item_received or s.items_recieved
         quantity = s.number_of_carton or 1
         weight = float(s.weight_kg or 0.0)
         phone_number = s.receiver_phone or (s.receiver.phone if s.receiver else None)
-        delivery_address = s.receiver_address or (s.receiver.address if s.receiver else None)
+        dpd_trk = getattr(s, 'dpd_tracking_number', None) or s.tracking_id or None
+        pay_ref = getattr(s, 'payment_reference_number', None) or None
 
         formatted_shipments.append(
             DailyManifestItemSchema(
                 id=s.id,
                 sn=idx,
+                tracking_number=dpd_trk,
+                dpd_tracking_number=dpd_trk,
+                payment_reference_number=pay_ref,
+                sender_name=sender_name,
+                sender_address=sender_address,
                 receiver_name=receiver_name,
                 item_shipped=item_shipped,
                 quantity=quantity,
                 weight=weight,
                 phone_number=phone_number,
-                delivery_address=delivery_address,
+                receiver_address=receiver_address,
+                delivery_address=receiver_address,
                 is_received_by_customer=getattr(s, 'is_received_by_customer', False),
                 shipment_status=s.shipment_status or 'PENDING'
             )

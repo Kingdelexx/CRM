@@ -1252,11 +1252,12 @@ export const InvoicesWorkspace: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Expected Parcel No</label>
+                  <label className="block font-semibold text-slate-700 mb-1">DPD Tracking Number / Parcel No</label>
                   <input
                     type="text"
                     value={formData.expected_parcel_no}
                     onChange={e => setFormData({ ...formData, expected_parcel_no: e.target.value })}
+                    placeholder="e.g. DPD-883920"
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
                   />
                 </div>

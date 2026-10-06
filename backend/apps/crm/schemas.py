@@ -404,8 +404,8 @@ class ShipmentSchema(ModelSchema):
             'id', 'sender_name', 'sender_phone', 'sender_email', 'sender_address',
             'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
             'date', 'shipment_date', 'shipment_status', 'payment_status', 'shipping_type', 'currency', 'conversion_rate', 'amount',
-            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_doorstep_delivery', 'dpd', 'packager', 'partner_name', 'item_received', 'items_shipped',
-            'items_recieved', 'weight_kg', 'tracking_id', 'value', 'note', 'manifest', 'created_at', 'updated_at'
+            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_doorstep_delivery', 'dpd', 'is_promo', 'packager', 'partner_name', 'item_received', 'items_shipped',
+            'items_recieved', 'weight_kg', 'tracking_id', 'dpd_tracking_number', 'payment_reference_number', 'value', 'note', 'manifest', 'created_at', 'updated_at'
         ]
 
 
@@ -433,6 +433,7 @@ class ShipmentCreateSchema(Schema):
     number_of_carton: Optional[int] = 1
     has_doorstep_delivery: Optional[bool] = False
     dpd: Optional[bool] = False
+    is_promo: Optional[bool] = False
     packager: Optional[str] = None
     partner_id: Optional[str] = None
     partner_name: Optional[str] = None
@@ -441,6 +442,8 @@ class ShipmentCreateSchema(Schema):
     items_recieved: Optional[str] = None
     weight_kg: Optional[float] = 0.00
     tracking_id: Optional[str] = None
+    dpd_tracking_number: Optional[str] = None
+    payment_reference_number: Optional[str] = None
     value: Optional[float] = 0.00
     note: Optional[str] = None
     recorded_by_id: Optional[str] = None
@@ -450,11 +453,17 @@ class ShipmentCreateSchema(Schema):
 class DailyManifestItemSchema(Schema):
     id: UUID
     sn: int
+    tracking_number: Optional[str] = None
+    dpd_tracking_number: Optional[str] = None
+    payment_reference_number: Optional[str] = None
+    sender_name: Optional[str] = None
+    sender_address: Optional[str] = None
     receiver_name: Optional[str] = None
     item_shipped: Optional[str] = None
     quantity: int = 1
     weight: float = 0.0
     phone_number: Optional[str] = None
+    receiver_address: Optional[str] = None
     delivery_address: Optional[str] = None
     is_received_by_customer: bool = False
     shipment_status: str = 'PENDING'

@@ -23,11 +23,17 @@ import { apiClient } from '@/api/client'
 interface ManifestItem {
   id: string
   sn: number
+  tracking_number?: string | null
+  dpd_tracking_number?: string | null
+  payment_reference_number?: string | null
+  sender_name?: string | null
+  sender_address?: string | null
   receiver_name: string | null
   item_shipped: string | null
   quantity: number
   weight: number
   phone_number: string | null
+  receiver_address?: string | null
   delivery_address: string | null
   is_received_by_customer: boolean
   shipment_status: string
@@ -161,15 +167,19 @@ export default function ManifestLookupPage() {
   const handleExportCSV = () => {
     if (!manifestData || !manifestData.shipments.length) return
     
-    const headers = ['S/N', 'Receiver Name', 'Item Shipped / Description', 'Quantity', 'Weight (kg)', 'Phone Number', 'Delivery Address', 'Customer Received']
+    const headers = ['S/N', 'DPD Tracking Number', 'Payment Reference Number', 'Sender Name', 'Sender Address', 'Receiver Name', 'Phone Number', 'Receiver Address', 'Item Shipped / Description', 'Quantity', 'Weight (kg)', 'Customer Received']
     const rows = manifestData.shipments.map(s => [
       s.sn,
+      `"${(s.dpd_tracking_number || s.tracking_number || '').replace(/"/g, '""')}"`,
+      `"${(s.payment_reference_number || '').replace(/"/g, '""')}"`,
+      `"${(s.sender_name || '').replace(/"/g, '""')}"`,
+      `"${(s.sender_address || '').replace(/"/g, '""')}"`,
       `"${(s.receiver_name || '').replace(/"/g, '""')}"`,
+      `"${(s.phone_number || '').replace(/"/g, '""')}"`,
+      `"${(s.receiver_address || s.delivery_address || '').replace(/"/g, '""')}"`,
       `"${(s.item_shipped || '').replace(/"/g, '""')}"`,
       s.quantity,
       s.weight,
-      `"${(s.phone_number || '').replace(/"/g, '""')}"`,
-      `"${(s.delivery_address || '').replace(/"/g, '""')}"`,
       `"${s.is_received_by_customer ? 'Received' : 'Pending'}"`
     ])
 
@@ -410,13 +420,13 @@ export default function ManifestLookupPage() {
                   <thead className="bg-slate-950/80 print:bg-slate-200 text-slate-400 print:text-slate-800 uppercase tracking-wider font-semibold border-b border-slate-800 print:border-slate-400">
                     <tr>
                       <th className="py-3.5 px-4 text-center w-12">S/N</th>
-                      <th className="py-3.5 px-4 min-w-[150px]">Receiver Name</th>
-                      <th className="py-3.5 px-4 min-w-[200px]">Item Shipped / Description</th>
+                      <th className="py-3.5 px-4 min-w-[140px]">DPD Tracking Number</th>
+                      <th className="py-3.5 px-4 min-w-[160px]">Sender Details</th>
+                      <th className="py-3.5 px-4 min-w-[180px]">Receiver Details</th>
+                      <th className="py-3.5 px-4 min-w-[180px]">Item Shipped / Description</th>
                       <th className="py-3.5 px-4 text-center w-16">Qty</th>
                       <th className="py-3.5 px-4 text-right w-24">Weight</th>
-                      <th className="py-3.5 px-4 min-w-[130px]">Phone Number</th>
-                      <th className="py-3.5 px-4 min-w-[200px]">Delivery Address</th>
-                      <th className="py-3.5 px-4 text-center min-w-[160px]">Customer Received</th>
+                      <th className="py-3.5 px-4 text-center min-w-[150px]">Customer Received</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 print:divide-slate-300 bg-slate-900/30 print:bg-white">
@@ -428,8 +438,44 @@ export default function ManifestLookupPage() {
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 font-semibold text-white print:text-black">
-                          {item.receiver_name || <span className="text-slate-500 print:text-slate-400 italic">Unspecified</span>}
+                        <td className="py-3.5 px-4 font-mono font-semibold text-indigo-300 print:text-indigo-900">
+                          {(item.dpd_tracking_number || item.tracking_number) ? (
+                            <span className="bg-indigo-950/60 print:bg-indigo-50 border border-indigo-800/50 print:border-indigo-200 px-2 py-0.5 rounded text-[11px]">
+                              {item.dpd_tracking_number || item.tracking_number}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 print:text-slate-400 italic">N/A</span>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-slate-300 print:text-black">
+                          <div className="font-semibold text-slate-100 print:text-black">
+                            {item.sender_name || <span className="text-slate-500 print:text-slate-400 italic">Unspecified</span>}
+                          </div>
+                          {item.sender_address && (
+                            <div className="text-[11px] text-slate-400 print:text-slate-700 flex items-start gap-1 mt-0.5">
+                              <MapPin className="w-3 h-3 text-slate-500 print:hidden shrink-0 mt-0.5" />
+                              <span className="line-clamp-2">{item.sender_address}</span>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3.5 px-4 text-slate-300 print:text-black">
+                          <div className="font-semibold text-white print:text-black">
+                            {item.receiver_name || <span className="text-slate-500 print:text-slate-400 italic">Unspecified</span>}
+                          </div>
+                          {item.phone_number && (
+                            <div className="text-[11px] font-mono text-slate-400 print:text-slate-700 flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 text-slate-500 print:hidden" />
+                              <span>{item.phone_number}</span>
+                            </div>
+                          )}
+                          {(item.receiver_address || item.delivery_address) && (
+                            <div className="text-[11px] text-slate-400 print:text-slate-700 flex items-start gap-1 mt-0.5">
+                              <MapPin className="w-3 h-3 text-emerald-400 print:hidden shrink-0 mt-0.5" />
+                              <span className="line-clamp-2">{item.receiver_address || item.delivery_address}</span>
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-3.5 px-4 text-slate-300 print:text-slate-800">
@@ -448,28 +494,6 @@ export default function ManifestLookupPage() {
 
                         <td className="py-3.5 px-4 text-right font-mono text-slate-200 print:text-black font-semibold">
                           {Number(item.weight).toFixed(2)} kg
-                        </td>
-
-                        <td className="py-3.5 px-4 font-mono text-slate-300 print:text-black">
-                          {item.phone_number ? (
-                            <span className="flex items-center gap-1.5">
-                              <Phone className="w-3 h-3 text-slate-500 print:hidden" />
-                              <span>{item.phone_number}</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 print:text-slate-400 italic">N/A</span>
-                          )}
-                        </td>
-
-                        <td className="py-3.5 px-4 text-slate-300 print:text-black">
-                          {item.delivery_address ? (
-                            <span className="flex items-start gap-1.5">
-                              <MapPin className="w-3.5 h-3.5 text-slate-500 print:hidden shrink-0 mt-0.5" />
-                              <span className="line-clamp-2">{item.delivery_address}</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 print:text-slate-400 italic">Pickup / Standard</span>
-                          )}
                         </td>
 
                         <td className="py-3.5 px-4 text-center">
@@ -505,7 +529,7 @@ export default function ManifestLookupPage() {
                   </tbody>
                   <tfoot className="bg-slate-950/90 print:bg-slate-100 border-t-2 border-slate-800 print:border-slate-400 font-bold text-slate-200 print:text-black">
                     <tr>
-                      <td colSpan={3} className="py-3.5 px-4 text-right uppercase text-[11px] tracking-wider text-slate-400 print:text-slate-700">
+                      <td colSpan={5} className="py-3.5 px-4 text-right uppercase text-[11px] tracking-wider text-slate-400 print:text-slate-700">
                         Total Summary:
                       </td>
                       <td className="py-3.5 px-4 text-center font-mono text-indigo-400 print:text-indigo-900 text-sm">
