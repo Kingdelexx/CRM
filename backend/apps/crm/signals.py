@@ -214,7 +214,7 @@ def shipment_post_save(sender, instance, created, **kwargs):
         return
 
     org = instance.organization
-    rate = float(getattr(org, 'gbp_to_ngn_rate', 2000.0) or 2000.0)
+    rate = float(instance.conversion_rate or getattr(org, 'gbp_to_ngn_rate', 2000.0) or 2000.0)
     if rate <= 1.0:
         rate = 2000.0
     amount_val = float(instance.amount or 0.0)

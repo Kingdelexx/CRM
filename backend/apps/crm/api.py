@@ -2490,33 +2490,52 @@ def sync_shipment_invoice(shipment):
     item_nature = shipment.item_received or shipment.items_shipped or 'CARGO / PARCEL'
     dos_date = str(shipment.shipment_date or shipment.date or timezone.localdate())
 
+    org = shipment.organization
+    ds_gbp = 0.0
+    ds_ngn = 0.0
+    if shipment.has_doorstep_delivery and org:
+        doorstep_rate_gbp = float(getattr(org, 'doorstep_rate', 0.0) or 0.0)
+        ds_parcels = shipment.number_of_carton if shipment.number_of_carton else 1
+        ds_gbp = round(ds_parcels * doorstep_rate_gbp, 2)
+        ds_ngn = round(ds_gbp * conversion_rate, 2)
+
+    pkg_ngn = 0.0
+    pkg_gbp = 0.0
+    if org:
+        parcel_rate_ngn = float(getattr(org, 'parcel_rate', 0.0) or 0.0)
+        if shipment.number_of_carton and parcel_rate_ngn > 0:
+            pkg_ngn = round(shipment.number_of_carton * parcel_rate_ngn, 2)
+            pkg_gbp = round(pkg_ngn / conversion_rate, 2) if conversion_rate > 0 else 0.0
+
+    services = [
+        {
+            'sn': 1,
+            'service_name': 'Packaging',
+            'price_ngn': round(pkg_ngn, 2),
+            'price_gbp': round(pkg_gbp, 2)
+        },
+        {
+            'sn': 2,
+            'service_name': 'Doorstep Delivery',
+            'price_ngn': round(ds_ngn, 2),
+            'price_gbp': round(ds_gbp, 2)
+        }
+    ]
+
+    items_ngn = max(0.0, round(total_ngn - (pkg_ngn + ds_ngn), 2))
+    items_gbp = max(0.0, round(total_gbp - (pkg_gbp + ds_gbp), 2))
+
     items = [
         {
             'dos': dos_date,
             'nature_of_item': item_nature.upper(),
             'weight_kg': float(shipment.weight_kg or 0),
-            'price_ngn': round(total_ngn, 2),
-            'price_gbp': round(total_gbp, 2),
-            'total_ngn': round(total_ngn, 2),
-            'total_gbp': round(total_gbp, 2)
+            'price_ngn': items_ngn,
+            'price_gbp': items_gbp,
+            'total_ngn': items_ngn,
+            'total_gbp': items_gbp
         }
     ]
-
-    services = [
-        {
-            'sn': 1,
-            'service_name': 'Freight & Freight Logistics',
-            'price_ngn': round(total_ngn, 2),
-            'price_gbp': round(total_gbp, 2)
-        }
-    ]
-    if shipment.has_doorstep_delivery:
-        services.append({
-            'sn': len(services) + 1,
-            'service_name': 'Doorstep Delivery',
-            'price_ngn': 0,
-            'price_gbp': 0
-        })
 
     inv_status = Invoice.PAID if shipment.payment_status == 'PAID' else Invoice.DRAFT
     issue_date = shipment.shipment_date or shipment.date or timezone.localdate()

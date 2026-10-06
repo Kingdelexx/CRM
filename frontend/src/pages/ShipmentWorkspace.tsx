@@ -98,6 +98,26 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const totalNgn = isGbp ? amountNum * conversionRate : amountNum
     const totalGbp = isGbp ? amountNum : (conversionRate > 0 ? amountNum / conversionRate : 0)
 
+    let dsGbp = 0
+    let dsNgn = 0
+    if (shipment.has_doorstep_delivery) {
+      const doorstepRateGbp = Number(meData?.organization?.doorstep_rate) || 0
+      const parcels = Number(shipment.number_of_carton) || 1
+      dsGbp = parcels * doorstepRateGbp
+      dsNgn = dsGbp * conversionRate
+    }
+
+    let pkgNgn = 0
+    let pkgGbp = 0
+    const parcelRateNgn = Number(meData?.organization?.parcel_rate) || 0
+    if (shipment.number_of_carton && parcelRateNgn > 0) {
+      pkgNgn = Number(shipment.number_of_carton) * parcelRateNgn
+      pkgGbp = conversionRate > 0 ? pkgNgn / conversionRate : 0
+    }
+
+    const itemsNgn = Math.max(0, totalNgn - dsNgn - pkgNgn)
+    const itemsGbp = Math.max(0, totalGbp - dsGbp - pkgGbp)
+
     const itemNature = shipment.item_received || shipment.items_shipped || 'CARGO / PARCEL'
 
     return {
@@ -120,14 +140,15 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           dos: shipment.shipment_date || shipment.date || new Date().toISOString().split('T')[0],
           nature_of_item: itemNature.toUpperCase(),
           weight_kg: Number(shipment.weight_kg) || 0,
-          price_ngn: totalNgn,
-          price_gbp: totalGbp,
-          total_ngn: totalNgn,
-          total_gbp: totalGbp
+          price_ngn: itemsNgn,
+          price_gbp: itemsGbp,
+          total_ngn: itemsNgn,
+          total_gbp: itemsGbp
         }
       ],
       services: [
-        { sn: 1, service_name: shipment.has_doorstep_delivery ? 'Doorstep Delivery' : 'Standard Shipping', price_ngn: 0, price_gbp: 0 }
+        { sn: 1, service_name: 'Packaging', price_ngn: pkgNgn, price_gbp: pkgGbp },
+        { sn: 2, service_name: 'Doorstep Delivery', price_ngn: dsNgn, price_gbp: dsGbp }
       ],
       total_ngn: totalNgn,
       total_gbp: totalGbp,
@@ -285,8 +306,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
   const handlePromoToggle = (val: 'YES' | 'NO') => {
     const isPromo = val === 'YES'
-    setFormData(prev => ({ ...prev, is_promo: isPromo }))
-    recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, undefined, undefined, undefined, isPromo)
+    setFormData(prev => {
+      const next = { ...prev, is_promo: isPromo }
+      recalculateTotalAmount(
+        hasPackaging,
+        next.number_of_carton,
+        hasDoorstepDelivery,
+        next.weight_kg,
+        next.discount_percentage,
+        next.partner_id,
+        next.partner_name,
+        next.shipping_type,
+        isPromo
+      )
+      return next
+    })
   }
 
   const handleHasPackagingToggle = (val: 'YES' | 'NO') => {
@@ -925,20 +959,26 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    if (name === 'dpd_tracking_number') {
-      setFormData(prev => ({ ...prev, dpd_tracking_number: value, tracking_id: value }))
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }))
-    }
-    if (name === 'weight_kg') {
-      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, value)
-    } else if (name === 'discount_percentage') {
-      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, value)
-    } else if (name === 'partner_name') {
-      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, undefined, value)
-    } else if (name === 'shipping_type') {
-      recalculateTotalAmount(hasPackaging, formData.number_of_carton, hasDoorstepDelivery, undefined, undefined, undefined, undefined, value)
-    }
+    setFormData(prev => {
+      const next = { ...prev, [name]: value }
+      if (name === 'dpd_tracking_number') {
+        next.tracking_id = value
+      }
+      if (['weight_kg', 'discount_percentage', 'partner_name', 'partner_id', 'shipping_type', 'is_promo'].includes(name)) {
+        recalculateTotalAmount(
+          hasPackaging,
+          next.number_of_carton,
+          hasDoorstepDelivery,
+          next.weight_kg,
+          next.discount_percentage,
+          next.partner_id,
+          next.partner_name,
+          next.shipping_type,
+          Boolean(next.is_promo)
+        )
+      }
+      return next
+    })
   }
 
   const formatContactAddress = (contact: Contact) => {
@@ -3624,8 +3664,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* DPD (Yes/No Dropdown) & Packager (Manual Text Input) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
+                  {/* DPD, Promo & Packager */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
                         <Truck className="h-3.5 w-3.5 text-amber-400" /> DPD
@@ -3637,6 +3677,20 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       >
                         <option value="NO" className="bg-zinc-950">No</option>
                         <option value="YES" className="bg-zinc-950">Yes</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-purple-300 font-semibold flex items-center gap-1">
+                        <Tag className="h-3.5 w-3.5 text-purple-400" /> Promo Pricing?
+                      </label>
+                      <select
+                        value={formData.is_promo ? 'YES' : 'NO'}
+                        onChange={(e) => handlePromoToggle(e.target.value as 'YES' | 'NO')}
+                        className="w-full bg-zinc-900 border border-purple-500/40 focus:border-purple-500 focus:outline-none rounded-lg p-2.5 text-sm text-purple-300 cursor-pointer font-bold"
+                      >
+                        <option value="NO" className="bg-zinc-950">No (Standard Rate)</option>
+                        <option value="YES" className="bg-zinc-950">Yes (Promo Rate)</option>
                       </select>
                     </div>
 
@@ -3655,47 +3709,65 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {(hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || (parseFloat(formData.weight_kg) || 0) > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
-                    <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
-                      <div className="text-xs text-zinc-300 space-y-1 pt-1">
-                        {hasPackaging === 'YES' && orgParcelRate > 0 && (
-                          <div className="flex justify-between text-purple-400 font-medium">
-                            <span>Packaging Fee ({(parseInt(formData.number_of_carton) || 0)} × ₦{orgParcelRate.toLocaleString()}):</span>
-                            <span>₦{((parseInt(formData.number_of_carton) || 0) * orgParcelRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          </div>
-                        )}
-                        {hasDoorstepDelivery === 'YES' && orgDoorstepRate > 0 && (
-                          <div className="flex justify-between text-sky-400 font-medium">
-                            <span>Doorstep Delivery Fee ({(parseInt(formData.number_of_carton) || 1)} parcel(s) × £{orgDoorstepRate.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
-                            <span>₦{((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          </div>
-                        )}
-                        {(parseFloat(formData.weight_kg) || 0) > 0 && orgPerKgPrice > 0 && (
-                          <div className="flex justify-between text-emerald-400 font-medium">
-                            <span>Weight Fee ({formData.weight_kg} kg × £{orgPerKgPrice.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
-                            <span>₦{((parseFloat(formData.weight_kg) || 0) * orgPerKgPrice * orgExchangeRate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          </div>
-                        )}
-                        {(parseFloat(formData.discount_percentage) || 0) > 0 && (
-                          <div className="flex justify-between text-rose-400 font-medium border-t border-zinc-800/80 pt-1">
-                            <span>Discount ({formData.discount_percentage}%):</span>
-                            <span>
-                              -₦{(
-                                (((hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0) +
-                                  (hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0) +
-                                  ((parseFloat(formData.weight_kg) || 0) * orgPerKgPrice * orgExchangeRate)) *
-                                  (parseFloat(formData.discount_percentage) || 0)) / 100
-                              ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex justify-between text-amber-300 font-bold pt-1 border-t border-zinc-800 text-xs uppercase tracking-wider">
-                          <span>Total Calculation:</span>
-                          <span>₦{amountNgn} NGN</span>
+                  {(() => {
+                    const isPartner = Boolean((formData.partner_id && formData.partner_id !== '') || (formData.partner_name && formData.partner_name.trim() !== ''))
+                    const isSea = formData.shipping_type === 'SEA'
+                    const isPromo = Boolean(formData.is_promo)
+                    let currentPerKgRate = orgPerKgPrice
+                    let rateLabel = ''
+                    if (isPromo && orgPromoRate > 0) {
+                      currentPerKgRate = orgPromoRate
+                      rateLabel = '(Promo Rate)'
+                    } else if (isSea && orgSeaShippingRate > 0) {
+                      currentPerKgRate = orgSeaShippingRate
+                      rateLabel = '(Sea Shipping Rate)'
+                    } else if (isPartner && orgPartnerPerKgPrice > 0) {
+                      currentPerKgRate = orgPartnerPerKgPrice
+                      rateLabel = '(Partner Rate)'
+                    }
+
+                    const weightVal = parseFloat(formData.weight_kg) || 0
+                    const weightFeeVal = weightVal * currentPerKgRate * orgExchangeRate
+                    const packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
+                    const doorstepFeeVal = hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0
+                    const subtotalVal = packagingFeeVal + doorstepFeeVal + weightFeeVal
+                    const discountVal = (subtotalVal * (parseFloat(formData.discount_percentage) || 0)) / 100
+
+                    return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
+                      <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
+                        <div className="text-xs text-zinc-300 space-y-1 pt-1">
+                          {hasPackaging === 'YES' && orgParcelRate > 0 && (
+                            <div className="flex justify-between text-purple-400 font-medium">
+                              <span>Packaging Fee ({(parseInt(formData.number_of_carton) || 0)} × ₦{orgParcelRate.toLocaleString()}):</span>
+                              <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {hasDoorstepDelivery === 'YES' && orgDoorstepRate > 0 && (
+                            <div className="flex justify-between text-sky-400 font-medium">
+                              <span>Doorstep Delivery Fee ({(parseInt(formData.number_of_carton) || 1)} parcel(s) × £{orgDoorstepRate.toLocaleString()} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                              <span>₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {weightVal > 0 && currentPerKgRate > 0 && (
+                            <div className="flex justify-between text-emerald-400 font-medium">
+                              <span>Weight Fee ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {rateLabel} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                              <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {(parseFloat(formData.discount_percentage) || 0) > 0 && (
+                            <div className="flex justify-between text-rose-400 font-medium border-t border-zinc-800/80 pt-1">
+                              <span>Discount ({formData.discount_percentage}%):</span>
+                              <span>- ₦{discountVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="border-t border-emerald-500/20 pt-2 flex justify-between text-sm font-bold text-emerald-300">
+                          <span>Calculated Total:</span>
+                          <span>₦{Math.max(0, subtotalVal - discountVal).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )
+                  })()}
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="space-y-1.5">
