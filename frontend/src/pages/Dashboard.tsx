@@ -18,6 +18,7 @@ import LeadsWorkspace from './LeadsWorkspace'
 import PartnersWorkspace from './PartnersWorkspace'
 import ShipmentWorkspace from './ShipmentWorkspace'
 import TasksWorkspace from './TasksWorkspace'
+import ChatWorkspace from './ChatWorkspace'
 import DetailDrawer from '@/components/DetailDrawer'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
 import {
@@ -59,6 +60,7 @@ type DashboardView =
   | 'shipments'
   | 'escalations'
   | 'tasks'
+  | 'chat'
   | 'pipeline'
   | 'contacts'
   | 'projects'
@@ -74,6 +76,7 @@ type DashboardView =
 const sidebarNavItems: { id: DashboardView; label: string; icon: React.ReactNode }[] = [
   { id: 'pipeline', label: ' Dashboard', icon: <Layers className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
   { id: 'summary', label: 'Summary Analytics', icon: <TrendingUp className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
+  { id: 'chat', label: 'Internal Chat', icon: <MessageSquare className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
   { id: 'leads', label: 'Leads', icon: <Target className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
   { id: 'partners', label: 'Partners', icon: <Handshake className="h-4.5 w-4.5 flex-shrink-0 text-emerald-600" /> },
   { id: 'shipments', label: 'Shipments', icon: <Truck className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
@@ -202,6 +205,8 @@ export default function Dashboard() {
         return 'Shipment Escalations & Complaints'
       case 'tasks':
         return 'Tasks Management'
+      case 'chat':
+        return 'Internal Team Chat'
       case 'pipeline':
         return 'Deals Board'
       case 'contacts':
@@ -606,6 +611,7 @@ export default function Dashboard() {
             <ShipmentWorkspace initialTab={currentView === 'escalations' ? 'escalations' : 'shipments'} />
           )}
           {currentView === 'tasks' && <TasksWorkspace />}
+          {currentView === 'chat' && <ChatWorkspace currentUser={currentUser} />}
           {currentView === 'pipeline' && <DealsKanban />}
           {currentView === 'contacts' && <ContactsDirectory />}
           {currentView === 'projects' && <ProjectsWorkspace />}

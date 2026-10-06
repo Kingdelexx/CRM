@@ -34,6 +34,7 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
 }
 
 import ManifestLookupPage from '@/pages/ManifestLookupPage'
+import PublicTrackingPage from '@/pages/PublicTrackingPage'
 
 export default function App() {
   useEffect(() => {
@@ -73,7 +74,9 @@ export default function App() {
             }
           />
 
-          {/* Public Manifest Lookup Routes */}
+          {/* Public Tracking & Manifest Lookup Routes */}
+          <Route path="/tracking" element={<PublicTrackingPage />} />
+          <Route path="/tracking/:invoiceNumber" element={<PublicTrackingPage />} />
           <Route path="/manifest" element={<ManifestLookupPage />} />
           <Route path="/manifest/:code" element={<ManifestLookupPage />} />
 

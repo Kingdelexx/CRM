@@ -7,10 +7,12 @@ from apps.crm.api import (
     pipelines_router, reports_router, emails_router, whatsapp_router,
     automations_router, notifications_router, approvals_router, calendar_router,
     documents_router, search_router, invoices_router, receipts_router, shipments_router,
-    shipment_escalations_router, csr_reports_router, performance_scorecards_router
+    shipment_escalations_router, csr_reports_router, performance_scorecards_router, tracking_router
 )
 from apps.planning.api import activities_router, tasks_router
 from apps.crm.webhooks import router as webhooks_router
+
+from apps.chat.api import chat_router
 
 # Set up Ninja API with django-ninja-extra to support Ninja JWT controllers
 api = NinjaExtraAPI(
@@ -51,6 +53,9 @@ api.add_router("/shipment-escalations", shipment_escalations_router)
 api.add_router("/csr-reports", csr_reports_router)
 api.add_router("/performance-scorecards", performance_scorecards_router)
 api.add_router("/search", search_router)
+api.add_router("/chat", chat_router)
+api.add_router("/tracking", tracking_router)
+
 
 
 

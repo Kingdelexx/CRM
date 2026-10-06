@@ -603,6 +603,26 @@ class PerformanceScorecardCreateSchema(Schema):
     evaluator_signature_date: Optional[str] = None
 
 
+class TrackingTimelineEventSchema(Schema):
+    status: str
+    timestamp: str
+    location: Optional[str] = "Hub"
+    description: str
+
+
+class PublicTrackingResponseSchema(Schema):
+    invoiceNumber: str
+    status: str
+    originCity: str
+    destinationCity: str
+    receiverName: Optional[str] = None
+    scheduledShipmentDate: Optional[str] = None
+    estimatedDeliveryDate: Optional[str] = None
+    timelineEvents: List[TrackingTimelineEventSchema]
+    statusHistory: List[TrackingTimelineEventSchema]
+
+
+
 
 
 

@@ -47,7 +47,8 @@ from .schemas import (
     ShipmentSchema, ShipmentCreateSchema, DailyManifestSchema, DailyManifestItemSchema, DailyManifestLookupResponseSchema,
     ShipmentEscalationSchema, ShipmentEscalationCreateSchema,
     CSRReportSchema, CSRReportCreateSchema,
-    PerformanceScorecardSchema, PerformanceScorecardCreateSchema
+    PerformanceScorecardSchema, PerformanceScorecardCreateSchema,
+    TrackingTimelineEventSchema, PublicTrackingResponseSchema
 )
 
 # Route instances initialized with JWT Auth
@@ -74,6 +75,7 @@ shipments_router = Router(auth=JWTAuth())
 shipment_escalations_router = Router(auth=JWTAuth())
 csr_reports_router = Router(auth=JWTAuth())
 performance_scorecards_router = Router(auth=JWTAuth())
+tracking_router = Router(auth=None)
 search_router = Router(auth=JWTAuth())
 
 
@@ -3352,6 +3354,197 @@ def delete_performance_scorecard(request, id: UUID):
 
     scorecard.delete()
     return 204, None
+
+
+# ----------------- PUBLIC SHIPMENT TRACKING API -----------------
+import time
+_TRACKING_RATE_LIMIT_BUCKETS = {}
+
+def _check_tracking_rate_limit(request, max_requests=30, window_seconds=60):
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '127.0.0.1'))
+    if ip and ',' in ip:
+        ip = ip.split(',')[0].strip()
+    
+    now = time.time()
+    history = _TRACKING_RATE_LIMIT_BUCKETS.get(ip, [])
+    history = [t for t in history if now - t < window_seconds]
+    
+    if len(history) >= max_requests:
+        raise HttpError(429, "Rate limit exceeded. Please try again in a minute.")
+    
+    history.append(now)
+    _TRACKING_RATE_LIMIT_BUCKETS[ip] = history
+
+
+def _build_public_tracking_response(shipment, queried_inv: str):
+    inv_no = shipment.invoice_number or shipment.tracking_id or queried_inv
+
+    # Status mapping
+    s_status = (shipment.shipment_status or 'PENDING').upper()
+    if shipment.is_received_by_customer or s_status == 'DELIVERED':
+        current_status = 'DELIVERED'
+    elif s_status == 'IN_TRANSIT':
+        current_status = 'IN_TRANSIT'
+    elif s_status == 'CUSTOMS_HOLD':
+        current_status = 'ON_HOLD'
+    elif s_status == 'PENDING':
+        current_status = 'RECEIVED_AT_HUB'
+    else:
+        current_status = 'ORDER_CREATED'
+
+    # Extract origin & destination cities
+    def parse_city(addr, default_val):
+        if not addr:
+            return default_val
+        lines = [line.strip() for line in str(addr).split('\n') if line.strip()]
+        if len(lines) >= 2:
+            return lines[-1] if ',' in lines[-1] else f"{lines[-2]}, {lines[-1]}"
+        return lines[0] if lines else default_val
+
+    origin_city = parse_city(shipment.sender_address, 'London, UK')
+    dest_city = parse_city(shipment.receiver_address, 'Lagos, Nigeria')
+
+    created_dt = shipment.created_at or timezone.now()
+    scheduled_date = shipment.shipment_date or shipment.date or created_dt.date()
+    
+    # Calculate estimated delivery date
+    is_sea = (shipment.shipping_type == 'SEA')
+    est_days = 28 if is_sea else 7
+    est_delivery_date = scheduled_date + timedelta(days=est_days)
+
+    # Timeline events
+    events = []
+    # Event 1: Order Created
+    events.append({
+        "status": "ORDER_CREATED",
+        "timestamp": created_dt.isoformat(),
+        "location": origin_city,
+        "description": "Shipment booking created and invoice generated."
+    })
+
+    # Event 2: Received at Hub
+    hub_dt = datetime.combine(scheduled_date, datetime.min.time(), tzinfo=timezone.UTC) if isinstance(scheduled_date, date) else created_dt
+    events.append({
+        "status": "RECEIVED_AT_HUB",
+        "timestamp": hub_dt.isoformat(),
+        "location": origin_city,
+        "description": "Package received and sorted at originating distribution center."
+    })
+
+    # Event 3: In Transit
+    if current_status in ['IN_TRANSIT', 'ON_HOLD', 'OUT_FOR_DELIVERY', 'DELIVERED']:
+        transit_dt = hub_dt + timedelta(days=1)
+        events.append({
+            "status": "IN_TRANSIT",
+            "timestamp": transit_dt.isoformat(),
+            "location": "International Transit Hub",
+            "description": f"Shipment dispatched via {'Sea Freight' if is_sea else 'Air Freight'}."
+        })
+
+    # Event 4: Customs / On Hold
+    if current_status == 'ON_HOLD':
+        events.append({
+            "status": "ON_HOLD",
+            "timestamp": (shipment.updated_at or timezone.now()).isoformat(),
+            "location": dest_city,
+            "description": "Shipment placed on temporary hold for customs verification."
+        })
+
+    # Event 5: Delivered
+    if current_status == 'DELIVERED':
+        events.append({
+            "status": "DELIVERED",
+            "timestamp": (shipment.updated_at or timezone.now()).isoformat(),
+            "location": dest_city,
+            "description": "Package successfully delivered to recipient."
+        })
+
+    # Sort chronologically by timestamp
+    events.sort(key=lambda e: e['timestamp'])
+
+    return {
+        "invoiceNumber": inv_no,
+        "status": current_status,
+        "originCity": origin_city,
+        "destinationCity": dest_city,
+        "receiverName": shipment.receiver_name or "Recipient",
+        "scheduledShipmentDate": scheduled_date.isoformat() if hasattr(scheduled_date, 'isoformat') else str(scheduled_date),
+        "estimatedDeliveryDate": est_delivery_date.isoformat() if hasattr(est_delivery_date, 'isoformat') else str(est_delivery_date),
+        "timelineEvents": events,
+        "statusHistory": events
+    }
+
+
+def _resolve_shipment_by_invoice(invoice_str: str):
+    clean_inv = (invoice_str or '').strip()
+    if not clean_inv:
+        raise HttpError(404, "No shipment found with this invoice number.")
+
+    # 1. Primary Shipment Lookup
+    shipment = Shipment.objects.filter(
+        Q(invoice_number__iexact=clean_inv) |
+        Q(tracking_id__iexact=clean_inv) |
+        Q(dpd_tracking_number__iexact=clean_inv) |
+        Q(payment_reference_number__iexact=clean_inv)
+    ).select_related('organization', 'sender', 'receiver').first()
+
+    # 2. Invoice Model Fallback
+    if not shipment:
+        inv = Invoice.objects.filter(
+            Q(invoice_number__iexact=clean_inv) |
+            Q(expected_parcel_no__iexact=clean_inv)
+        ).select_related('organization', 'contact').first()
+
+        if inv:
+            # Check if there is an associated Shipment
+            shipment = Shipment.objects.filter(
+                Q(invoice_number__iexact=inv.invoice_number) |
+                Q(tracking_id__iexact=inv.expected_parcel_no) |
+                Q(invoice_number__iexact=inv.expected_parcel_no)
+            ).select_related('organization', 'sender', 'receiver').first()
+
+            # Construct fallback Shipment object from Invoice data if no separate Shipment record
+            if not shipment:
+                rec_name = inv.receiver_name or (
+                    f"{inv.contact.first_name} {inv.contact.last_name}".strip() if inv.contact else "Recipient"
+                )
+                shipment = Shipment(
+                    organization=inv.organization,
+                    invoice_number=inv.invoice_number,
+                    tracking_id=inv.expected_parcel_no or inv.invoice_number,
+                    receiver_name=rec_name,
+                    receiver_phone=inv.receiver_tel,
+                    receiver_address=inv.receiver_address,
+                    shipment_status='DELIVERED' if inv.status == Invoice.PAID else 'PENDING',
+                    created_at=inv.created_at,
+                    updated_at=inv.updated_at,
+                    shipment_date=inv.issue_date
+                )
+
+    if not shipment:
+        raise HttpError(404, "No shipment found with this invoice number.")
+    
+    return shipment
+
+
+@tracking_router.get("/{invoice_number}", response=PublicTrackingResponseSchema)
+@tracking_router.get("/{invoice_number}/", response=PublicTrackingResponseSchema)
+def get_public_tracking_by_path(request, invoice_number: str):
+    _check_tracking_rate_limit(request)
+    shipment = _resolve_shipment_by_invoice(invoice_number)
+    return _build_public_tracking_response(shipment, invoice_number)
+
+
+@tracking_router.get("", response=PublicTrackingResponseSchema)
+@tracking_router.get("/", response=PublicTrackingResponseSchema)
+def get_public_tracking_by_query(request, invoice: Optional[str] = None, invoiceNumber: Optional[str] = None):
+    _check_tracking_rate_limit(request)
+    inv_str = invoice or invoiceNumber
+    if not inv_str:
+        raise HttpError(404, "No shipment found with this invoice number.")
+    shipment = _resolve_shipment_by_invoice(inv_str)
+    return _build_public_tracking_response(shipment, inv_str)
+
 
 
 
