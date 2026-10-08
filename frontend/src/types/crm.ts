@@ -328,6 +328,10 @@ export interface Invoice extends BaseEntity {
   receiver_tel?: string;
   receiver_email?: string;
   receiver_address?: string;
+  sender_name?: string;
+  sender_tel?: string;
+  sender_email?: string;
+  sender_address?: string;
   total_value_items?: number;
   expected_parcel_no?: string;
   parcel_handler?: string;

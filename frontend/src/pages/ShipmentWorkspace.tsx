@@ -2505,7 +2505,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         name="invoice_number"
                         value={formData.invoice_number}
                         onChange={handleInputChange}
-                        placeholder="e.g. MINT/SEP/FRI/1001 (Auto if blank)"
+                        placeholder="e.g. MINT-SEP-FRI-1001 (Auto if blank)"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>
@@ -3936,7 +3936,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         name="invoice_number"
                         value={formData.invoice_number}
                         onChange={handleInputChange}
-                        placeholder="e.g. MINT/SEP/FRI/1001 (Auto if blank)"
+                        placeholder="e.g. MINT-SEP-FRI-1001 (Auto if blank)"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>

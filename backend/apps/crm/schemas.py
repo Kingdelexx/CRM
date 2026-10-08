@@ -330,6 +330,7 @@ class InvoiceSchema(ModelSchema):
         fields = [
             'id', 'invoice_number', 'issue_date', 'due_date', 'status',
             'receiver_name', 'receiver_tel', 'receiver_email', 'receiver_address',
+            'sender_name', 'sender_tel', 'sender_email', 'sender_address',
             'total_value_items', 'expected_parcel_no', 'parcel_handler',
             'items', 'services', 'total_ngn', 'total_gbp', 'original_total_ngn', 'original_total_gbp', 'amount_paid',
             'currency', 'sla_terms_url', 'notes', 'created_at', 'updated_at'
@@ -348,6 +349,10 @@ class InvoiceCreateSchema(Schema):
     receiver_tel: Optional[str] = None
     receiver_email: Optional[str] = None
     receiver_address: Optional[str] = None
+    sender_name: Optional[str] = None
+    sender_tel: Optional[str] = None
+    sender_email: Optional[str] = None
+    sender_address: Optional[str] = None
     total_value_items: Optional[float] = 0.0
     expected_parcel_no: Optional[str] = None
     parcel_handler: Optional[str] = None

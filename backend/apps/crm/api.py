@@ -2368,7 +2368,7 @@ def create_shipment(request, data: ShipmentCreateSchema):
             except Exception:
                 pass
         count = Shipment.objects.filter(organization=request.user.organization).count() + 1001
-        payload['invoice_number'] = f"MINT/{month_str}/{day_str}/{count}"
+        payload['invoice_number'] = f"MINT-{month_str}-{day_str}-{count}"
 
     # Synchronize dpd_tracking_number with tracking_id if present
     if payload.get('dpd_tracking_number') and not payload.get('tracking_id'):
@@ -2484,10 +2484,20 @@ def sync_shipment_invoice(shipment):
     total_ngn = amount_num * conversion_rate if is_gbp else amount_num
     total_gbp = amount_num if is_gbp else (amount_num / conversion_rate)
 
-    rec_name = shipment.receiver_name or shipment.sender_name or 'Valued Client'
-    rec_phone = shipment.receiver_phone or shipment.sender_phone or 'N/A'
-    rec_email = shipment.receiver_email or shipment.sender_email or 'N/A'
-    rec_addr = shipment.receiver_address or shipment.sender_address or 'N/A'
+    r_name = shipment.receiver_name or (f"{shipment.receiver.first_name or ''} {shipment.receiver.last_name or ''}".strip() if shipment.receiver else None)
+    r_phone = shipment.receiver_phone or (shipment.receiver.phone if shipment.receiver else None)
+    r_email = shipment.receiver_email or (shipment.receiver.email if shipment.receiver else None)
+    r_addr = shipment.receiver_address or (shipment.receiver.address if shipment.receiver else None)
+
+    s_name = shipment.sender_name or (f"{shipment.sender.first_name or ''} {shipment.sender.last_name or ''}".strip() if shipment.sender else None)
+    s_phone = shipment.sender_phone or (shipment.sender.phone if shipment.sender else None)
+    s_email = shipment.sender_email or (shipment.sender.email if shipment.sender else None)
+    s_addr = shipment.sender_address or (shipment.sender.address if shipment.sender else None)
+
+    rec_name = r_name or s_name or 'Valued Client'
+    rec_phone = r_phone or s_phone or 'N/A'
+    rec_email = r_email or s_email or 'N/A'
+    rec_addr = r_addr or s_addr or 'N/A'
 
     item_nature = shipment.item_received or shipment.items_shipped or 'CARGO / PARCEL'
     dos_date = str(shipment.shipment_date or shipment.date or timezone.localdate())
@@ -2588,38 +2598,49 @@ def sync_shipment_invoice(shipment):
 
     parcel_handler_val = recorded_by_name or ""
 
-    inv, created = Invoice.objects.get_or_create(
+    inv = Invoice.objects.filter(
         organization=shipment.organization,
-        invoice_number=shipment.invoice_number,
-        defaults={
-            'contact': shipment.receiver or shipment.sender,
-            'receiver_name': rec_name,
-            'receiver_tel': rec_phone,
-            'receiver_email': rec_email,
-            'receiver_address': rec_addr,
-            'total_value_items': shipment.value or 0,
-            'expected_parcel_no': shipment.dpd_tracking_number or shipment.tracking_id or shipment.invoice_number,
-            'parcel_handler': parcel_handler_val,
-            'items': items,
-            'services': services,
-            'total_ngn': round(total_ngn, 2),
-            'total_gbp': round(total_gbp, 2),
-            'original_total_ngn': orig_total_ngn,
-            'original_total_gbp': orig_total_gbp,
-            'amount_paid': round(total_ngn, 2) if inv_status == Invoice.PAID else 0,
-            'currency': shipment.currency or 'NGN',
-            'issue_date': issue_date,
-            'status': inv_status,
-            'notes': shipment.note or ''
-        }
-    )
+        invoice_number=shipment.invoice_number
+    ).first()
 
-    if not created:
+    if not inv:
+        inv = Invoice.objects.create(
+            organization=shipment.organization,
+            invoice_number=shipment.invoice_number,
+            contact=shipment.receiver or shipment.sender,
+            receiver_name=rec_name,
+            receiver_tel=rec_phone,
+            receiver_email=rec_email,
+            receiver_address=rec_addr,
+            sender_name=s_name,
+            sender_tel=s_phone,
+            sender_email=s_email,
+            sender_address=s_addr,
+            total_value_items=shipment.value or 0,
+            expected_parcel_no=shipment.dpd_tracking_number or shipment.tracking_id or shipment.invoice_number,
+            parcel_handler=parcel_handler_val,
+            items=items,
+            services=services,
+            total_ngn=round(total_ngn, 2),
+            total_gbp=round(total_gbp, 2),
+            original_total_ngn=orig_total_ngn,
+            original_total_gbp=orig_total_gbp,
+            amount_paid=round(total_ngn, 2) if inv_status == Invoice.PAID else 0,
+            currency=shipment.currency or 'NGN',
+            issue_date=issue_date,
+            status=inv_status,
+            notes=shipment.note or ''
+        )
+    else:
         inv.contact = shipment.receiver or shipment.sender
         inv.receiver_name = rec_name
         inv.receiver_tel = rec_phone
         inv.receiver_email = rec_email
         inv.receiver_address = rec_addr
+        inv.sender_name = s_name
+        inv.sender_tel = s_phone
+        inv.sender_email = s_email
+        inv.sender_address = s_addr
         inv.total_value_items = shipment.value or 0
         inv.expected_parcel_no = shipment.dpd_tracking_number or shipment.tracking_id or shipment.invoice_number
         inv.parcel_handler = parcel_handler_val

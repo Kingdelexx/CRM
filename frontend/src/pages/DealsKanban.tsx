@@ -64,7 +64,7 @@ export default function DealsKanban() {
   const currentUserId = me?.id
 
   // 2. Fetch Stages & Deals
-  const { data: rawStages = [], isLoading: loadingStages, isError: errorStages } = useQuery({
+  const { data: rawStages = [], isLoading: loadingStages, isError: errorStages, refetch: refetchStages } = useQuery({
     queryKey: ['stages'],
     queryFn: async () => {
       const response = await apiClient.get<Stage[]>('/stages/')
@@ -83,7 +83,7 @@ export default function DealsKanban() {
     })
   }, [rawStages])
 
-  const { data: dealsData, isLoading: loadingDeals, isError: errorDeals } = useQuery({
+  const { data: dealsData, isLoading: loadingDeals, isError: errorDeals, refetch: refetchDeals } = useQuery({
     queryKey: ['deals'],
     queryFn: async () => {
       const response = await apiClient.get<{ items: Deal[]; count: number }>('/deals/', {
@@ -438,9 +438,38 @@ export default function DealsKanban() {
 
   if (errorStages || errorDeals) {
     return (
-      <div className="py-20 text-center text-red-400 flex items-center justify-center gap-2">
-        <AlertCircle className="h-5 w-5" />
-        <span className="text-xs">Failed to load Kanban board. Please verify session tokens.</span>
+      <div className="py-16 px-4 max-w-md mx-auto text-center space-y-4">
+        <div className="w-12 h-12 rounded-full bg-red-100 border border-red-200 text-red-600 flex items-center justify-center mx-auto shadow-sm">
+          <AlertCircle className="h-6 w-6" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-sm font-bold text-slate-800">Session Expired or Connection Issue</h3>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Failed to load Kanban board. Your login session token may have expired.
+          </p>
+        </div>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => {
+              refetchStages()
+              refetchDeals()
+            }}
+            className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition cursor-pointer"
+          >
+            Retry Loading
+          </button>
+          <button
+            onClick={() => {
+              localStorage.removeItem('access_token')
+              localStorage.removeItem('refresh_token')
+              localStorage.removeItem('current_user')
+              window.location.href = '/login'
+            }}
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition cursor-pointer shadow-md shadow-indigo-500/20"
+          >
+            Log In Again
+          </button>
+        </div>
       </div>
     )
   }

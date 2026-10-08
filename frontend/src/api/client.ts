@@ -80,10 +80,15 @@ apiClient.interceptors.response.use(
     }
     
     // Standardize error messaging structure
+    const isNetworkError = !error.response
+    const errorMessage = isNetworkError 
+      ? 'Unable to connect to backend server. Please verify your internet connection or server status.'
+      : (error.response?.data?.detail || error.message || 'An unexpected error occurred.')
+
     return Promise.reject({
-      message: error.response?.data?.detail || error.message || 'An unexpected error occurred.',
+      message: errorMessage,
       errors: error.response?.data?.errors || null,
-      status: error.response?.status || 500,
+      status: error.response?.status || (isNetworkError ? 0 : 500),
       response: error.response,
     })
   }
