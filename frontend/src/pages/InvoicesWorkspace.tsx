@@ -979,10 +979,10 @@ export const InvoicesWorkspace: React.FC = () => {
               {/* Delivery & Parcel Details */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-sky-50/60 p-4 rounded-xl border border-sky-100">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Expected Parcel No</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Expected Parcel No (Count)</label>
                   <input
                     type="text"
-                    placeholder="e.g. MNT-998273"
+                    placeholder="e.g. 1, 2, 3..."
                     value={formData.expected_parcel_no}
                     onChange={e => setFormData({ ...formData, expected_parcel_no: e.target.value })}
                     className="w-full p-2 bg-white border border-sky-200 rounded-lg text-sm"
@@ -1252,12 +1252,12 @@ export const InvoicesWorkspace: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">DPD Tracking Number / Parcel No</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Expected Parcel No (Count)</label>
                   <input
                     type="text"
                     value={formData.expected_parcel_no}
                     onChange={e => setFormData({ ...formData, expected_parcel_no: e.target.value })}
-                    placeholder="e.g. DPD-883920"
+                    placeholder="e.g. 1, 2, 3..."
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl"
                   />
                 </div>

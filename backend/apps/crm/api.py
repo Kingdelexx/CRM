@@ -2617,7 +2617,7 @@ def sync_shipment_invoice(shipment):
             sender_email=s_email,
             sender_address=s_addr,
             total_value_items=shipment.value or 0,
-            expected_parcel_no=shipment.dpd_tracking_number or shipment.tracking_id or shipment.invoice_number,
+            expected_parcel_no=str(shipment.number_of_carton or 1),
             parcel_handler=parcel_handler_val,
             items=items,
             services=services,
@@ -2642,7 +2642,7 @@ def sync_shipment_invoice(shipment):
         inv.sender_email = s_email
         inv.sender_address = s_addr
         inv.total_value_items = shipment.value or 0
-        inv.expected_parcel_no = shipment.dpd_tracking_number or shipment.tracking_id or shipment.invoice_number
+        inv.expected_parcel_no = str(shipment.number_of_carton or 1)
         inv.parcel_handler = parcel_handler_val
         inv.items = items
         inv.services = services

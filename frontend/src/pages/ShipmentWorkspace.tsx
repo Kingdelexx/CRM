@@ -175,7 +175,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       receiver_email: shipment.receiver_email || shipment.sender_email || 'N/A',
       receiver_address: shipment.receiver_address || shipment.sender_address || 'N/A',
       total_value_items: Number(shipment.value) || 0,
-      expected_parcel_no: shipment.tracking_id || shipment.invoice_number || 'N/A',
+      expected_parcel_no: String(shipment.number_of_carton || 1),
       parcel_handler: shipment.recorded_by
         ? ([shipment.recorded_by.first_name, shipment.recorded_by.last_name].filter(Boolean).join(' ') || shipment.recorded_by.email || '')
         : (shipment.packager || ''),
