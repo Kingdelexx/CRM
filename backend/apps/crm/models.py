@@ -819,6 +819,7 @@ class Shipment(TimeStampedModel):
     number_of_carton = models.IntegerField(default=1)
     has_packaging = models.BooleanField(default=False)
     has_doorstep_delivery = models.BooleanField(default=False)
+    extra_charges = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     dpd = models.BooleanField(default=False)
     is_promo = models.BooleanField(default=False)
     promo_packaging_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)

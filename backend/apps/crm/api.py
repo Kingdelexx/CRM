@@ -2493,8 +2493,23 @@ def sync_shipment_invoice(shipment):
         conversion_rate = 2000.0
 
     amount_num = float(shipment.amount or 0)
-    total_ngn = amount_num * conversion_rate if is_gbp else amount_num
-    total_gbp = amount_num if is_gbp else (amount_num / conversion_rate)
+    extra_charges_val = float(getattr(shipment, 'extra_charges', 0.0) or 0.0)
+    if extra_charges_val > 0:
+        if is_gbp:
+            extra_gbp = extra_charges_val
+            extra_ngn = extra_charges_val * conversion_rate
+        else:
+            extra_ngn = extra_charges_val
+            extra_gbp = extra_charges_val / conversion_rate if conversion_rate > 0 else 0.0
+    else:
+        extra_ngn = 0.0
+        extra_gbp = 0.0
+
+    base_ngn = amount_num * conversion_rate if is_gbp else amount_num
+    base_gbp = amount_num if is_gbp else (amount_num / conversion_rate)
+
+    total_ngn = base_ngn + extra_ngn
+    total_gbp = base_gbp + extra_gbp
 
     r_name = shipment.receiver_name or (f"{shipment.receiver.first_name or ''} {shipment.receiver.last_name or ''}".strip() if shipment.receiver else None)
     r_phone = shipment.receiver_phone or (shipment.receiver.phone if shipment.receiver else None)
@@ -2576,8 +2591,18 @@ def sync_shipment_invoice(shipment):
         services.append(ds_service)
         sn_counter += 1
 
-    items_ngn = max(0.0, round(total_ngn - (pkg_ngn + ds_ngn), 2))
-    items_gbp = max(0.0, round(total_gbp - (pkg_gbp + ds_gbp), 2))
+    if extra_charges_val > 0:
+        extra_service = {
+            'sn': sn_counter,
+            'service_name': 'Extra Charges',
+            'price_ngn': round(extra_ngn, 2),
+            'price_gbp': round(extra_gbp, 2)
+        }
+        services.append(extra_service)
+        sn_counter += 1
+
+    items_ngn = max(0.0, round(total_ngn - (pkg_ngn + ds_ngn + extra_ngn), 2))
+    items_gbp = max(0.0, round(total_gbp - (pkg_gbp + ds_gbp + extra_gbp), 2))
 
     std_per_kg = float(getattr(org, 'per_kg_price', 0.0) or 0.0) if org else 0.0
     std_items_ngn = round(float(shipment.weight_kg or 0) * std_per_kg * conversion_rate, 2)

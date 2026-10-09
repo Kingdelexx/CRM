@@ -21,6 +21,7 @@ import {
   Truck,
   Package,
   DollarSign,
+  Coins,
   User as UserIcon,
   Calendar,
   FileText,
@@ -95,8 +96,24 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const conversionRate = (!isNaN(rawRate) && rawRate > 1) ? rawRate : rate
     const amountNum = Number(shipment.amount) || 0
     
-    const totalNgn = isGbp ? amountNum * conversionRate : amountNum
-    const totalGbp = isGbp ? amountNum : (conversionRate > 0 ? amountNum / conversionRate : 0)
+    const baseNgn = isGbp ? amountNum * conversionRate : amountNum
+    const baseGbp = isGbp ? amountNum : (conversionRate > 0 ? amountNum / conversionRate : 0)
+
+    const extraChargesVal = Number(shipment.extra_charges) || 0
+    let extraNgn = 0
+    let extraGbp = 0
+    if (extraChargesVal > 0) {
+      if (isGbp) {
+        extraGbp = extraChargesVal
+        extraNgn = extraChargesVal * conversionRate
+      } else {
+        extraNgn = extraChargesVal
+        extraGbp = conversionRate > 0 ? extraChargesVal / conversionRate : 0
+      }
+    }
+
+    const totalNgn = baseNgn + extraNgn
+    const totalGbp = baseGbp + extraGbp
 
     const isPromo = Boolean(shipment.is_promo)
     const parcels = Number(shipment.number_of_carton) || 1
@@ -149,8 +166,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       services.push(dsService)
     }
 
-    const itemsNgn = Math.max(0, totalNgn - dsNgn - pkgNgn)
-    const itemsGbp = Math.max(0, totalGbp - dsGbp - pkgGbp)
+    if (extraChargesVal > 0) {
+      services.push({
+        sn: serviceSn++,
+        service_name: 'Extra Charges',
+        price_ngn: extraNgn,
+        price_gbp: extraGbp
+      })
+    }
+
+    const itemsNgn = Math.max(0, totalNgn - dsNgn - pkgNgn - extraNgn)
+    const itemsGbp = Math.max(0, totalGbp - dsGbp - pkgGbp - extraGbp)
 
     const stdPerKg = Number(meData?.organization?.per_kg_price) || 0
     const stdItemsNgn = (Number(shipment.weight_kg) || 0) * stdPerKg * conversionRate
@@ -267,7 +293,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     recorded_by_id: '',
     is_promo: false,
     promo_packaging_fee: '',
-    promo_doorstep_fee: ''
+    promo_doorstep_fee: '',
+    extra_charges: ''
   })
   const [formError, setFormError] = useState('')
   const [amountNgn, setAmountNgn] = useState('')
@@ -317,7 +344,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     shippingTypeOverride?: string,
     isPromoOverride?: boolean,
     promoPackagingFeeOverride?: string,
-    promoDoorstepFeeOverride?: string
+    promoDoorstepFeeOverride?: string,
+    extraChargesStr?: string
   ) => {
     const numParcels = parseInt(parcelCountStr) || 0
     const weightKg = parseFloat(weightKgStr !== undefined ? weightKgStr : formData.weight_kg) || 0
@@ -330,6 +358,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const isPromo = isPromoOverride !== undefined ? isPromoOverride : Boolean(formData.is_promo)
     const promoPkgFeeStr = promoPackagingFeeOverride !== undefined ? promoPackagingFeeOverride : String(formData.promo_packaging_fee ?? '')
     const promoDsFeeStr = promoDoorstepFeeOverride !== undefined ? promoDoorstepFeeOverride : String(formData.promo_doorstep_fee ?? '')
+    const extraChargesVal = parseFloat(extraChargesStr !== undefined ? extraChargesStr : formData.extra_charges) || 0
 
     let parcelFee = currentHasPackaging === 'YES' ? (numParcels * orgParcelRate) : 0
     if (isPromo && currentHasPackaging === 'YES' && promoPkgFeeStr !== '' && !isNaN(parseFloat(promoPkgFeeStr))) {
@@ -356,7 +385,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
 
     const weightFee = weightKg * effectivePerKgPrice * orgExchangeRate
-    const subtotalNgn = parcelFee + doorstepFee + weightFee
+    const extraChargesNgn = formData.currency === 'GBP' ? extraChargesVal * orgExchangeRate : extraChargesVal
+    const subtotalNgn = parcelFee + doorstepFee + weightFee + extraChargesNgn
 
     const discountPct = parseFloat(discountStr !== undefined ? discountStr : formData.discount_percentage) || 0
     const discountNgn = subtotalNgn * (discountPct / 100)
@@ -588,6 +618,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         is_promo: Boolean(payload.is_promo),
         promo_packaging_fee: (payload.is_promo && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
         promo_doorstep_fee: (payload.is_promo && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
+        extra_charges: parseFloat(payload.extra_charges) || 0.0,
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
@@ -677,7 +708,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       recorded_by_id: shipment.recorded_by?.id || '',
       is_promo: Boolean(shipment.is_promo),
       promo_packaging_fee: shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null ? String(shipment.promo_packaging_fee) : '',
-      promo_doorstep_fee: shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null ? String(shipment.promo_doorstep_fee) : ''
+      promo_doorstep_fee: shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null ? String(shipment.promo_doorstep_fee) : '',
+      extra_charges: shipment.extra_charges ? String(shipment.extra_charges) : ''
     })
     const amt = shipment.amount ? Number(shipment.amount) : 0
     const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
@@ -911,6 +943,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         is_promo: Boolean(payload.is_promo),
         promo_packaging_fee: (payload.is_promo && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
         promo_doorstep_fee: (payload.is_promo && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
+        extra_charges: parseFloat(payload.extra_charges) || 0.0,
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
         partner_name: payload.partner_name || null,
@@ -1029,7 +1062,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       recorded_by_id: meData?.id || '',
       is_promo: false,
       promo_packaging_fee: '',
-      promo_doorstep_fee: ''
+      promo_doorstep_fee: '',
+      extra_charges: ''
     })
     setAmountNgn('')
     setAmountGbp('')
@@ -1046,7 +1080,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       if (name === 'dpd_tracking_number') {
         next.tracking_id = value
       }
-      if (['weight_kg', 'discount_percentage', 'partner_name', 'partner_id', 'shipping_type', 'is_promo', 'promo_packaging_fee', 'promo_doorstep_fee'].includes(name)) {
+      if (['weight_kg', 'discount_percentage', 'partner_name', 'partner_id', 'shipping_type', 'is_promo', 'promo_packaging_fee', 'promo_doorstep_fee', 'extra_charges'].includes(name)) {
         recalculateTotalAmount(
           hasPackaging,
           next.number_of_carton,
@@ -1058,7 +1092,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           next.shipping_type,
           Boolean(next.is_promo),
           String(next.promo_packaging_fee ?? ''),
-          String(next.promo_doorstep_fee ?? '')
+          String(next.promo_doorstep_fee ?? ''),
+          next.extra_charges
         )
       }
       return next
@@ -2650,8 +2685,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* Weight (kg), Declared Value & Recorded By */}
-                  <div className="grid grid-cols-3 gap-4">
+                  {/* Weight (kg), Declared Value, Extra Charges & Recorded By */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Weight (kg)</label>
                       <input
@@ -2675,6 +2710,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         onChange={handleInputChange}
                         placeholder="0.00"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-amber-400 font-semibold flex items-center gap-1">
+                        <Coins className="h-3.5 w-3.5 text-amber-400" /> Extra Charges
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        name="extra_charges"
+                        value={formData.extra_charges}
+                        onChange={handleInputChange}
+                        placeholder="0.00"
+                        className="w-full bg-zinc-900 border border-amber-500/30 focus:border-amber-500 focus:outline-none rounded-lg p-2.5 text-sm text-amber-200 placeholder-zinc-600 font-medium"
                       />
                     </div>
 
@@ -2980,6 +3030,16 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     <span className="text-zinc-500">Declared Value:</span>
                     <span className="text-zinc-300">{selectedShipment.currency} {selectedShipment.value}</span>
                   </div>
+                  {Number(selectedShipment.extra_charges) > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-amber-400 font-semibold flex items-center gap-1">
+                        <Coins className="h-3 w-3" /> Extra Service Charges:
+                      </span>
+                      <span className="text-amber-300 font-bold font-mono">
+                        {selectedShipment.currency} {Number(selectedShipment.extra_charges).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -4053,8 +4113,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* Weight (kg), Declared Value & Recorded By */}
-                  <div className="grid grid-cols-3 gap-4">
+                  {/* Weight (kg), Declared Value, Extra Charges & Recorded By */}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Weight (kg)</label>
                       <input
@@ -4078,6 +4138,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         onChange={handleInputChange}
                         placeholder="0.00"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-amber-400 font-semibold flex items-center gap-1">
+                        <Coins className="h-3.5 w-3.5 text-amber-400" /> Extra Charges
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        name="extra_charges"
+                        value={formData.extra_charges}
+                        onChange={handleInputChange}
+                        placeholder="0.00"
+                        className="w-full bg-zinc-900 border border-amber-500/30 focus:border-amber-500 focus:outline-none rounded-lg p-2.5 text-sm text-amber-200 placeholder-zinc-600 font-medium"
                       />
                     </div>
 

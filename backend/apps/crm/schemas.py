@@ -409,7 +409,7 @@ class ShipmentSchema(ModelSchema):
             'id', 'sender_name', 'sender_phone', 'sender_email', 'sender_address',
             'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
             'date', 'shipment_date', 'shipment_status', 'payment_status', 'shipping_type', 'currency', 'conversion_rate', 'amount',
-            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_packaging', 'has_doorstep_delivery', 'dpd', 'is_promo', 'promo_packaging_fee', 'promo_doorstep_fee', 'packager', 'partner_name', 'item_received', 'items_shipped',
+            'discount_percentage', 'invoice_number', 'number_of_carton', 'has_packaging', 'has_doorstep_delivery', 'extra_charges', 'dpd', 'is_promo', 'promo_packaging_fee', 'promo_doorstep_fee', 'packager', 'partner_name', 'item_received', 'items_shipped',
             'items_recieved', 'weight_kg', 'tracking_id', 'dpd_tracking_number', 'payment_reference_number', 'value', 'note', 'manifest', 'created_at', 'updated_at'
         ]
 
@@ -438,6 +438,7 @@ class ShipmentCreateSchema(Schema):
     number_of_carton: Optional[int] = 1
     has_packaging: Optional[bool] = False
     has_doorstep_delivery: Optional[bool] = False
+    extra_charges: Optional[float] = 0.00
     dpd: Optional[bool] = False
     is_promo: Optional[bool] = False
     promo_packaging_fee: Optional[float] = None
