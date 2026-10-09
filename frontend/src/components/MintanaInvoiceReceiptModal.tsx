@@ -24,6 +24,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
   // Determine active dataset
   const activeInvoice = invoice || receipt?.invoice;
   const isPaid = receipt || activeInvoice?.status === 'PAID';
+  const effectiveManifestCode = manifestCode || (activeInvoice as any)?.manifest?.access_code || (activeInvoice as any)?.manifest_access_code || null;
 
   // Currency display toggle state (NGN vs GBP)
   const initialCurrency = (activeInvoice?.currency === 'GBP' || (activeInvoice as any)?.currency === 'GBP') ? 'GBP' : 'NGN';
@@ -347,7 +348,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
             </div>
 
             {/* Daily Manifest Link Banner (Hidden on print) */}
-            {manifestCode && (
+            {effectiveManifestCode && (
               <div className="bg-indigo-950 text-white px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-indigo-800 print:hidden">
                 <div className="flex items-center space-x-2.5">
                   <div className="h-7 w-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-xs">
@@ -355,22 +356,22 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                   </div>
                   <div>
                     <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider block">Daily Shipment Manifest Access Code</span>
-                    <span className="text-xs font-mono font-extrabold text-indigo-100">{manifestCode}</span>
+                    <span className="text-xs font-mono font-extrabold text-indigo-100">{effectiveManifestCode}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => {
-                      navigator.clipboard.writeText(manifestCode)
-                      alert(`Manifest access code '${manifestCode}' copied!`)
+                      navigator.clipboard.writeText(effectiveManifestCode)
+                      alert(`Manifest access code '${effectiveManifestCode}' copied!`)
                     }}
                     className="px-2.5 py-1 bg-indigo-900 hover:bg-indigo-800 text-indigo-200 rounded-md text-xs font-semibold transition border border-indigo-700/60 cursor-pointer"
                   >
                     Copy Code
                   </button>
                   <a
-                    href={`/manifest/${manifestCode}`}
+                    href={`/manifest/${effectiveManifestCode}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-bold transition flex items-center gap-1 shadow cursor-pointer"

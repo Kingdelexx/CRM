@@ -345,6 +345,11 @@ export interface Invoice extends BaseEntity {
   currency: string;
   sla_terms_url?: string;
   notes?: string;
+  manifest?: {
+    id: string;
+    date: string;
+    access_code: string;
+  };
 }
 
 export interface Receipt extends BaseEntity {

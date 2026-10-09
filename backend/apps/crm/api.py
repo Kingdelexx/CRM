@@ -2374,7 +2374,7 @@ def create_shipment(request, data: ShipmentCreateSchema):
     if payload.get('dpd_tracking_number') and not payload.get('tracking_id'):
         payload['tracking_id'] = payload['dpd_tracking_number']
 
-    target_d = payload.get('shipment_date') or payload.get('date')
+    target_d = effective_date or payload.get('shipment_date') or payload.get('date')
     manifest = get_or_create_daily_manifest(request.user.organization, target_d)
 
     shipment = Shipment.objects.create(
@@ -2391,6 +2391,7 @@ def create_shipment(request, data: ShipmentCreateSchema):
     except Exception as e:
         print(f"Failed to auto-sync invoice for shipment {shipment.id}: {e}")
 
+    shipment = Shipment.objects.select_related('manifest', 'sender', 'receiver', 'partner', 'recorded_by').get(id=shipment.id)
     return 201, shipment
 
 
@@ -2412,11 +2413,17 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
         return None
 
     if 'sender_id' in payload:
-        shipment.sender_id = parse_uuid(payload.pop('sender_id'))
+        s_id = parse_uuid(payload.pop('sender_id'))
+        if s_id:
+            shipment.sender_id = s_id
     if 'receiver_id' in payload:
-        shipment.receiver_id = parse_uuid(payload.pop('receiver_id'))
+        r_id = parse_uuid(payload.pop('receiver_id'))
+        if r_id:
+            shipment.receiver_id = r_id
     if 'partner_id' in payload:
-        shipment.partner_id = parse_uuid(payload.pop('partner_id'))
+        p_id = parse_uuid(payload.pop('partner_id'))
+        if p_id:
+            shipment.partner_id = p_id
     if 'recorded_by_id' in payload:
         rec_id = parse_uuid(payload.pop('recorded_by_id'))
         if rec_id:
@@ -2441,6 +2448,10 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
     if payload.get('dpd_tracking_number') and not payload.get('tracking_id'):
         payload['tracking_id'] = payload['dpd_tracking_number']
 
+    target_d = effective_date or shipment.shipment_date or shipment.date
+    if not shipment.manifest or effective_date:
+        shipment.manifest = get_or_create_daily_manifest(request.user.organization, target_d)
+
     for attr, value in payload.items():
         setattr(shipment, attr, value)
 
@@ -2451,6 +2462,7 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
     except Exception as e:
         print(f"Failed to auto-sync invoice for updated shipment {shipment.id}: {e}")
 
+    shipment = Shipment.objects.select_related('manifest', 'sender', 'receiver', 'partner', 'recorded_by').get(id=shipment.id)
     return shipment
 
 

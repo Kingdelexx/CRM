@@ -199,6 +199,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       amount_paid: shipment.payment_status === 'PAID' ? totalNgn : 0,
       currency: shipment.currency || 'NGN',
       sla_terms_url: 'https://www.mintana.co.uk/terms-and-conditions',
+      manifest: shipment.manifest,
       notes: shipment.note || '',
       created_at: shipment.created_at || new Date().toISOString(),
       updated_at: shipment.updated_at || new Date().toISOString()
@@ -946,12 +947,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             matched = shipmentToInvoice(savedShipment)
           }
           if (matched) {
+            if (!matched.manifest && savedShipment?.manifest) {
+              matched.manifest = savedShipment.manifest
+            }
             setSelectedInvoiceForModal(matched)
           }
         } catch (err) {
           console.error("Error fetching invoice modal after shipment creation:", err)
           if (savedShipment) {
-            setSelectedInvoiceForModal(shipmentToInvoice(savedShipment))
+            const invObj = shipmentToInvoice(savedShipment)
+            invObj.manifest = savedShipment.manifest
+            setSelectedInvoiceForModal(invObj)
           }
         }
       }
