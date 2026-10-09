@@ -2524,7 +2524,7 @@ def sync_shipment_invoice(shipment):
     std_pkg_ngn = round((shipment.number_of_carton or 0) * parcel_rate_ngn, 2) if shipment.number_of_carton else 0.0
     std_pkg_gbp = round(std_pkg_ngn / conversion_rate, 2) if (conversion_rate > 0 and std_pkg_ngn > 0) else 0.0
 
-    if shipment.number_of_carton and (parcel_rate_ngn > 0 or shipment.promo_packaging_fee is not None):
+    if getattr(shipment, 'has_packaging', False):
         if shipment.is_promo and shipment.promo_packaging_fee is not None:
             pkg_ngn = round(float(shipment.promo_packaging_fee), 2)
             pkg_gbp = round(pkg_ngn / conversion_rate, 2) if conversion_rate > 0 else 0.0
@@ -2535,27 +2535,34 @@ def sync_shipment_invoice(shipment):
         pkg_ngn = 0.0
         pkg_gbp = 0.0
 
-    pkg_service = {
-        'sn': 1,
-        'service_name': 'Packaging',
-        'price_ngn': round(pkg_ngn, 2),
-        'price_gbp': round(pkg_gbp, 2)
-    }
-    if std_pkg_ngn > pkg_ngn:
-        pkg_service['original_price_ngn'] = std_pkg_ngn
-        pkg_service['original_price_gbp'] = std_pkg_gbp
+    services = []
+    sn_counter = 1
 
-    ds_service = {
-        'sn': 2,
-        'service_name': 'Doorstep Delivery',
-        'price_ngn': round(ds_ngn, 2),
-        'price_gbp': round(ds_gbp, 2)
-    }
-    if std_ds_ngn > ds_ngn:
-        ds_service['original_price_ngn'] = std_ds_ngn
-        ds_service['original_price_gbp'] = std_ds_gbp
+    if getattr(shipment, 'has_packaging', False):
+        pkg_service = {
+            'sn': sn_counter,
+            'service_name': 'Packaging',
+            'price_ngn': round(pkg_ngn, 2),
+            'price_gbp': round(pkg_gbp, 2)
+        }
+        if std_pkg_ngn > pkg_ngn:
+            pkg_service['original_price_ngn'] = std_pkg_ngn
+            pkg_service['original_price_gbp'] = std_pkg_gbp
+        services.append(pkg_service)
+        sn_counter += 1
 
-    services = [pkg_service, ds_service]
+    if shipment.has_doorstep_delivery:
+        ds_service = {
+            'sn': sn_counter,
+            'service_name': 'Doorstep Delivery',
+            'price_ngn': round(ds_ngn, 2),
+            'price_gbp': round(ds_gbp, 2)
+        }
+        if std_ds_ngn > ds_ngn:
+            ds_service['original_price_ngn'] = std_ds_ngn
+            ds_service['original_price_gbp'] = std_ds_gbp
+        services.append(ds_service)
+        sn_counter += 1
 
     items_ngn = max(0.0, round(total_ngn - (pkg_ngn + ds_ngn), 2))
     items_gbp = max(0.0, round(total_gbp - (pkg_gbp + ds_gbp), 2))

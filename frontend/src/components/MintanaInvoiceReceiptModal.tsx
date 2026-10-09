@@ -662,95 +662,97 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
           </div>
 
           {/* Additional Services Table */}
-          <div className="mb-6 overflow-x-auto rounded-lg border border-sky-200">
-            <table className="w-full text-left text-xs border-collapse min-w-[350px]">
-              <thead>
-                <tr className="bg-blue-600 text-white font-bold text-[11px] uppercase">
-                  <th className="py-2 px-3 border-r border-blue-500 w-12 text-center">S/N</th>
-                  <th className="py-2 px-3 border-r border-blue-500">Services</th>
-                  <th className="py-2 px-3 text-right">
-                    {displayCurrency === 'NGN' ? 'Price (NGN)' : 'Price (GBP)'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {services.map((srv, idx) => (
-                  <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="py-2 px-3 border-r border-slate-200 text-center font-bold text-slate-700">
-                      {srv.sn || idx + 1}
-                    </td>
-                    <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-800">
-                      {srv.service_name}
-                    </td>
-                    <td className="py-2 px-3 text-right font-medium">
-                      {displayCurrency === 'NGN' ? (
-                        srv.original_price_ngn && srv.original_price_ngn > (srv.price_ngn || 0) ? (
-                          <div className="flex items-center justify-end space-x-1.5">
-                            <span className="line-through text-slate-400 font-normal">
-                              ₦{Number(srv.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                            <span className="font-bold text-emerald-700">
-                              ₦{(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </div>
+          {services && services.length > 0 && (
+            <div className="mb-6 overflow-x-auto rounded-lg border border-sky-200">
+              <table className="w-full text-left text-xs border-collapse min-w-[350px]">
+                <thead>
+                  <tr className="bg-blue-600 text-white font-bold text-[11px] uppercase">
+                    <th className="py-2 px-3 border-r border-blue-500 w-12 text-center">S/N</th>
+                    <th className="py-2 px-3 border-r border-blue-500">Services</th>
+                    <th className="py-2 px-3 text-right">
+                      {displayCurrency === 'NGN' ? 'Price (NGN)' : 'Price (GBP)'}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {services.map((srv, idx) => (
+                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="py-2 px-3 border-r border-slate-200 text-center font-bold text-slate-700">
+                        {srv.sn || idx + 1}
+                      </td>
+                      <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-800">
+                        {srv.service_name}
+                      </td>
+                      <td className="py-2 px-3 text-right font-medium">
+                        {displayCurrency === 'NGN' ? (
+                          srv.original_price_ngn && srv.original_price_ngn > (srv.price_ngn || 0) ? (
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <span className="line-through text-slate-400 font-normal">
+                                ₦{Number(srv.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                              <span className="font-bold text-emerald-700">
+                                ₦{(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          ) : (
+                            `₦${(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          )
                         ) : (
-                          `₦${(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          srv.original_price_gbp && srv.original_price_gbp > (srv.price_gbp || 0) ? (
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <span className="line-through text-slate-400 font-normal">
+                                £{Number(srv.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                              <span className="font-bold text-emerald-700">
+                                £{(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          ) : (
+                            `£${(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          )
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Services Total */}
+                  <tr className="bg-sky-100 font-bold text-sky-950">
+                    <td colSpan={2} className="py-2 px-3 text-center uppercase tracking-wider">
+                      TOTAL
+                    </td>
+                    <td className="py-2 px-3 text-right">
+                      {displayCurrency === 'NGN' ? (
+                        servicesOriginalTotalNgn > servicesTotalNgn ? (
+                          <span>
+                            <span className="line-through text-slate-400 font-normal mr-2">
+                              ₦{servicesOriginalTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-emerald-700 font-bold">
+                              ₦{servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </span>
+                        ) : (
+                          `₦${servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         )
                       ) : (
-                        srv.original_price_gbp && srv.original_price_gbp > (srv.price_gbp || 0) ? (
-                          <div className="flex items-center justify-end space-x-1.5">
-                            <span className="line-through text-slate-400 font-normal">
-                              £{Number(srv.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        servicesOriginalTotalGbp > servicesTotalGbp ? (
+                          <span>
+                            <span className="line-through text-slate-400 font-normal mr-2">
+                              £{servicesOriginalTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
-                            <span className="font-bold text-emerald-700">
-                              £{(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <span className="text-emerald-700 font-bold">
+                              £{servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
-                          </div>
+                          </span>
                         ) : (
-                          `£${(Number(srv.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          `£${servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         )
                       )}
                     </td>
                   </tr>
-                ))}
-                {/* Services Total */}
-                <tr className="bg-sky-100 font-bold text-sky-950">
-                  <td colSpan={2} className="py-2 px-3 text-center uppercase tracking-wider">
-                    TOTAL
-                  </td>
-                  <td className="py-2 px-3 text-right">
-                    {displayCurrency === 'NGN' ? (
-                      servicesOriginalTotalNgn > servicesTotalNgn ? (
-                        <span>
-                          <span className="line-through text-slate-400 font-normal mr-2">
-                            ₦{servicesOriginalTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-emerald-700 font-bold">
-                            ₦{servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </span>
-                      ) : (
-                        `₦${servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      )
-                    ) : (
-                      servicesOriginalTotalGbp > servicesTotalGbp ? (
-                        <span>
-                          <span className="line-through text-slate-400 font-normal mr-2">
-                            £{servicesOriginalTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-emerald-700 font-bold">
-                            £{servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        </span>
-                      ) : (
-                        `£${servicesTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      )
-                    )}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Grand Totals Display */}
           <div className="flex justify-end mb-8">

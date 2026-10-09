@@ -117,25 +117,36 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const stdPkgNgn = (shipment.number_of_carton && parcelRateNgn > 0) ? Number(shipment.number_of_carton) * parcelRateNgn : 0
     const stdPkgGbp = conversionRate > 0 ? stdPkgNgn / conversionRate : 0
 
-    let pkgNgn = stdPkgNgn
-    let pkgGbp = stdPkgGbp
-    if (shipment.number_of_carton && (parcelRateNgn > 0 || shipment.promo_packaging_fee !== undefined)) {
+    let pkgNgn = 0
+    let pkgGbp = 0
+    if (shipment.has_packaging) {
+      pkgNgn = stdPkgNgn
+      pkgGbp = stdPkgGbp
       if (isPromo && shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null && String(shipment.promo_packaging_fee) !== '') {
         pkgNgn = Number(shipment.promo_packaging_fee)
         pkgGbp = conversionRate > 0 ? pkgNgn / conversionRate : 0
       }
     }
 
-    const pkgService: LogisticsService = { sn: 1, service_name: 'Packaging', price_ngn: pkgNgn, price_gbp: pkgGbp }
-    if (stdPkgNgn > pkgNgn) {
-      pkgService.original_price_ngn = stdPkgNgn
-      pkgService.original_price_gbp = stdPkgGbp
+    const services: LogisticsService[] = []
+    let serviceSn = 1
+
+    if (shipment.has_packaging) {
+      const pkgService: LogisticsService = { sn: serviceSn++, service_name: 'Packaging', price_ngn: pkgNgn, price_gbp: pkgGbp }
+      if (stdPkgNgn > pkgNgn) {
+        pkgService.original_price_ngn = stdPkgNgn
+        pkgService.original_price_gbp = stdPkgGbp
+      }
+      services.push(pkgService)
     }
 
-    const dsService: LogisticsService = { sn: 2, service_name: 'Doorstep Delivery', price_ngn: dsNgn, price_gbp: dsGbp }
-    if (stdDsNgn > dsNgn) {
-      dsService.original_price_ngn = stdDsNgn
-      dsService.original_price_gbp = stdDsGbp
+    if (shipment.has_doorstep_delivery) {
+      const dsService: LogisticsService = { sn: serviceSn++, service_name: 'Doorstep Delivery', price_ngn: dsNgn, price_gbp: dsGbp }
+      if (stdDsNgn > dsNgn) {
+        dsService.original_price_ngn = stdDsNgn
+        dsService.original_price_gbp = stdDsGbp
+      }
+      services.push(dsService)
     }
 
     const itemsNgn = Math.max(0, totalNgn - dsNgn - pkgNgn)
@@ -180,7 +191,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         ? ([shipment.recorded_by.first_name, shipment.recorded_by.last_name].filter(Boolean).join(' ') || shipment.recorded_by.email || '')
         : (shipment.packager || ''),
       items: [itemObj],
-      services: [pkgService, dsService],
+      services: services,
       total_ngn: totalNgn,
       total_gbp: totalGbp,
       original_total_ngn: (isPromo && stdTotalNgn > totalNgn) ? stdTotalNgn : undefined,
@@ -570,6 +581,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         discount_percentage: parseFloat(payload.discount_percentage) || 0.0,
         invoice_number: payload.invoice_number || null,
         number_of_carton: parseInt(payload.number_of_carton) || 1,
+        has_packaging: hasPackaging === 'YES',
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         dpd: dpd === 'YES',
         is_promo: Boolean(payload.is_promo),
@@ -668,7 +680,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     })
     const amt = shipment.amount ? Number(shipment.amount) : 0
     const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
-    setHasPackaging('NO')
+    setHasPackaging(shipment.has_packaging ? 'YES' : 'NO')
     setHasDoorstepDelivery(shipment.has_doorstep_delivery ? 'YES' : 'NO')
     setDpd(shipment.dpd ? 'YES' : 'NO')
     if (shipment.currency === 'GBP') {
@@ -892,6 +904,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         discount_percentage: parseFloat(payload.discount_percentage) || 0.0,
         invoice_number: payload.invoice_number || null,
         number_of_carton: parseInt(payload.number_of_carton) || 1,
+        has_packaging: hasPackaging === 'YES',
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         dpd: dpd === 'YES',
         is_promo: Boolean(payload.is_promo),

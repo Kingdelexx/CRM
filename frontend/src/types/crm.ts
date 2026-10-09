@@ -469,6 +469,7 @@ export interface Shipment extends BaseEntity {
   discount_percentage?: number;
   invoice_number?: string;
   number_of_carton: number;
+  has_packaging?: boolean;
   has_doorstep_delivery?: boolean;
   dpd?: boolean;
   is_promo?: boolean;

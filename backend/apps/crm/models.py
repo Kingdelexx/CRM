@@ -817,6 +817,7 @@ class Shipment(TimeStampedModel):
     
     # Cartons & Delivery & Partner
     number_of_carton = models.IntegerField(default=1)
+    has_packaging = models.BooleanField(default=False)
     has_doorstep_delivery = models.BooleanField(default=False)
     dpd = models.BooleanField(default=False)
     is_promo = models.BooleanField(default=False)
