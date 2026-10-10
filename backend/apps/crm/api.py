@@ -2720,6 +2720,15 @@ def sync_shipment_invoice(shipment):
 
     return inv
 
+@shipments_router.get("/manifest/by-date/{date_str}", response=dict)
+@shipments_router.get("/manifest/by-date/{date_str}/", response=dict)
+def get_or_create_manifest_by_date(request, date_str: str):
+    manifest = get_or_create_daily_manifest(request.user.organization, date_str)
+    return {
+        "date": str(manifest.date),
+        "access_code": manifest.access_code
+    }
+
 @shipments_router.get("/manifest/{access_code}", response=DailyManifestLookupResponseSchema, auth=None)
 @shipments_router.get("/manifest/{access_code}/", response=DailyManifestLookupResponseSchema, auth=None)
 def get_daily_manifest_by_access_code(request, access_code: str):

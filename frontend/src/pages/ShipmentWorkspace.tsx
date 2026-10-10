@@ -969,7 +969,24 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       resetForm()
 
       const savedShipment = res?.data
-      const mCode = savedShipment?.manifest?.access_code || null
+      let mCode = savedShipment?.manifest?.access_code || null
+
+      const targetShipDate = savedShipment?.shipment_date || savedShipment?.date || formData.shipment_date || formData.date || new Date().toISOString().split('T')[0]
+
+      if (!mCode && targetShipDate) {
+        try {
+          const mRes = await apiClient.get<any>(`/shipments/manifest/by-date/${targetShipDate}/`)
+          if (mRes.data?.access_code) {
+            mCode = mRes.data.access_code
+            if (savedShipment) {
+              if (!savedShipment.manifest) savedShipment.manifest = {}
+              savedShipment.manifest.access_code = mCode
+            }
+          }
+        } catch (err) {
+          console.error("Failed to resolve manifest code by date:", err)
+        }
+      }
 
       const invNumber = savedShipment?.invoice_number || formData.invoice_number
       if (invNumber) {
