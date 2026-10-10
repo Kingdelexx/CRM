@@ -3468,11 +3468,12 @@ def _check_tracking_rate_limit(request, max_requests=30, window_seconds=60):
 
 
 def _build_public_tracking_response(shipment, queried_inv: str):
-    inv_no = shipment.invoice_number or shipment.tracking_id or queried_inv
+    inv_no = getattr(shipment, 'invoice_number', None) or getattr(shipment, 'tracking_id', None) or queried_inv
 
     # Status mapping
-    s_status = (shipment.shipment_status or 'PENDING').upper()
-    if shipment.is_received_by_customer or s_status == 'DELIVERED':
+    s_status = (getattr(shipment, 'shipment_status', None) or 'PENDING').upper()
+    is_rec = getattr(shipment, 'is_received_by_customer', False)
+    if is_rec or s_status == 'DELIVERED':
         current_status = 'DELIVERED'
     elif s_status == 'IN_TRANSIT':
         current_status = 'IN_TRANSIT'
@@ -3492,29 +3493,51 @@ def _build_public_tracking_response(shipment, queried_inv: str):
             return lines[-1] if ',' in lines[-1] else f"{lines[-2]}, {lines[-1]}"
         return lines[0] if lines else default_val
 
-    origin_city = parse_city(shipment.sender_address, 'London, UK')
-    dest_city = parse_city(shipment.receiver_address, 'Lagos, Nigeria')
+    origin_city = parse_city(getattr(shipment, 'sender_address', None), 'London, UK')
+    dest_city = parse_city(getattr(shipment, 'receiver_address', None), 'Lagos, Nigeria')
 
-    created_dt = shipment.created_at or timezone.now()
-    scheduled_date = shipment.shipment_date or shipment.date or created_dt.date()
-    
+    # Date parsing logic - safe for date, datetime, str, or None
+    created_dt = getattr(shipment, 'created_at', None)
+    if not created_dt:
+        created_dt = timezone.now()
+    elif isinstance(created_dt, str):
+        try:
+            created_dt = datetime.fromisoformat(created_dt)
+        except Exception:
+            created_dt = timezone.now()
+
+    raw_date = getattr(shipment, 'shipment_date', None) or getattr(shipment, 'date', None)
+    if isinstance(raw_date, datetime):
+        scheduled_date = raw_date.date()
+    elif isinstance(raw_date, date):
+        scheduled_date = raw_date
+    elif isinstance(raw_date, str) and raw_date.strip():
+        try:
+            scheduled_date = datetime.strptime(raw_date.strip()[:10], '%Y-%m-%d').date()
+        except Exception:
+            scheduled_date = created_dt.date() if isinstance(created_dt, datetime) else timezone.localdate()
+    else:
+        scheduled_date = created_dt.date() if isinstance(created_dt, datetime) else timezone.localdate()
+
     # Calculate estimated delivery date
-    is_sea = (shipment.shipping_type == 'SEA')
+    is_sea = (getattr(shipment, 'shipping_type', 'AIR') == 'SEA')
     est_days = 28 if is_sea else 7
     est_delivery_date = scheduled_date + timedelta(days=est_days)
 
     # Timeline events
     events = []
+    
     # Event 1: Order Created
+    created_iso = created_dt.isoformat() if hasattr(created_dt, 'isoformat') else str(created_dt)
     events.append({
         "status": "ORDER_CREATED",
-        "timestamp": created_dt.isoformat(),
+        "timestamp": created_iso,
         "location": origin_city,
         "description": "Shipment booking created and invoice generated."
     })
 
     # Event 2: Received at Hub
-    hub_dt = datetime.combine(scheduled_date, datetime.min.time(), tzinfo=timezone.UTC) if isinstance(scheduled_date, date) else created_dt
+    hub_dt = datetime.combine(scheduled_date, datetime.min.time(), tzinfo=timezone.UTC)
     events.append({
         "status": "RECEIVED_AT_HUB",
         "timestamp": hub_dt.isoformat(),
@@ -3533,10 +3556,13 @@ def _build_public_tracking_response(shipment, queried_inv: str):
         })
 
     # Event 4: Customs / On Hold
+    upd_dt = getattr(shipment, 'updated_at', None) or timezone.now()
+    upd_iso = upd_dt.isoformat() if hasattr(upd_dt, 'isoformat') else str(upd_dt)
+
     if current_status == 'ON_HOLD':
         events.append({
             "status": "ON_HOLD",
-            "timestamp": (shipment.updated_at or timezone.now()).isoformat(),
+            "timestamp": upd_iso,
             "location": dest_city,
             "description": "Shipment placed on temporary hold for customs verification."
         })
@@ -3545,22 +3571,24 @@ def _build_public_tracking_response(shipment, queried_inv: str):
     if current_status == 'DELIVERED':
         events.append({
             "status": "DELIVERED",
-            "timestamp": (shipment.updated_at or timezone.now()).isoformat(),
+            "timestamp": upd_iso,
             "location": dest_city,
             "description": "Package successfully delivered to recipient."
         })
 
     # Sort chronologically by timestamp
-    events.sort(key=lambda e: e['timestamp'])
+    events.sort(key=lambda e: str(e['timestamp']))
+
+    rec_name = getattr(shipment, 'receiver_name', None) or "Recipient"
 
     return {
         "invoiceNumber": inv_no,
         "status": current_status,
         "originCity": origin_city,
         "destinationCity": dest_city,
-        "receiverName": shipment.receiver_name or "Recipient",
-        "scheduledShipmentDate": scheduled_date.isoformat() if hasattr(scheduled_date, 'isoformat') else str(scheduled_date),
-        "estimatedDeliveryDate": est_delivery_date.isoformat() if hasattr(est_delivery_date, 'isoformat') else str(est_delivery_date),
+        "receiverName": rec_name,
+        "scheduledShipmentDate": scheduled_date.isoformat(),
+        "estimatedDeliveryDate": est_delivery_date.isoformat(),
         "timelineEvents": events,
         "statusHistory": events
     }
@@ -3579,22 +3607,28 @@ def _resolve_shipment_by_invoice(invoice_str: str):
         Q(payment_reference_number__iexact=clean_inv)
     ).select_related('organization', 'sender', 'receiver').first()
 
+    if not shipment:
+        shipment = Shipment.objects.filter(
+            Q(invoice_number__icontains=clean_inv) |
+            Q(tracking_id__icontains=clean_inv) |
+            Q(dpd_tracking_number__icontains=clean_inv)
+        ).select_related('organization', 'sender', 'receiver').first()
+
     # 2. Invoice Model Fallback
     if not shipment:
         inv = Invoice.objects.filter(
             Q(invoice_number__iexact=clean_inv) |
-            Q(expected_parcel_no__iexact=clean_inv)
+            Q(expected_parcel_no__iexact=clean_inv) |
+            Q(invoice_number__icontains=clean_inv)
         ).select_related('organization', 'contact').first()
 
         if inv:
-            # Check if there is an associated Shipment
             shipment = Shipment.objects.filter(
                 Q(invoice_number__iexact=inv.invoice_number) |
                 Q(tracking_id__iexact=inv.expected_parcel_no) |
                 Q(invoice_number__iexact=inv.expected_parcel_no)
             ).select_related('organization', 'sender', 'receiver').first()
 
-            # Construct fallback Shipment object from Invoice data if no separate Shipment record
             if not shipment:
                 rec_name = inv.receiver_name or (
                     f"{inv.contact.first_name} {inv.contact.last_name}".strip() if inv.contact else "Recipient"
@@ -3607,14 +3641,14 @@ def _resolve_shipment_by_invoice(invoice_str: str):
                     receiver_phone=inv.receiver_tel,
                     receiver_address=inv.receiver_address,
                     shipment_status='DELIVERED' if inv.status == Invoice.PAID else 'PENDING',
-                    created_at=inv.created_at,
-                    updated_at=inv.updated_at,
+                    created_at=inv.created_at or timezone.now(),
+                    updated_at=inv.updated_at or timezone.now(),
                     shipment_date=inv.issue_date
                 )
 
     if not shipment:
-        raise HttpError(404, "No shipment found with this invoice number.")
-    
+        raise HttpError(404, f"No shipment found matching '{clean_inv}'.")
+
     return shipment
 
 
