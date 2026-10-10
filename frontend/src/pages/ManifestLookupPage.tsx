@@ -79,7 +79,7 @@ export default function ManifestLookupPage() {
     setError(null)
 
     try {
-      const response = await apiClient.get<ManifestResponse>(`/shipments/manifest/${code}`)
+      const response = await apiClient.get<ManifestResponse>(`/shipments/manifest/${code}/`)
       setManifestData(response.data)
       // Update URL route seamlessly without page reload
       navigate(`/manifest/${code}`, { replace: true })
@@ -121,7 +121,7 @@ export default function ManifestLookupPage() {
     })
 
     try {
-      await apiClient.patch(`/shipments/manifest/shipment/${shipmentId}/toggle-received`)
+      await apiClient.patch(`/shipments/manifest/shipment/${shipmentId}/toggle-received/`)
     } catch (err) {
       console.error('Failed to toggle package received status:', err)
       // Revert optimistic update on error

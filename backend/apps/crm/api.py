@@ -2712,7 +2712,7 @@ def sync_shipment_invoice(shipment):
 @shipments_router.get("/manifest/{access_code}", response=DailyManifestLookupResponseSchema, auth=None)
 @shipments_router.get("/manifest/{access_code}/", response=DailyManifestLookupResponseSchema, auth=None)
 def get_daily_manifest_by_access_code(request, access_code: str):
-    manifest = DailyManifest.objects.filter(access_code=access_code).first()
+    manifest = DailyManifest.objects.filter(access_code__iexact=access_code).first()
     if not manifest:
         raise HttpError(404, f"Manifest with access code '{access_code}' not found.")
 

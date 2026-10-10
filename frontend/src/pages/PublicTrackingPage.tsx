@@ -60,7 +60,7 @@ export default function PublicTrackingPage() {
     setError(null)
 
     try {
-      const response = await apiClient.get<PublicTrackingResponse>('/tracking', {
+      const response = await apiClient.get<PublicTrackingResponse>('/tracking/', {
         params: { invoice: cleanInv }
       })
       setTrackingData(response.data)
