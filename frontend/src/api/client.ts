@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || ''
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://mintana-crm-backend.onrender.com').replace(/\/$/, '')
 
 // Axios client mapping to backend API
 export const apiClient = axios.create({

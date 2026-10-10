@@ -69,15 +69,15 @@ export default function PublicTrackingPage() {
     } catch (err: any) {
       console.error('Failed to fetch tracking data:', err)
       setTrackingData(null)
-      const statusCode = err.response?.status || err.status
-      const detailMsg = err.response?.data?.detail
+      const statusCode = err.status || err.response?.status
+      const detailMsg = err.message || err.response?.data?.detail
 
       if (statusCode === 404) {
         setError(detailMsg || `No shipment found matching invoice number "${cleanInv}". Please verify the number on your receipt or confirmation email.`)
       } else if (statusCode === 429) {
         setError('Rate limit exceeded. Please wait a minute before trying again.')
       } else {
-        setError(detailMsg || 'Unable to retrieve tracking details. Please check your internet connection or verify the tracking code.')
+        setError(detailMsg || `No shipment found matching invoice number "${cleanInv}". Please verify the number on your receipt or confirmation email.`)
       }
     } finally {
       setLoading(false)
