@@ -225,6 +225,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       amount_paid: shipment.payment_status === 'PAID' ? totalNgn : 0,
       currency: shipment.currency || 'NGN',
       sla_terms_url: 'https://www.mintana.co.uk/terms-and-conditions',
+      video_link: shipment.video_link || undefined,
       manifest: shipment.manifest,
       notes: shipment.note || '',
       created_at: shipment.created_at || new Date().toISOString(),
@@ -294,7 +295,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     is_promo: false,
     promo_packaging_fee: '',
     promo_doorstep_fee: '',
-    extra_charges: ''
+    extra_charges: '',
+    video_link: ''
   })
   const [formError, setFormError] = useState('')
   const [amountNgn, setAmountNgn] = useState('')
@@ -328,7 +330,6 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
   const [hasPackaging, setHasPackaging] = useState<'NO' | 'YES'>('NO')
   const [hasDoorstepDelivery, setHasDoorstepDelivery] = useState<'NO' | 'YES'>('NO')
-  const [dpd, setDpd] = useState<'NO' | 'YES'>('NO')
 
   const createPromoPkgRef = useRef<HTMLInputElement>(null)
   const editPromoPkgRef = useRef<HTMLInputElement>(null)
@@ -614,7 +615,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         number_of_carton: parseInt(payload.number_of_carton) || 1,
         has_packaging: hasPackaging === 'YES',
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
-        dpd: dpd === 'YES',
+        video_link: payload.video_link || null,
         is_promo: Boolean(payload.is_promo),
         promo_packaging_fee: (payload.is_promo && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
         promo_doorstep_fee: (payload.is_promo && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
@@ -709,13 +710,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       is_promo: Boolean(shipment.is_promo),
       promo_packaging_fee: shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null ? String(shipment.promo_packaging_fee) : '',
       promo_doorstep_fee: shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null ? String(shipment.promo_doorstep_fee) : '',
-      extra_charges: shipment.extra_charges ? String(shipment.extra_charges) : ''
+      extra_charges: shipment.extra_charges ? String(shipment.extra_charges) : '',
+      video_link: shipment.video_link || ''
     })
     const amt = shipment.amount ? Number(shipment.amount) : 0
     const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
     setHasPackaging(shipment.has_packaging ? 'YES' : 'NO')
     setHasDoorstepDelivery(shipment.has_doorstep_delivery ? 'YES' : 'NO')
-    setDpd(shipment.dpd ? 'YES' : 'NO')
     if (shipment.currency === 'GBP') {
       setAmountGbp(amt > 0 ? String(amt) : '')
       setAmountNgn(amt > 0 ? (amt * orgExchangeRate).toFixed(2) : '')
@@ -939,7 +940,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         number_of_carton: parseInt(payload.number_of_carton) || 1,
         has_packaging: hasPackaging === 'YES',
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
-        dpd: dpd === 'YES',
+        video_link: payload.video_link || null,
         is_promo: Boolean(payload.is_promo),
         promo_packaging_fee: (payload.is_promo && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
         promo_doorstep_fee: (payload.is_promo && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
@@ -1063,13 +1064,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       is_promo: false,
       promo_packaging_fee: '',
       promo_doorstep_fee: '',
-      extra_charges: ''
+      extra_charges: '',
+      video_link: ''
     })
     setAmountNgn('')
     setAmountGbp('')
     setHasPackaging('NO')
     setHasDoorstepDelivery('NO')
-    setDpd('NO')
     setActiveTab('shipment')
   }
 
@@ -1178,6 +1179,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     if (!formData.receiver_name.trim()) {
       setFormError('Receiver Name is required.')
       setActiveTab('shipment')
+      return
+    }
+    if (!formData.video_link.trim()) {
+      setFormError('Video Link is required.')
+      setActiveTab('package')
       return
     }
     createShipmentMutation.mutate(formData)
@@ -1361,10 +1367,16 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 <Truck className="h-2.5 w-2.5" /> Doorstep
               </span>
             )}
-            {info.row.original.dpd && (
-              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
-                DPD
-              </span>
+            {info.row.original.video_link && (
+              <a
+                href={info.row.original.video_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-[10px] bg-purple-500/20 text-purple-300 hover:text-purple-200 border border-purple-500/40 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5 cursor-pointer"
+              >
+                <ExternalLink className="h-2.5 w-2.5" /> Video
+              </a>
             )}
           </div>
           <div className="text-[11px] text-zinc-500">
@@ -2397,20 +2409,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* DPD, Packager & Promo Toggle */}
+                  {/* Video Link, Promo Toggle & Packager */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Truck className="h-3.5 w-3.5 text-amber-400" /> DPD
+                        <ExternalLink className="h-3.5 w-3.5 text-sky-400" /> Video Link <span className="text-rose-400">*</span>
                       </label>
-                      <select
-                        value={dpd}
-                        onChange={(e) => setDpd(e.target.value as 'YES' | 'NO')}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-amber-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
-                      >
-                        <option value="NO" className="bg-zinc-950">No</option>
-                        <option value="YES" className="bg-zinc-950">Yes</option>
-                      </select>
+                      <input
+                        type="url"
+                        name="video_link"
+                        required
+                        value={formData.video_link}
+                        onChange={handleInputChange}
+                        placeholder="https://..."
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-sky-500 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
                     </div>
 
                     <div className="space-y-1.5">
@@ -3016,11 +3029,20 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       {selectedShipment.has_doorstep_delivery ? 'Yes (Included)' : 'No'}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-500">DPD:</span>
-                    <span className={selectedShipment.dpd ? "text-amber-400 font-bold" : "text-zinc-400"}>
-                      {selectedShipment.dpd ? 'Yes' : 'No'}
-                    </span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500">Video Link:</span>
+                    {selectedShipment.video_link ? (
+                      <a
+                        href={selectedShipment.video_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-400 hover:text-purple-300 font-semibold underline flex items-center gap-1 text-xs"
+                      >
+                        <ExternalLink className="h-3 w-3" /> View Video
+                      </a>
+                    ) : (
+                      <span className="text-zinc-500 text-xs">N/A</span>
+                    )}
                   </div>
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Packager:</span>
@@ -3567,6 +3589,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   setActiveTab('shipment')
                   return
                 }
+                if (!formData.video_link.trim()) {
+                  setFormError('Video Link is required.')
+                  setActiveTab('package')
+                  return
+                }
                 updateShipmentMutation.mutate({ id: editingShipment.id, payload: formData })
               }}
               className="p-6 space-y-4 flex-1 overflow-y-auto max-h-[75vh]"
@@ -3855,20 +3882,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
                   </div>
 
-                  {/* DPD, Promo & Packager */}
+                  {/* Video Link, Promo & Packager */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Truck className="h-3.5 w-3.5 text-amber-400" /> DPD
+                        <ExternalLink className="h-3.5 w-3.5 text-sky-400" /> Video Link <span className="text-rose-400">*</span>
                       </label>
-                      <select
-                        value={dpd}
-                        onChange={(e) => setDpd(e.target.value as 'YES' | 'NO')}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-amber-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
-                      >
-                        <option value="NO" className="bg-zinc-950">No</option>
-                        <option value="YES" className="bg-zinc-950">Yes</option>
-                      </select>
+                      <input
+                        type="url"
+                        name="video_link"
+                        required
+                        value={formData.video_link}
+                        onChange={handleInputChange}
+                        placeholder="https://..."
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-sky-500 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
+                      />
                     </div>
 
                     <div className="space-y-1.5">

@@ -2673,6 +2673,7 @@ def sync_shipment_invoice(shipment):
             currency=shipment.currency or 'NGN',
             issue_date=issue_date,
             status=inv_status,
+            video_link=shipment.video_link,
             notes=shipment.note or ''
         )
     else:
@@ -2694,7 +2695,12 @@ def sync_shipment_invoice(shipment):
         inv.total_gbp = round(total_gbp, 2)
         inv.original_total_ngn = orig_total_ngn
         inv.original_total_gbp = orig_total_gbp
+        inv.amount_paid = round(total_ngn, 2) if inv_status == Invoice.PAID else 0
+        inv.currency = shipment.currency or 'NGN'
+        inv.issue_date = issue_date
         inv.status = inv_status
+        inv.video_link = shipment.video_link
+        inv.notes = shipment.note or ''
         if inv_status == Invoice.PAID:
             inv.amount_paid = round(total_ngn, 2)
         if issue_date:

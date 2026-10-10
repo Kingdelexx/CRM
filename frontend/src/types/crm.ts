@@ -344,6 +344,7 @@ export interface Invoice extends BaseEntity {
   amount_paid: number;
   currency: string;
   sla_terms_url?: string;
+  video_link?: string;
   notes?: string;
   manifest?: {
     id: string;
@@ -478,6 +479,7 @@ export interface Shipment extends BaseEntity {
   has_doorstep_delivery?: boolean;
   extra_charges?: number;
   dpd?: boolean;
+  video_link?: string;
   is_promo?: boolean;
   promo_packaging_fee?: number;
   promo_doorstep_fee?: number;

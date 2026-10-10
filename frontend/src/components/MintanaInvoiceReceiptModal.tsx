@@ -433,7 +433,28 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </p>
               </div>
 
-              {/* Shipping Terms & Conditions SLA Link */}
+              {/* Video Link & Shipping Terms & Conditions SLA Link */}
+              {activeInvoice?.video_link && (
+                <div className="mb-2 bg-purple-50 border border-purple-200 rounded-lg p-2 text-left sm:text-right shadow-sm">
+                  <p className="text-[11px] font-bold text-slate-700">
+                    Please{' '}
+                    <a
+                      href={activeInvoice.video_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-purple-600 hover:text-purple-800 underline font-extrabold inline-flex items-center space-x-1"
+                    >
+                      <span>click here</span>
+                      <ExternalLink className="w-3 h-3 inline" />
+                    </a>{' '}
+                    to view your
+                  </p>
+                  <p className="text-[11px] font-extrabold text-purple-900">
+                    Parcel / Shipment Video
+                  </p>
+                </div>
+              )}
+
               <div className="mb-4 bg-sky-50 border border-sky-200 rounded-lg p-2 text-left sm:text-right shadow-sm">
                 <p className="text-[11px] font-bold text-slate-700">
                   Please{' '}
