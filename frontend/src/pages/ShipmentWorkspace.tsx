@@ -4539,51 +4539,57 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             </div>
 
             {/* Daily Manifest Section */}
-            {createdShipmentSuccessData.manifestCode ? (
-              <div className="bg-gradient-to-br from-indigo-950/80 to-purple-950/80 border border-indigo-500/30 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-indigo-400" />
-                    <span className="text-xs font-bold text-indigo-200">Daily Shipment Manifest Code</span>
+            {(() => {
+              const effectiveManifestCode = createdShipmentSuccessData.manifestCode || createdShipmentSuccessData.shipment?.manifest?.access_code || (selectedInvoiceForModal as any)?.manifest?.access_code || null
+              if (effectiveManifestCode) {
+                return (
+                  <div className="bg-gradient-to-br from-indigo-950/80 to-purple-950/80 border border-indigo-500/30 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-indigo-400" />
+                        <span className="text-xs font-bold text-indigo-200">Daily Shipment Manifest Code</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase">Linked</span>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-black/50 border border-indigo-500/30 rounded-lg p-2.5">
+                      <span className="font-mono text-sm font-black text-indigo-100 tracking-wider">
+                        {effectiveManifestCode}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(effectiveManifestCode)
+                          alert(`Manifest access code '${effectiveManifestCode}' copied!`)
+                        }}
+                        className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 rounded text-xs font-semibold transition cursor-pointer"
+                      >
+                        Copy Code
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-indigo-300/80 leading-relaxed">
+                      Shipments sharing date ({createdShipmentSuccessData.shipment.shipment_date || createdShipmentSuccessData.shipment.date}) belong to this daily manifest.
+                    </p>
+
+                    <a
+                      href={`/manifest/${effectiveManifestCode}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 cursor-pointer"
+                    >
+                      <span>Open Day's Manifest Tracking Page</span>
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase">Linked</span>
+                )
+              }
+              return (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400">
+                  Daily Manifest code linked to shipment date ({createdShipmentSuccessData.shipment.shipment_date || createdShipmentSuccessData.shipment.date || 'Today'})
                 </div>
-
-                <div className="flex items-center justify-between bg-black/50 border border-indigo-500/30 rounded-lg p-2.5">
-                  <span className="font-mono text-sm font-black text-indigo-100 tracking-wider">
-                    {createdShipmentSuccessData.manifestCode}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(createdShipmentSuccessData.manifestCode!)
-                      alert(`Manifest access code '${createdShipmentSuccessData.manifestCode}' copied!`)
-                    }}
-                    className="px-2.5 py-1 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/30 rounded text-xs font-semibold transition cursor-pointer"
-                  >
-                    Copy Code
-                  </button>
-                </div>
-
-                <p className="text-[11px] text-indigo-300/80 leading-relaxed">
-                  Shipments sharing date ({createdShipmentSuccessData.shipment.shipment_date || createdShipmentSuccessData.shipment.date}) belong to this daily manifest.
-                </p>
-
-                <a
-                  href={`/manifest/${createdShipmentSuccessData.manifestCode}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 cursor-pointer"
-                >
-                  <span>Open Day's Manifest Tracking Page</span>
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </div>
-            ) : (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400">
-                Generating daily manifest access code...
-              </div>
-            )}
+              )
+            })()}
 
             {/* Modal Actions */}
             <div className="flex items-center justify-end gap-3 pt-2">

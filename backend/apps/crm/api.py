@@ -2473,14 +2473,25 @@ def get_or_create_daily_manifest(organization, shipment_date_val):
         target_date = shipment_date_val if isinstance(shipment_date_val, date) else shipment_date_val.date()
     else:
         try:
-            target_date = datetime.strptime(str(shipment_date_val).strip(), '%Y-%m-%d').date()
+            target_date = datetime.strptime(str(shipment_date_val).strip()[:10], '%Y-%m-%d').date()
         except Exception:
             target_date = timezone.localdate()
 
-    manifest, _ = DailyManifest.objects.get_or_create(
+    import secrets
+    date_str = target_date.strftime("%Y%m%d")
+    rand_suffix = secrets.token_hex(2).upper()
+    default_code = f"MANIFEST-{date_str}-{rand_suffix}"
+
+    manifest, created = DailyManifest.objects.get_or_create(
         organization=organization,
-        date=target_date
+        date=target_date,
+        defaults={'access_code': default_code}
     )
+
+    if not manifest.access_code or str(manifest.access_code).strip() == '':
+        manifest.access_code = default_code
+        manifest.save(update_fields=['access_code'])
+
     return manifest
 
 def sync_shipment_invoice(shipment):
