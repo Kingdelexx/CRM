@@ -455,24 +455,26 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
               )}
 
-              <div className="mb-4 bg-sky-50 border border-sky-200 rounded-lg p-2 text-left sm:text-right shadow-sm">
-                <p className="text-[11px] font-bold text-slate-700">
-                  Please{' '}
-                  <a
-                    href={slaUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sky-600 hover:text-sky-800 underline font-extrabold inline-flex items-center space-x-1"
-                  >
-                    <span>click here</span>
-                    <ExternalLink className="w-3 h-3 inline" />
-                  </a>{' '}
-                  to view our
-                </p>
-                <p className="text-[11px] font-extrabold text-blue-900">
-                  Shipping Terms & Conditions & SLA
-                </p>
-              </div>
+              {!receipt && (
+                <div className="mb-4 bg-sky-50 border border-sky-200 rounded-lg p-2 text-left sm:text-right shadow-sm">
+                  <p className="text-[11px] font-bold text-slate-700">
+                    Please{' '}
+                    <a
+                      href={slaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sky-600 hover:text-sky-800 underline font-extrabold inline-flex items-center space-x-1"
+                    >
+                      <span>click here</span>
+                      <ExternalLink className="w-3 h-3 inline" />
+                    </a>{' '}
+                    to view our
+                  </p>
+                  <p className="text-[11px] font-extrabold text-blue-900">
+                    Shipping Terms & Conditions & SLA
+                  </p>
+                </div>
+              )}
 
               {/* Bank Payment Account Card matching displayCurrency */}
               <div className="text-left text-[11px] w-full max-w-[220px] sm:ml-auto">
@@ -882,149 +884,151 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
           {/* Bottom Corner Accent Page 1 */}
           <div className="absolute bottom-0 right-0 w-32 h-12 bg-gradient-to-l from-sky-600 to-transparent rounded-tl-full opacity-20 pointer-events-none print:hidden" />
 
-          {/* PAGE 2: TERMS & CONDITIONS / SERVICE LEVEL AGREEMENT */}
-          <div className="page-break pt-8 border-t-2 border-slate-200 mt-8 print:mt-0 print:border-none print:pt-2 text-[6pt] leading-tight text-slate-700 bg-white" id="printable-terms-document">
-            {/* Header / Accent Bar for Page 2 */}
-            <div className="flex justify-between items-center border-b-2 border-sky-700 pb-2 mb-3">
-              <div>
-                <h2 className="text-[9pt] font-extrabold text-blue-950 uppercase tracking-wide">
-                  Mintana Global Logistics — Terms & Conditions / Service Level Agreement (SLA)
-                </h2>
-                <p className="text-[6pt] text-slate-500 font-medium">
-                  Document Reference: SLA-MINT-{docNumber} | Effective Version: 2026.1
-                </p>
+          {/* PAGE 2: TERMS & CONDITIONS / SERVICE LEVEL AGREEMENT (Invoices Only) */}
+          {!receipt && (
+            <div className="page-break pt-8 border-t-2 border-slate-200 mt-8 print:mt-0 print:border-none print:pt-2 text-[6pt] leading-tight text-slate-700 bg-white" id="printable-terms-document">
+              {/* Header / Accent Bar for Page 2 */}
+              <div className="flex justify-between items-center border-b-2 border-sky-700 pb-2 mb-3">
+                <div>
+                  <h2 className="text-[9pt] font-extrabold text-blue-950 uppercase tracking-wide">
+                    Mintana Global Logistics — Terms & Conditions / Service Level Agreement (SLA)
+                  </h2>
+                  <p className="text-[6pt] text-slate-500 font-medium">
+                    Document Reference: SLA-MINT-{docNumber} | Effective Version: 2026.1
+                  </p>
+                </div>
+                <img 
+                  src="/mintana-logo.jpg" 
+                  alt="Mintana" 
+                  className="h-8 object-contain mix-blend-multiply" 
+                />
               </div>
-              <img 
-                src="/mintana-logo.jpg" 
-                alt="Mintana" 
-                className="h-8 object-contain mix-blend-multiply" 
-              />
+
+              <p className="mb-2 italic text-slate-800 font-medium">
+                This Agreement is between Mintana ("Mintana", "we", "us") and the customer named on this invoice ("Customer", "you"), and governs all shipping and courier services provided by Mintana. It takes effect automatically upon payment of this invoice, as set out in the notice above.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-[6pt]">
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">1. Scope of Service</h3>
+                  <p>
+                    Mintana agrees to collect, transport, and deliver the consignment described on this invoice to the stated destination, using reasonable care and skill. Estimated delivery timeframes are provided in good faith and are not guaranteed unless a specific guaranteed-delivery service is separately purchased.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">2. Insurance & Goods-in-Transit Cover</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li><strong>Standard cover:</strong> every consignment shipped with Mintana is automatically covered, at no extra cost, for loss or damage occurring while in Mintana's custody, up to a maximum of £100 (or the declared value of the goods, whichever is lower).</li>
+                    <li><strong>Enhanced cover:</strong> for goods with a declared value above £100, the Customer may request Enhanced Cover for an additional premium at the time of booking. If Enhanced Cover is not purchased, Mintana's maximum liability remains capped at £100 regardless of the item's actual value.</li>
+                    <li>It is the Customer's responsibility to accurately declare the value of goods at the point of booking. Under-declared or undeclared items will be compensated based on the declared value only.</li>
+                    <li>This cover does not exclude Mintana's liability for loss or damage caused by Mintana's own negligence; it sets a reasonable, clearly-disclosed maximum compensation amount consistent with standard courier industry practice.</li>
+                    <li><strong>Packaging standard:</strong> fragile or breakable items (including but not limited to glass, cosmetics, and liquid-filled containers) are packaged by trained Mintana staff using protective materials such as bubble wrap, shrink wrap, and/or padded packaging, in line with Mintana's standard packaging protocol. Where Mintana can show an item was packaged to this standard (for example, via dispatch photographs or a packaging checklist retained on file), this will be treated as evidence that the item left Mintana's custody in good, properly protected condition.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">3. Loss, Damage & Refund Policy</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li>If a consignment is confirmed lost or damaged beyond use while in Mintana's custody, Mintana will pay the Customer a single lump-sum refund, capped at £100 per consignment (or the declared value / Enhanced Cover amount, whichever applies).</li>
+                    <li>Refunds are issued as a one-off payment — Mintana does not offer instalment-based repayment for lost-item claims under the standard scheme.</li>
+                    <li>Refunds will be paid within 10 business days of a claim being approved, by bank transfer to the Customer's nominated account.</li>
+                    <li>This refund is the Customer's exclusive remedy for loss or damage under this Agreement, except where a claim also involves proven negligence causing further loss, or where mandatory consumer law provides additional rights that cannot be excluded (see Clause 10).</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">4. Claims Process & Timelines</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li>Claims must be reported in writing (email or in-app) within 7 calendar days of the expected delivery date. Claims made after this window may be declined.</li>
+                    <li>The Customer must provide the tracking/waybill number, proof of value (receipt, invoice, or equivalent), and a description of the goods.</li>
+                    <li>Mintana will investigate and respond to a claim within 14 business days of receiving all required information.</li>
+                    <li>Damage claims require the Customer to retain the original packaging and goods for inspection until the claim is resolved.</li>
+                    <li>Where a damaged parcel shows signs of having been opened, resealed, or inspected by a third party (for example, a customs inspection slip, tamper-evident seal, or agency sticker), the Customer should note this when reporting the claim, as it is relevant evidence of when and where the damage is likely to have occurred.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">5. Exclusions & Limitations</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li>No cover is provided for prohibited, restricted, perishable, fragile-without-adequate-packaging, or illegal items, or for cash, jewellery, or negotiable instruments unless separately agreed in writing.</li>
+                    <li>Mintana is not liable for delays or losses caused by events beyond its reasonable control (force majeure), including customs delays, extreme weather, strikes, or incorrect address information provided by the Customer.</li>
+                    <li>Compensation will not be paid where loss or damage results from inadequate packaging by the Customer, inherent defect in the goods, or the Customer's own act or omission.</li>
+                    <li><strong>Third-party handling, customs & regulatory checks:</strong> where a consignment passes through the custody, handling, or inspection of a party outside Mintana's direct control — including partner or last-mile delivery companies, customs authorities, airport/port security, or other regulatory agencies — and Mintana can show the item left its custody properly packaged in accordance with Clause 2, Mintana will not be treated as negligent or at fault for damage caused by that third party's handling or inspection. This does not remove the Customer's right to the standard compensation set out in Clauses 2 and 3; it only clarifies that fault for the damage itself does not attach to Mintana in these circumstances. Where possible, Mintana will assist the Customer by forwarding claim details to the relevant third party.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">6. Liability Limits & Risk Transfer</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li>Mintana's total liability under this Agreement is limited to the compensation set out in Clauses 2 and 3. Mintana is not liable for any indirect or consequential loss arising from delay, loss, or damage to a consignment, including but not limited to loss of income, loss of business or contracts, loss of opportunity, or distress.</li>
+                    <li><strong>Self-packed items:</strong> where the Customer or Sender packs an item themselves rather than Mintana's staff, the packaging-standard evidence described in Clause 2 does not apply to that item. Mintana's acceptance of a self-packed item for carriage does not amount to an inspection or approval of its packaging, and the Customer accepts a higher risk of damage where packaging is inadequate.</li>
+                    <li><strong>Proof of delivery & risk transfer:</strong> once a consignment has been delivered to the recipient's address and evidenced by a signature, photograph, PIN confirmation, or equivalent proof of delivery, risk in the goods passes to the recipient and Mintana's responsibility under this Agreement ends, save for claims validly reported within the timeframe in Clause 4 concerning the condition of the goods at the point of delivery.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">7. Perishable Goods</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li>Mintana does not, as a general rule, accept perishable goods for shipment, including but not limited to plantain, fruit, vegetables, flowers, and other fresh food items. Where Mintana agrees, at its sole discretion, to ship a perishable item, the following applies in addition to the rest of this Agreement:</li>
+                    <li>By handing a perishable item to Mintana, the Sender confirms it is fresh, ripe-appropriate for the expected transit time, and fit for shipment at the point of collection.</li>
+                    <li>Mintana will not be held liable where a perishable item arrives spoiled, overripe, or otherwise inedible/unusable, as this results from the condition and nature of the goods at the time they were handed to Mintana, and the natural process of decay during transit, rather than from any act or omission of Mintana.</li>
+                    <li>Perishable goods are excluded from the standard cover in Clause 2 and are not eligible for a spoilage-related refund under Clause 3. Where Mintana fails to deliver a perishable consignment at all (total non-delivery caused by Mintana), the standard compensation cap in Clauses 2 and 3 applies to that failure only, and not to any assessment of spoilage.</li>
+                    <li>Mintana reserves the right to refuse to collect or carry any item that appears, on inspection at collection, to already be spoiled, overripe, or otherwise unfit for transport.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">8. Customs, Duties & Unclaimed Goods</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li>The recipient (or Customer) is responsible for any customs duties, import taxes, tariffs, or clearance charges arising in connection with a consignment. Mintana is not liable for delays, additional charges, or seizure of goods resulting from customs or other regulatory processes.</li>
+                    <li>If a consignment cannot be delivered because the recipient is uncontactable, refuses delivery, or fails to collect it within 14 calendar days of the first delivery attempt, Mintana may charge reasonable storage fees and, after a further 14 days' written notice to the Customer, dispose of, return at the Customer's cost, or donate the goods, without further liability to the Customer.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">9. Fraud, Misdeclared Goods & Indemnity</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li>The Customer/Sender warrants that the contents of a consignment are accurately described, lawfully permitted to be shipped, and not prohibited or restricted goods under Clause 5. The Customer agrees to indemnify Mintana against any loss, fine, cost, or liability Mintana incurs as a result of misdeclared, prohibited, or illegal contents shipped by the Customer.</li>
+                    <li>Mintana reserves the right to investigate any claim it reasonably suspects to be false, exaggerated, or fraudulent, and to decline payment on such claims. A knowingly false or fraudulent claim may result in Mintana refusing future service to the Customer and pursuing recovery of any costs incurred.</li>
+                    <li>Where the Customer disputes or reverses a card/bank payment after accepting this Agreement under Clause 11, without first raising the issue through the claims process in Clause 4, Mintana may treat this as a breach of this Agreement and pursue recovery of the disputed amount plus any related costs.</li>
+                    <li>Mintana reserves the right to refuse, suspend, or terminate service to any Customer for suspected fraud, abuse, non-payment, or repeated invalid claims.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">10. Governing Law & Jurisdiction</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li>This Agreement is governed primarily by the laws of the Federal Republic of Nigeria. Where the Customer is based in, or the shipment originates from or is delivered within, the United Kingdom, nothing in this Agreement excludes or limits any statutory right the Customer has under UK consumer protection law (including the Consumer Rights Act 2015) that cannot lawfully be excluded or restricted by contract; where any clause conflicts with such mandatory UK protections, the mandatory protection applies to that extent only.</li>
+                    <li>Disputes will first be addressed through good-faith negotiation between the parties. If unresolved within 30 days, either party may refer the dispute to arbitration or the competent courts of Lagos, Nigeria, save that UK-based consumers retain the right to bring proceedings in their local courts where required by applicable law.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">11. Acceptance by Payment</h3>
+                  <p>
+                    As stated on the face of this invoice, payment of any amount against this invoice — whether in full or as a deposit/part-payment — constitutes the Customer's electronic signature and binding acceptance of this Agreement in its entirety, to the same extent as if signed by hand. If the Customer does not agree to these terms, they must not make payment and should contact Mintana before doing so.
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">12. General Terms</h3>
+                  <ul className="list-disc pl-3 space-y-0.5">
+                    <li><strong>Amendments:</strong> Mintana may update this Agreement from time to time. The version in effect at the time an invoice is issued and paid governs the shipment(s) on that invoice.</li>
+                    <li><strong>Severability:</strong> if any provision of this Agreement is found unenforceable, that provision will be limited or removed to the minimum extent necessary, and the remaining provisions will continue in full force.</li>
+                    <li><strong>Entire Agreement:</strong> this Agreement, together with the invoice it accompanies, represents the entire agreement between the parties regarding the consignment(s) described, and supersedes any prior discussions or agreements on the same subject.</li>
+                  </ul>
+                </div>
+
+                <div className="md:col-span-2 mt-1 border-t border-slate-200 pt-1">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5">13. Contact & Complaints</h3>
+                  <p>
+                    For claims, disputes, or questions about this Agreement, contact Mintana at <strong>contact@mintanaltd.com</strong> or <strong>09019081819</strong> / <strong>+234 814 547 4526</strong>. We aim to acknowledge all enquiries within 2 business days.
+                  </p>
+                </div>
+              </div>
             </div>
-
-            <p className="mb-2 italic text-slate-800 font-medium">
-              This Agreement is between Mintana ("Mintana", "we", "us") and the customer named on this invoice ("Customer", "you"), and governs all shipping and courier services provided by Mintana. It takes effect automatically upon payment of this invoice, as set out in the notice above.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-[6pt]">
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">1. Scope of Service</h3>
-                <p>
-                  Mintana agrees to collect, transport, and deliver the consignment described on this invoice to the stated destination, using reasonable care and skill. Estimated delivery timeframes are provided in good faith and are not guaranteed unless a specific guaranteed-delivery service is separately purchased.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">2. Insurance & Goods-in-Transit Cover</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li><strong>Standard cover:</strong> every consignment shipped with Mintana is automatically covered, at no extra cost, for loss or damage occurring while in Mintana's custody, up to a maximum of £100 (or the declared value of the goods, whichever is lower).</li>
-                  <li><strong>Enhanced cover:</strong> for goods with a declared value above £100, the Customer may request Enhanced Cover for an additional premium at the time of booking. If Enhanced Cover is not purchased, Mintana's maximum liability remains capped at £100 regardless of the item's actual value.</li>
-                  <li>It is the Customer's responsibility to accurately declare the value of goods at the point of booking. Under-declared or undeclared items will be compensated based on the declared value only.</li>
-                  <li>This cover does not exclude Mintana's liability for loss or damage caused by Mintana's own negligence; it sets a reasonable, clearly-disclosed maximum compensation amount consistent with standard courier industry practice.</li>
-                  <li><strong>Packaging standard:</strong> fragile or breakable items (including but not limited to glass, cosmetics, and liquid-filled containers) are packaged by trained Mintana staff using protective materials such as bubble wrap, shrink wrap, and/or padded packaging, in line with Mintana's standard packaging protocol. Where Mintana can show an item was packaged to this standard (for example, via dispatch photographs or a packaging checklist retained on file), this will be treated as evidence that the item left Mintana's custody in good, properly protected condition.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">3. Loss, Damage & Refund Policy</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li>If a consignment is confirmed lost or damaged beyond use while in Mintana's custody, Mintana will pay the Customer a single lump-sum refund, capped at £100 per consignment (or the declared value / Enhanced Cover amount, whichever applies).</li>
-                  <li>Refunds are issued as a one-off payment — Mintana does not offer instalment-based repayment for lost-item claims under the standard scheme.</li>
-                  <li>Refunds will be paid within 10 business days of a claim being approved, by bank transfer to the Customer's nominated account.</li>
-                  <li>This refund is the Customer's exclusive remedy for loss or damage under this Agreement, except where a claim also involves proven negligence causing further loss, or where mandatory consumer law provides additional rights that cannot be excluded (see Clause 10).</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">4. Claims Process & Timelines</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li>Claims must be reported in writing (email or in-app) within 7 calendar days of the expected delivery date. Claims made after this window may be declined.</li>
-                  <li>The Customer must provide the tracking/waybill number, proof of value (receipt, invoice, or equivalent), and a description of the goods.</li>
-                  <li>Mintana will investigate and respond to a claim within 14 business days of receiving all required information.</li>
-                  <li>Damage claims require the Customer to retain the original packaging and goods for inspection until the claim is resolved.</li>
-                  <li>Where a damaged parcel shows signs of having been opened, resealed, or inspected by a third party (for example, a customs inspection slip, tamper-evident seal, or agency sticker), the Customer should note this when reporting the claim, as it is relevant evidence of when and where the damage is likely to have occurred.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">5. Exclusions & Limitations</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li>No cover is provided for prohibited, restricted, perishable, fragile-without-adequate-packaging, or illegal items, or for cash, jewellery, or negotiable instruments unless separately agreed in writing.</li>
-                  <li>Mintana is not liable for delays or losses caused by events beyond its reasonable control (force majeure), including customs delays, extreme weather, strikes, or incorrect address information provided by the Customer.</li>
-                  <li>Compensation will not be paid where loss or damage results from inadequate packaging by the Customer, inherent defect in the goods, or the Customer's own act or omission.</li>
-                  <li><strong>Third-party handling, customs & regulatory checks:</strong> where a consignment passes through the custody, handling, or inspection of a party outside Mintana's direct control — including partner or last-mile delivery companies, customs authorities, airport/port security, or other regulatory agencies — and Mintana can show the item left its custody properly packaged in accordance with Clause 2, Mintana will not be treated as negligent or at fault for damage caused by that third party's handling or inspection. This does not remove the Customer's right to the standard compensation set out in Clauses 2 and 3; it only clarifies that fault for the damage itself does not attach to Mintana in these circumstances. Where possible, Mintana will assist the Customer by forwarding claim details to the relevant third party.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">6. Liability Limits & Risk Transfer</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li>Mintana's total liability under this Agreement is limited to the compensation set out in Clauses 2 and 3. Mintana is not liable for any indirect or consequential loss arising from delay, loss, or damage to a consignment, including but not limited to loss of income, loss of business or contracts, loss of opportunity, or distress.</li>
-                  <li><strong>Self-packed items:</strong> where the Customer or Sender packs an item themselves rather than Mintana's staff, the packaging-standard evidence described in Clause 2 does not apply to that item. Mintana's acceptance of a self-packed item for carriage does not amount to an inspection or approval of its packaging, and the Customer accepts a higher risk of damage where packaging is inadequate.</li>
-                  <li><strong>Proof of delivery & risk transfer:</strong> once a consignment has been delivered to the recipient's address and evidenced by a signature, photograph, PIN confirmation, or equivalent proof of delivery, risk in the goods passes to the recipient and Mintana's responsibility under this Agreement ends, save for claims validly reported within the timeframe in Clause 4 concerning the condition of the goods at the point of delivery.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">7. Perishable Goods</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li>Mintana does not, as a general rule, accept perishable goods for shipment, including but not limited to plantain, fruit, vegetables, flowers, and other fresh food items. Where Mintana agrees, at its sole discretion, to ship a perishable item, the following applies in addition to the rest of this Agreement:</li>
-                  <li>By handing a perishable item to Mintana, the Sender confirms it is fresh, ripe-appropriate for the expected transit time, and fit for shipment at the point of collection.</li>
-                  <li>Mintana will not be held liable where a perishable item arrives spoiled, overripe, or otherwise inedible/unusable, as this results from the condition and nature of the goods at the time they were handed to Mintana, and the natural process of decay during transit, rather than from any act or omission of Mintana.</li>
-                  <li>Perishable goods are excluded from the standard cover in Clause 2 and are not eligible for a spoilage-related refund under Clause 3. Where Mintana fails to deliver a perishable consignment at all (total non-delivery caused by Mintana), the standard compensation cap in Clauses 2 and 3 applies to that failure only, and not to any assessment of spoilage.</li>
-                  <li>Mintana reserves the right to refuse to collect or carry any item that appears, on inspection at collection, to already be spoiled, overripe, or otherwise unfit for transport.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">8. Customs, Duties & Unclaimed Goods</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li>The recipient (or Customer) is responsible for any customs duties, import taxes, tariffs, or clearance charges arising in connection with a consignment. Mintana is not liable for delays, additional charges, or seizure of goods resulting from customs or other regulatory processes.</li>
-                  <li>If a consignment cannot be delivered because the recipient is uncontactable, refuses delivery, or fails to collect it within 14 calendar days of the first delivery attempt, Mintana may charge reasonable storage fees and, after a further 14 days' written notice to the Customer, dispose of, return at the Customer's cost, or donate the goods, without further liability to the Customer.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">9. Fraud, Misdeclared Goods & Indemnity</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li>The Customer/Sender warrants that the contents of a consignment are accurately described, lawfully permitted to be shipped, and not prohibited or restricted goods under Clause 5. The Customer agrees to indemnify Mintana against any loss, fine, cost, or liability Mintana incurs as a result of misdeclared, prohibited, or illegal contents shipped by the Customer.</li>
-                  <li>Mintana reserves the right to investigate any claim it reasonably suspects to be false, exaggerated, or fraudulent, and to decline payment on such claims. A knowingly false or fraudulent claim may result in Mintana refusing future service to the Customer and pursuing recovery of any costs incurred.</li>
-                  <li>Where the Customer disputes or reverses a card/bank payment after accepting this Agreement under Clause 11, without first raising the issue through the claims process in Clause 4, Mintana may treat this as a breach of this Agreement and pursue recovery of the disputed amount plus any related costs.</li>
-                  <li>Mintana reserves the right to refuse, suspend, or terminate service to any Customer for suspected fraud, abuse, non-payment, or repeated invalid claims.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">10. Governing Law & Jurisdiction</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li>This Agreement is governed primarily by the laws of the Federal Republic of Nigeria. Where the Customer is based in, or the shipment originates from or is delivered within, the United Kingdom, nothing in this Agreement excludes or limits any statutory right the Customer has under UK consumer protection law (including the Consumer Rights Act 2015) that cannot lawfully be excluded or restricted by contract; where any clause conflicts with such mandatory UK protections, the mandatory protection applies to that extent only.</li>
-                  <li>Disputes will first be addressed through good-faith negotiation between the parties. If unresolved within 30 days, either party may refer the dispute to arbitration or the competent courts of Lagos, Nigeria, save that UK-based consumers retain the right to bring proceedings in their local courts where required by applicable law.</li>
-                </ul>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">11. Acceptance by Payment</h3>
-                <p>
-                  As stated on the face of this invoice, payment of any amount against this invoice — whether in full or as a deposit/part-payment — constitutes the Customer's electronic signature and binding acceptance of this Agreement in its entirety, to the same extent as if signed by hand. If the Customer does not agree to these terms, they must not make payment and should contact Mintana before doing so.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">12. General Terms</h3>
-                <ul className="list-disc pl-3 space-y-0.5">
-                  <li><strong>Amendments:</strong> Mintana may update this Agreement from time to time. The version in effect at the time an invoice is issued and paid governs the shipment(s) on that invoice.</li>
-                  <li><strong>Severability:</strong> if any provision of this Agreement is found unenforceable, that provision will be limited or removed to the minimum extent necessary, and the remaining provisions will continue in full force.</li>
-                  <li><strong>Entire Agreement:</strong> this Agreement, together with the invoice it accompanies, represents the entire agreement between the parties regarding the consignment(s) described, and supersedes any prior discussions or agreements on the same subject.</li>
-                </ul>
-              </div>
-
-              <div className="md:col-span-2 mt-1 border-t border-slate-200 pt-1">
-                <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5">13. Contact & Complaints</h3>
-                <p>
-                  For claims, disputes, or questions about this Agreement, contact Mintana at <strong>contact@mintanaltd.com</strong> or <strong>09019081819</strong> / <strong>+234 814 547 4526</strong>. We aim to acknowledge all enquiries within 2 business days.
-                </p>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Modal Bottom Control Footer (Hidden on print) */}
