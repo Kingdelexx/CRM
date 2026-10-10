@@ -3595,30 +3595,37 @@ def _build_public_tracking_response(shipment, queried_inv: str):
 
 
 def _resolve_shipment_by_invoice(invoice_str: str):
-    clean_inv = (invoice_str or '').strip()
-    if not clean_inv:
+    raw_inv = (invoice_str or '').strip()
+    if not raw_inv:
         raise HttpError(404, "No shipment found with this invoice number.")
 
-    # 1. Primary Shipment Lookup
-    shipment = Shipment.objects.filter(
-        Q(invoice_number__iexact=clean_inv) |
-        Q(tracking_id__iexact=clean_inv) |
-        Q(dpd_tracking_number__iexact=clean_inv) |
-        Q(payment_reference_number__iexact=clean_inv)
-    ).select_related('organization', 'sender', 'receiver').first()
+    clean_inv = raw_inv.upper()
+    variant_hyphen = clean_inv.replace('/', '-')
+    variant_slash = clean_inv.replace('-', '/')
 
-    if not shipment:
-        shipment = Shipment.objects.filter(
-            Q(invoice_number__icontains=clean_inv) |
-            Q(tracking_id__icontains=clean_inv) |
-            Q(dpd_tracking_number__icontains=clean_inv)
-        ).select_related('organization', 'sender', 'receiver').first()
+    def build_q(term):
+        return (
+            Q(invoice_number__iexact=term) |
+            Q(tracking_id__iexact=term) |
+            Q(dpd_tracking_number__iexact=term) |
+            Q(payment_reference_number__iexact=term) |
+            Q(invoice_number__icontains=term) |
+            Q(tracking_id__icontains=term)
+        )
+
+    # 1. Primary Shipment Lookup with string variants
+    shipment = Shipment.objects.filter(
+        build_q(clean_inv) | build_q(variant_hyphen) | build_q(variant_slash)
+    ).select_related('organization', 'sender', 'receiver').first()
 
     # 2. Invoice Model Fallback
     if not shipment:
         inv = Invoice.objects.filter(
             Q(invoice_number__iexact=clean_inv) |
+            Q(invoice_number__iexact=variant_hyphen) |
+            Q(invoice_number__iexact=variant_slash) |
             Q(expected_parcel_no__iexact=clean_inv) |
+            Q(expected_parcel_no__iexact=variant_hyphen) |
             Q(invoice_number__icontains=clean_inv)
         ).select_related('organization', 'contact').first()
 
@@ -3646,8 +3653,15 @@ def _resolve_shipment_by_invoice(invoice_str: str):
                     shipment_date=inv.issue_date
                 )
 
+    # 3. Fallback: Search by Receiver Phone or Name
+    if not shipment and len(clean_inv) >= 3:
+        shipment = Shipment.objects.filter(
+            Q(receiver_phone__icontains=clean_inv) |
+            Q(receiver_name__icontains=clean_inv)
+        ).select_related('organization', 'sender', 'receiver').first()
+
     if not shipment:
-        raise HttpError(404, f"No shipment found matching '{clean_inv}'.")
+        raise HttpError(404, f"No shipment found matching '{raw_inv}'.")
 
     return shipment
 
