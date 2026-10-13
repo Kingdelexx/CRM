@@ -166,11 +166,8 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
     window.print();
   };
 
-  // Handler for WhatsApp receipt sharing
+  // Handler for WhatsApp receipt sharing — opens contact picker so user can choose any contact
   const handleWhatsAppShare = () => {
-    const rawPhone = receiverTel.replace(/[^0-9]/g, '');
-    const cleanPhone = rawPhone.startsWith('0') ? '234' + rawPhone.slice(1) : rawPhone;
-    
     const formattedAmount = displayCurrency === 'GBP'
       ? `*Total Payable (GBP):* £${totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2 })}`
       : `*Total Payable (NGN):* ₦${totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -188,11 +185,8 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
       `Shipping Terms & SLA: ${slaUrl}\n\n` +
       `Thank you for shipping with Mintana Global Logistics!`;
 
-    const whatsappUrl = cleanPhone 
-      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-      : `https://wa.me/?text=${encodeURIComponent(message)}`;
-
-    window.open(whatsappUrl, '_blank');
+    // No phone number — WhatsApp opens the contact picker so the user can choose any contact
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
   };
 
   return (
