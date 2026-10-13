@@ -1,9 +1,12 @@
+import json
 import logging
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List, Optional
+from urllib import request as urllib_request
+from urllib.error import URLError, HTTPError
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -13,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 class EmailNotificationService:
     """
-    Modular Email Notification Service that connects to an SMTP host
-    using environment variables (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS).
-    Uses dynamic properties so settings updates are always picked up immediately.
+    Email Notification Service.
+    Primary:    Brevo (Sendinblue) HTTP API — uses built-in urllib, no extra packages needed.
+    Fallback 1: Django send_mail (SMTP via settings).
+    Fallback 2: Direct raw SMTP.
     """
 
     def __init__(
@@ -31,6 +35,17 @@ class EmailNotificationService:
         self._user = user
         self._password = password
         self._use_tls = use_tls
+
+    # --- Brevo ---
+
+    @property
+    def brevo_api_key(self) -> str:
+        return (
+            os.environ.get('BREVO_API_KEY')
+            or getattr(settings, 'BREVO_API_KEY', '')
+        )
+
+    # --- SMTP fallback properties ---
 
     @property
     def host(self) -> str:
@@ -83,6 +98,8 @@ class EmailNotificationService:
             or 'mintanacrm@gmail.com'
         )
 
+    # --- Main send method ---
+
     def send_email(
         self,
         subject: str,
@@ -91,10 +108,6 @@ class EmailNotificationService:
         html_body: Optional[str] = None,
         fail_silently: bool = False,
     ) -> bool:
-        """
-        Sends an email to the specified list of recipient emails.
-        Leverages Django's mail interface, with direct SMTP fallback if needed.
-        """
         if not recipients:
             logger.warning("[EmailNotificationService] No recipients provided.")
             return False
@@ -104,7 +117,17 @@ class EmailNotificationService:
             logger.warning("[EmailNotificationService] Recipient list is empty after cleaning.")
             return False
 
-        # Attempt 1: Standard Django send_mail dispatch
+        # Attempt 1: Brevo HTTP API (uses built-in urllib — no extra packages)
+        if self.brevo_api_key:
+            try:
+                result = self._send_via_brevo(subject, body, clean_recipients, html_body)
+                if result:
+                    logger.info(f"[EmailNotificationService] Brevo sent '{subject}' to {clean_recipients}")
+                    return True
+            except Exception as e:
+                logger.error(f"[EmailNotificationService] Brevo failed for '{subject}': {e}. Falling back to SMTP...")
+
+        # Attempt 2: Django send_mail (SMTP)
         try:
             sent_count = send_mail(
                 subject=subject,
@@ -115,22 +138,74 @@ class EmailNotificationService:
                 fail_silently=False,
             )
             if sent_count > 0:
-                logger.info(f"[EmailNotificationService] Sent '{subject}' to {clean_recipients}")
+                logger.info(f"[EmailNotificationService] Django SMTP sent '{subject}' to {clean_recipients}")
                 return True
-            else:
-                logger.warning(f"[EmailNotificationService] send_mail returned 0 for '{subject}'. Trying direct SMTP fallback.")
         except Exception as e:
-            logger.error(f"[EmailNotificationService] Primary send_mail failed for '{subject}': {e}. Triggering direct SMTP fallback...")
+            logger.error(f"[EmailNotificationService] Django SMTP failed for '{subject}': {e}. Trying raw SMTP...")
 
-        # Attempt 2: Direct SMTP Fallback
+        # Attempt 3: Raw SMTP fallback
         try:
             self._send_raw_smtp(subject, body, clean_recipients, html_body)
-            logger.info(f"[EmailNotificationService] Direct SMTP fallback succeeded for '{subject}' to {clean_recipients}")
+            logger.info(f"[EmailNotificationService] Raw SMTP sent '{subject}' to {clean_recipients}")
             return True
         except Exception as smtp_err:
-            logger.error(f"[EmailNotificationService] Direct SMTP fallback error for '{subject}': {smtp_err}")
+            logger.error(f"[EmailNotificationService] Raw SMTP fallback failed for '{subject}': {smtp_err}")
             if not fail_silently:
                 raise smtp_err
+            return False
+
+    def _send_via_brevo(
+        self,
+        subject: str,
+        body: str,
+        recipients: List[str],
+        html_body: Optional[str] = None,
+    ) -> bool:
+        """
+        Sends email via Brevo transactional email HTTP API.
+        Uses Python built-in urllib — no third-party packages required.
+        """
+        url = "https://api.brevo.com/v3/smtp/email"
+
+        payload = {
+            "sender": {
+                "name": "Mintana CRM",
+                "email": self.from_email,
+            },
+            "to": [{"email": r} for r in recipients],
+            "subject": subject,
+            "textContent": body,
+        }
+        if html_body:
+            payload["htmlContent"] = html_body
+
+        data = json.dumps(payload).encode("utf-8")
+
+        req = urllib_request.Request(
+            url,
+            data=data,
+            headers={
+                "accept": "application/json",
+                "api-key": self.brevo_api_key,
+                "content-type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib_request.urlopen(req, timeout=15) as resp:
+                status = resp.getcode()
+                if status in (200, 201):
+                    return True
+                body_resp = resp.read().decode("utf-8", errors="replace")
+                logger.error(f"[Brevo] Unexpected status {status}: {body_resp}")
+                return False
+        except HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")
+            logger.error(f"[Brevo] HTTP error {e.code}: {err_body}")
+            return False
+        except URLError as e:
+            logger.error(f"[Brevo] URL error: {e.reason}")
             return False
 
     def _send_raw_smtp(

@@ -115,6 +115,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Custom Auth User Configuration
 AUTH_USER_MODEL = 'accounts.User'
 
+AUTHENTICATION_BACKENDS = [
+    'apps.accounts.backends.EmailOrUsernameModelBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 # CORS Configurations
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     "http://localhost:5173",
@@ -135,12 +140,18 @@ import sys
 is_testing = 'test' in sys.argv
 default_backend = 'django.core.mail.backends.locmem.EmailBackend' if is_testing else 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_BACKEND = env('EMAIL_BACKEND', default=default_backend)
-EMAIL_HOST = env('SMTP_HOST', default=env('EMAIL_HOST', default='smtp.gmail.com'))
+EMAIL_HOST = env('SMTP_HOST', default=env('EMAIL_HOST', default='smtp-relay.brevo.com'))
 EMAIL_PORT = env.int('SMTP_PORT', default=env.int('EMAIL_PORT', default=587))
 EMAIL_USE_TLS = env.bool('SMTP_USE_TLS', default=env.bool('EMAIL_USE_TLS', default=True))
 EMAIL_HOST_USER = env('SMTP_USER', default=env('EMAIL_HOST_USER', default=''))
 EMAIL_HOST_PASSWORD = env('SMTP_PASS', default=env('EMAIL_HOST_PASSWORD', default='')).replace(' ', '')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='') or EMAIL_HOST_USER or 'noreply@mintana.com'
+
+# Brevo (Sendinblue) Transactional Email API
+BREVO_API_KEY = env('BREVO_API_KEY', default='')
+
+# Frontend application URL (used in email links)
+FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
 
 

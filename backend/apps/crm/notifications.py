@@ -2,7 +2,6 @@ import logging
 import urllib.request
 import json
 import os
-from django.core.mail import send_mail
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -20,25 +19,57 @@ def send_deal_closed_won_notifications(deal):
     
     if admin_emails:
         subject = f"🎉 Deal Closed Won: {deal.title}"
-        message = (
+        contact_name = (
+            f"{deal.contact.first_name} {deal.contact.last_name}".strip()
+            if deal.contact else "N/A"
+        )
+        company_name = deal.company.name if deal.company else "Standalone"
+        industry = deal.company.industry if (deal.company and deal.company.industry) else "N/A"
+
+        body = (
             f"Great news!\n\n"
-            f"The deal '{deal.title}' associated with {deal.company.name if deal.company else 'Standalone'} "
-            f"has been marked as CLOSED WON.\n\n"
+            f"The deal '{deal.title}' associated with {company_name} has been marked as CLOSED WON.\n\n"
             f"Deal Details:\n"
             f"- Value: ${deal.value} {deal.currency}\n"
-            f"- Contact: {deal.contact.first_name if deal.contact else 'N/A'} {deal.contact.last_name if deal.contact else 'N/A'}\n"
-            f"- Industry: {deal.company.industry if (deal.company and deal.company.industry) else 'N/A'}\n\n"
+            f"- Contact: {contact_name}\n"
+            f"- Industry: {industry}\n\n"
             f"Congratulations to the team!"
         )
+        html_body = f"""
+        <!DOCTYPE html><html><head><meta charset="utf-8">
+        <style>
+          body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#09090b;color:#f4f4f5;margin:0;padding:20px;}}
+          .card{{max-width:520px;margin:20px auto;background:#18181b;border:1px solid #27272a;border-radius:12px;padding:32px;box-shadow:0 10px 25px rgba(0,0,0,.5);}}
+          .header{{font-size:20px;font-weight:800;color:#10b981;margin-bottom:16px;}}
+          .badge{{display:inline-block;padding:3px 8px;background:#065f46;color:#6ee7b7;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:20px;}}
+          .row{{margin-bottom:8px;font-size:14px;color:#d4d4d8;}}
+          .label{{font-weight:700;color:#a1a1aa;display:inline-block;width:110px;font-size:11px;text-transform:uppercase;}}
+          .val{{color:#f4f4f5;font-weight:600;}}
+          .footer{{border-top:1px solid #27272a;margin-top:24px;padding-top:16px;font-size:12px;color:#71717a;text-align:center;}}
+        </style></head><body>
+        <div class="card">
+          <div class="header">🎉 Deal Closed Won!</div>
+          <div class="badge">Mintana CRM</div>
+          <p style="font-size:14px;color:#a1a1aa;">The deal <strong style="color:#f4f4f5;">{deal.title}</strong> has been marked as <strong style="color:#10b981;">CLOSED WON</strong>.</p>
+          <div class="row"><span class="label">Value:</span><span class="val">${deal.value} {deal.currency}</span></div>
+          <div class="row"><span class="label">Contact:</span><span class="val">{contact_name}</span></div>
+          <div class="row"><span class="label">Company:</span><span class="val">{company_name}</span></div>
+          <div class="row"><span class="label">Industry:</span><span class="val">{industry}</span></div>
+          <div class="footer">Mintana CRM &bull; Automated Sales Notification</div>
+        </div></body></html>
+        """
         try:
-            send_mail(
+            sent = email_service.send_email(
                 subject=subject,
-                message=message,
-                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'crm@mintana.com'),
-                recipient_list=admin_emails,
-                fail_silently=False
+                body=body,
+                recipients=admin_emails,
+                html_body=html_body,
+                fail_silently=True,
             )
-            print(f"[Email Notification] Closed Won alert sent to: {admin_emails}")
+            if sent:
+                logger.info(f"[Email Notification] Closed Won alert sent to: {admin_emails}")
+            else:
+                logger.warning(f"[Email Notification] Closed Won alert failed for: {admin_emails}")
         except Exception as e:
             logger.error(f"Failed to send Closed Won notification email: {str(e)}")
 
@@ -49,33 +80,63 @@ def send_deal_closed_won_notifications(deal):
 
 def send_contact_assignment_email(contact):
     """
-    Sends email alert to the assigned sales representative.
+    Sends email alert to the assigned sales representative via Brevo.
     """
     rep = contact.assigned_to
-    if rep and rep.email:
-        subject = f"💼 New Contact Assigned: {contact.first_name} {contact.last_name}"
-        message = (
-            f"Hello {rep.first_name},\n\n"
-            f"A new contact has been assigned to you:\n\n"
-            f"Contact Details:\n"
-            f"- Name: {contact.first_name} {contact.last_name}\n"
-            f"- Job Title: {contact.job_title or 'N/A'}\n"
-            f"- Company: {contact.company.name if contact.company else 'N/A'}\n"
-            f"- Email: {contact.email}\n"
-            f"- Phone: {contact.phone or 'N/A'}\n\n"
-            f"Please reach out and update their status in the CRM."
+    if not rep or not rep.email:
+        return
+
+    subject = f"💼 New Contact Assigned: {contact.first_name} {contact.last_name}"
+    company_str = contact.company.name if contact.company else "N/A"
+    body = (
+        f"Hello {rep.first_name},\n\n"
+        f"A new contact has been assigned to you:\n\n"
+        f"Contact Details:\n"
+        f"- Name: {contact.first_name} {contact.last_name}\n"
+        f"- Job Title: {contact.job_title or 'N/A'}\n"
+        f"- Company: {company_str}\n"
+        f"- Email: {contact.email}\n"
+        f"- Phone: {contact.phone or 'N/A'}\n\n"
+        f"Please reach out and update their status in the CRM."
+    )
+    html_body = f"""
+    <!DOCTYPE html><html><head><meta charset="utf-8">
+    <style>
+      body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#09090b;color:#f4f4f5;margin:0;padding:20px;}}
+      .card{{max-width:520px;margin:20px auto;background:#18181b;border:1px solid #27272a;border-radius:12px;padding:32px;box-shadow:0 10px 25px rgba(0,0,0,.5);}}
+      .header{{font-size:20px;font-weight:800;color:#6366f1;margin-bottom:16px;}}
+      .badge{{display:inline-block;padding:3px 8px;background:#312e81;color:#a5b4fc;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:20px;}}
+      .row{{margin-bottom:8px;font-size:14px;color:#d4d4d8;}}
+      .label{{font-weight:700;color:#a1a1aa;display:inline-block;width:110px;font-size:11px;text-transform:uppercase;}}
+      .val{{color:#f4f4f5;font-weight:600;}}
+      .footer{{border-top:1px solid #27272a;margin-top:24px;padding-top:16px;font-size:12px;color:#71717a;text-align:center;}}
+    </style></head><body>
+    <div class="card">
+      <div class="header">💼 New Contact Assigned</div>
+      <div class="badge">Mintana CRM</div>
+      <p style="font-size:14px;color:#a1a1aa;">Hello <strong style="color:#f4f4f5;">{rep.first_name}</strong>, a new contact has been assigned to you.</p>
+      <div class="row"><span class="label">Name:</span><span class="val">{contact.first_name} {contact.last_name}</span></div>
+      <div class="row"><span class="label">Job Title:</span><span class="val">{contact.job_title or 'N/A'}</span></div>
+      <div class="row"><span class="label">Company:</span><span class="val">{company_str}</span></div>
+      <div class="row"><span class="label">Email:</span><span class="val">{contact.email}</span></div>
+      <div class="row"><span class="label">Phone:</span><span class="val">{contact.phone or 'N/A'}</span></div>
+      <div class="footer">Mintana CRM &bull; Automated Contact Assignment</div>
+    </div></body></html>
+    """
+    try:
+        sent = email_service.send_email(
+            subject=subject,
+            body=body,
+            recipients=[rep.email],
+            html_body=html_body,
+            fail_silently=True,
         )
-        try:
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'crm@mintana.com'),
-                recipient_list=[rep.email],
-                fail_silently=False
-            )
-            print(f"[Email Notification] Assignment alert sent to sales rep: {rep.email}")
-        except Exception as e:
-            logger.error(f"Failed to send Contact Assignment notification email: {str(e)}")
+        if sent:
+            logger.info(f"[Email Notification] Contact assignment email sent to: {rep.email}")
+        else:
+            logger.warning(f"[Email Notification] Contact assignment email failed for: {rep.email}")
+    except Exception as e:
+        logger.error(f"Failed to send Contact Assignment notification email: {str(e)}")
 
 
 def trigger_external_webhook(deal, event_type):
