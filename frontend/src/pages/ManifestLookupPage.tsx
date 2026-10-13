@@ -167,7 +167,7 @@ export default function ManifestLookupPage() {
   const handleExportCSV = () => {
     if (!manifestData || !manifestData.shipments.length) return
     
-    const headers = ['S/N', 'DPD Tracking Number', 'Payment Reference Number', 'Sender Name', 'Sender Address', 'Receiver Name', 'Phone Number', 'Receiver Address', 'Item Shipped / Description', 'Quantity', 'Weight (kg)', 'Customer Received']
+    const headers = ['S/N', 'Delivery Company Tracking Number', 'Payment Reference Number', 'Sender Name', 'Sender Address', 'Receiver Name', 'Phone Number', 'Receiver Address', 'Item Shipped / Description', 'Quantity', 'Weight (kg)', 'Customer Received']
     const rows = manifestData.shipments.map(s => [
       s.sn,
       `"${(s.dpd_tracking_number || s.tracking_number || '').replace(/"/g, '""')}"`,
@@ -420,7 +420,7 @@ export default function ManifestLookupPage() {
                   <thead className="bg-slate-950/80 print:bg-slate-200 text-slate-400 print:text-slate-800 uppercase tracking-wider font-semibold border-b border-slate-800 print:border-slate-400">
                     <tr>
                       <th className="py-3.5 px-4 text-center w-12">S/N</th>
-                      <th className="py-3.5 px-4 min-w-[140px]">DPD Tracking Number</th>
+                      <th className="py-3.5 px-4 min-w-[140px]">Delivery Co. Tracking No.</th>
                       <th className="py-3.5 px-4 min-w-[160px]">Sender Details</th>
                       <th className="py-3.5 px-4 min-w-[180px]">Receiver Details</th>
                       <th className="py-3.5 px-4 min-w-[180px]">Item Shipped / Description</th>

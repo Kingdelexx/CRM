@@ -2596,14 +2596,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> DPD Tracking Number
+                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> Delivery Company Tracking Number
                       </label>
                       <input
                         type="text"
                         name="dpd_tracking_number"
                         value={formData.dpd_tracking_number || formData.tracking_id}
                         onChange={handleInputChange}
-                        placeholder="e.g. DPD-987654"
+                        placeholder="e.g. DPD-987654, FedEx-123, UPS-456"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>
@@ -2688,14 +2688,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> DPD Tracking Number
+                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> Delivery Company Tracking Number
                       </label>
                       <input
                         type="text"
                         name="dpd_tracking_number"
                         value={formData.dpd_tracking_number || formData.tracking_id}
                         onChange={handleInputChange}
-                        placeholder="e.g. DPD-987654"
+                        placeholder="e.g. DPD-987654, FedEx-123, UPS-456"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>
@@ -4067,14 +4067,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> DPD Tracking Number
+                        <Tag className="h-3.5 w-3.5 text-emerald-400" /> Delivery Company Tracking Number
                       </label>
                       <input
                         type="text"
                         name="dpd_tracking_number"
                         value={formData.dpd_tracking_number}
                         onChange={handleInputChange}
-                        placeholder="e.g. DPD-883920"
+                        placeholder="e.g. DPD-883920, FedEx-123, UPS-456"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>
