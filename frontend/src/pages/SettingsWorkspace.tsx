@@ -313,6 +313,23 @@ export default function SettingsWorkspace() {
     }
   })
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiClient.delete(`/accounts/users/${id}`)
+    },
+    onSuccess: () => {
+      refetchUsers()
+    },
+    onError: (err: any) => {
+      alert(`Error: ${err?.response?.data?.detail || err.message}`)
+    }
+  })
+
+  const handleDeleteUser = (user: User) => {
+    if (!window.confirm(`Are you sure you want to permanently delete ${user.first_name} ${user.last_name}? This action cannot be undone.`)) return
+    deleteUserMutation.mutate(user.id)
+  }
+
   // Add Hierarchy items states
   const [newDeptForm, setNewDeptForm] = useState({ name: '', manager_id: '' })
   const [newTeamForm, setNewTeamForm] = useState({ name: '', department_id: '', manager_id: '' })
@@ -1131,7 +1148,8 @@ export default function SettingsWorkspace() {
                     <th className="py-3 px-4 w-32">Department</th>
                     <th className="py-3 px-4 w-16 text-center">Status</th>
                     <th className="py-3 px-4 w-16 text-center">Configure</th>
-                  </tr>
+                     <th className="py-3 px-4 w-12 text-center">Delete</th>
+                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900">
                   {users.map(u => (
@@ -1166,6 +1184,18 @@ export default function SettingsWorkspace() {
                         >
                           Configure
                         </button>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {isUserAdmin && u.id !== me?.id && (
+                          <button
+                            onClick={() => handleDeleteUser(u)}
+                            disabled={deleteUserMutation.isPending}
+                            title={`Delete ${u.first_name} ${u.last_name}`}
+                            className="text-zinc-600 hover:text-red-400 hover:bg-red-500/10 p-1 rounded transition-all cursor-pointer disabled:opacity-30"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -157,6 +157,23 @@ def invite_user(request, data: UserCreateSchema):
 
     return 201, user
 
+@router.delete("/users/{user_id}", response={204: None}, auth=JWTAuth())
+@router.delete("/users/{user_id}/", response={204: None}, auth=JWTAuth())
+def delete_user(request, user_id: UUID):
+    if request.user.role != 'ADMIN':
+        raise HttpError(403, "Only admins can delete staff members.")
+
+    if str(request.user.id) == str(user_id):
+        raise HttpError(400, "You cannot delete your own account.")
+
+    User = get_user_model()
+    user = User.objects.filter(id=user_id, organization=request.user.organization).first()
+    if not user:
+        raise HttpError(404, "User not found within your organization.")
+
+    user.delete()
+    return 204, None
+
 @router.put("/users/{user_id}", response=UserSchema, auth=JWTAuth())
 @router.put("/users/{user_id}/", response=UserSchema, auth=JWTAuth())
 def update_user(request, user_id: UUID, data: UserUpdateSchema):
