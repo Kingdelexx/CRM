@@ -4,7 +4,7 @@ import json
 import quopri
 import urllib.parse
 from django.utils import timezone
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from django.db import transaction
 from django.db.models import Q, Sum
 from ninja import Router, File, UploadedFile
@@ -3497,7 +3497,8 @@ def _build_public_tracking_response(shipment, queried_inv: str):
     dest_city = parse_city(getattr(shipment, 'receiver_address', None), 'Lagos, Nigeria')
 
     # Date parsing logic - safe for date, datetime, str, or None
-    created_dt = getattr(shipment, 'created_at', None)
+    # Unsaved proxy shipments (built from Invoice) store timestamps in private override attrs
+    created_dt = getattr(shipment, '_created_at_override', None) or getattr(shipment, 'created_at', None)
     if not created_dt:
         created_dt = timezone.now()
     elif isinstance(created_dt, str):
@@ -3537,7 +3538,7 @@ def _build_public_tracking_response(shipment, queried_inv: str):
     })
 
     # Event 2: Received at Hub
-    hub_dt = datetime.combine(scheduled_date, datetime.min.time(), tzinfo=timezone.UTC)
+    hub_dt = datetime.combine(scheduled_date, datetime.min.time()).replace(tzinfo=dt_timezone.utc)
     events.append({
         "status": "RECEIVED_AT_HUB",
         "timestamp": hub_dt.isoformat(),
@@ -3556,7 +3557,7 @@ def _build_public_tracking_response(shipment, queried_inv: str):
         })
 
     # Event 4: Customs / On Hold
-    upd_dt = getattr(shipment, 'updated_at', None) or timezone.now()
+    upd_dt = getattr(shipment, '_updated_at_override', None) or getattr(shipment, 'updated_at', None) or timezone.now()
     upd_iso = upd_dt.isoformat() if hasattr(upd_dt, 'isoformat') else str(upd_dt)
 
     if current_status == 'ON_HOLD':
@@ -3640,6 +3641,10 @@ def _resolve_shipment_by_invoice(invoice_str: str):
                 rec_name = inv.receiver_name or (
                     f"{inv.contact.first_name} {inv.contact.last_name}".strip() if inv.contact else "Recipient"
                 )
+                # Build a lightweight unsaved Shipment proxy from invoice data.
+                # Do NOT set created_at/updated_at — they are auto fields and
+                # cannot be assigned on unsaved instances; _build_public_tracking_response
+                # reads them via getattr with a safe fallback to timezone.now().
                 shipment = Shipment(
                     organization=inv.organization,
                     invoice_number=inv.invoice_number,
@@ -3648,10 +3653,11 @@ def _resolve_shipment_by_invoice(invoice_str: str):
                     receiver_phone=inv.receiver_tel,
                     receiver_address=inv.receiver_address,
                     shipment_status='DELIVERED' if inv.status == Invoice.PAID else 'PENDING',
-                    created_at=inv.created_at or timezone.now(),
-                    updated_at=inv.updated_at or timezone.now(),
                     shipment_date=inv.issue_date
                 )
+                # Attach timestamps manually as plain attributes so the builder can read them
+                shipment._created_at_override = inv.created_at or timezone.now()
+                shipment._updated_at_override = inv.updated_at or timezone.now()
 
     # 3. Fallback: Search by Receiver Phone or Name
     if not shipment and len(clean_inv) >= 3:
