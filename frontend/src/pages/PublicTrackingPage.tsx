@@ -11,14 +11,20 @@ import {
   XCircle,
   Calendar,
   User,
-  ArrowRight,
   RefreshCw,
   ArrowLeft,
-  Building2,
   ShieldCheck
 } from 'lucide-react'
-import { apiClient } from '@/api/client'
-import type { PublicTrackingResponse, TrackingTimelineEvent } from '@/types/tracking'
+import axios from 'axios'
+import type { PublicTrackingResponse } from '@/types/tracking'
+
+// Unauthenticated axios instance – purely for public tracking, no JWT interceptors
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://mintana-crm-backend.onrender.com').replace(/\/$/, '')
+const publicAxios = axios.create({
+  baseURL: `${API_BASE}/api`,
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 15000,
+})
 
 // Defined 5 Milestone Stages
 const MILESTONE_STAGES = [
@@ -60,7 +66,7 @@ export default function PublicTrackingPage() {
     setError(null)
 
     try {
-      const response = await apiClient.get<PublicTrackingResponse>('/tracking/', {
+      const response = await publicAxios.get<PublicTrackingResponse>('/tracking/', {
         params: { invoice: cleanInv }
       })
       setTrackingData(response.data)
@@ -69,15 +75,28 @@ export default function PublicTrackingPage() {
     } catch (err: any) {
       console.error('Failed to fetch tracking data:', err)
       setTrackingData(null)
-      const statusCode = err.status || err.response?.status
-      const detailMsg = err.message || err.response?.data?.detail
+
+      const statusCode: number = err?.response?.status ?? 0
+      const serverDetail: string = err?.response?.data?.detail || ''
 
       if (statusCode === 404) {
-        setError(detailMsg || `No shipment found matching invoice number "${cleanInv}". Please verify the number on your receipt or confirmation email.`)
+        setError(
+          serverDetail ||
+          `No shipment found matching "${cleanInv}". Please double-check the invoice number on your receipt or confirmation email.`
+        )
       } else if (statusCode === 429) {
-        setError('Rate limit exceeded. Please wait a minute before trying again.')
+        setError('Too many requests. Please wait a moment before trying again.')
+      } else if (statusCode === 500) {
+        setError(
+          `Our tracking service is temporarily experiencing issues. Please try again in a few minutes, or contact Mintana support if the problem persists.`
+        )
+      } else if (statusCode === 0 || !err?.response) {
+        setError('Unable to connect to the tracking server. Please check your internet connection and try again.')
       } else {
-        setError(detailMsg || `No shipment found matching invoice number "${cleanInv}". Please verify the number on your receipt or confirmation email.`)
+        setError(
+          serverDetail ||
+          `No shipment found matching "${cleanInv}". Please double-check the invoice number on your receipt or confirmation email.`
+        )
       }
     } finally {
       setLoading(false)

@@ -3468,11 +3468,23 @@ def _check_tracking_rate_limit(request, max_requests=30, window_seconds=60):
 
 
 def _build_public_tracking_response(shipment, queried_inv: str):
+    try:
+        return _build_public_tracking_response_inner(shipment, queried_inv)
+    except Exception as exc:
+        import traceback
+        print(f"[Tracking API Error] Failed to build tracking response for '{queried_inv}': {exc}")
+        traceback.print_exc()
+        raise HttpError(500, f"Unable to retrieve tracking data. Please try again later.")
+
+
+def _build_public_tracking_response_inner(shipment, queried_inv: str):
     inv_no = getattr(shipment, 'invoice_number', None) or getattr(shipment, 'tracking_id', None) or queried_inv
+    if not inv_no:
+        inv_no = queried_inv
 
     # Status mapping
-    s_status = (getattr(shipment, 'shipment_status', None) or 'PENDING').upper()
-    is_rec = getattr(shipment, 'is_received_by_customer', False)
+    s_status = str(getattr(shipment, 'shipment_status', None) or 'PENDING').upper()
+    is_rec = bool(getattr(shipment, 'is_received_by_customer', False))
     if is_rec or s_status == 'DELIVERED':
         current_status = 'DELIVERED'
     elif s_status == 'IN_TRANSIT':
@@ -3484,28 +3496,41 @@ def _build_public_tracking_response(shipment, queried_inv: str):
     else:
         current_status = 'ORDER_CREATED'
 
-    # Extract origin & destination cities
+    # Extract origin & destination cities safely
     def parse_city(addr, default_val):
-        if not addr:
+        try:
+            if not addr:
+                return default_val
+            lines = [line.strip() for line in str(addr).split('\n') if line.strip()]
+            if not lines:
+                return default_val
+            if len(lines) >= 2:
+                last = lines[-1]
+                second_last = lines[-2]
+                return last if ',' in last else f"{second_last}, {last}"
+            return lines[0]
+        except Exception:
             return default_val
-        lines = [line.strip() for line in str(addr).split('\n') if line.strip()]
-        if len(lines) >= 2:
-            return lines[-1] if ',' in lines[-1] else f"{lines[-2]}, {lines[-1]}"
-        return lines[0] if lines else default_val
 
     origin_city = parse_city(getattr(shipment, 'sender_address', None), 'London, UK')
     dest_city = parse_city(getattr(shipment, 'receiver_address', None), 'Lagos, Nigeria')
 
-    # Date parsing logic - safe for date, datetime, str, or None
-    # Unsaved proxy shipments (built from Invoice) store timestamps in private override attrs
+    # --- Date parsing logic (robust for date / datetime / str / None) ---
+    # Unsaved proxy shipments (built from Invoice) use private override attrs.
+    now_tz = timezone.now()
+
     created_dt = getattr(shipment, '_created_at_override', None) or getattr(shipment, 'created_at', None)
     if not created_dt:
-        created_dt = timezone.now()
+        created_dt = now_tz
     elif isinstance(created_dt, str):
         try:
             created_dt = datetime.fromisoformat(created_dt)
         except Exception:
-            created_dt = timezone.now()
+            created_dt = now_tz
+
+    # Make created_dt timezone-aware if not already
+    if hasattr(created_dt, 'tzinfo') and created_dt.tzinfo is None:
+        created_dt = created_dt.replace(tzinfo=dt_timezone.utc)
 
     raw_date = getattr(shipment, 'shipment_date', None) or getattr(shipment, 'date', None)
     if isinstance(raw_date, datetime):
@@ -3516,19 +3541,19 @@ def _build_public_tracking_response(shipment, queried_inv: str):
         try:
             scheduled_date = datetime.strptime(raw_date.strip()[:10], '%Y-%m-%d').date()
         except Exception:
-            scheduled_date = created_dt.date() if isinstance(created_dt, datetime) else timezone.localdate()
+            scheduled_date = created_dt.date() if hasattr(created_dt, 'date') else timezone.localdate()
     else:
-        scheduled_date = created_dt.date() if isinstance(created_dt, datetime) else timezone.localdate()
+        scheduled_date = created_dt.date() if hasattr(created_dt, 'date') else timezone.localdate()
 
     # Calculate estimated delivery date
-    is_sea = (getattr(shipment, 'shipping_type', 'AIR') == 'SEA')
+    is_sea = (str(getattr(shipment, 'shipping_type', '') or '').upper() == 'SEA')
     est_days = 28 if is_sea else 7
     est_delivery_date = scheduled_date + timedelta(days=est_days)
 
-    # Timeline events
+    # --- Build timeline events ---
     events = []
-    
-    # Event 1: Order Created
+
+    # Event 1: Order Created — use actual creation timestamp
     created_iso = created_dt.isoformat() if hasattr(created_dt, 'isoformat') else str(created_dt)
     events.append({
         "status": "ORDER_CREATED",
@@ -3537,8 +3562,12 @@ def _build_public_tracking_response(shipment, queried_inv: str):
         "description": "Shipment booking created and invoice generated."
     })
 
-    # Event 2: Received at Hub
-    hub_dt = datetime.combine(scheduled_date, datetime.min.time()).replace(tzinfo=dt_timezone.utc)
+    # Event 2: Received at Hub — use scheduled date at 08:00 UTC (after ORDER_CREATED)
+    hub_naive = datetime(scheduled_date.year, scheduled_date.month, scheduled_date.day, 8, 0, 0)
+    hub_dt = hub_naive.replace(tzinfo=dt_timezone.utc)
+    # Ensure hub_dt is after created_dt
+    if hub_dt <= created_dt:
+        hub_dt = created_dt + timedelta(hours=2)
     events.append({
         "status": "RECEIVED_AT_HUB",
         "timestamp": hub_dt.isoformat(),
@@ -3556,8 +3585,10 @@ def _build_public_tracking_response(shipment, queried_inv: str):
             "description": f"Shipment dispatched via {'Sea Freight' if is_sea else 'Air Freight'}."
         })
 
-    # Event 4: Customs / On Hold
-    upd_dt = getattr(shipment, '_updated_at_override', None) or getattr(shipment, 'updated_at', None) or timezone.now()
+    # Event 4 / 5: Hold or Delivered
+    upd_dt = getattr(shipment, '_updated_at_override', None) or getattr(shipment, 'updated_at', None) or now_tz
+    if hasattr(upd_dt, 'tzinfo') and upd_dt.tzinfo is None:
+        upd_dt = upd_dt.replace(tzinfo=dt_timezone.utc)
     upd_iso = upd_dt.isoformat() if hasattr(upd_dt, 'isoformat') else str(upd_dt)
 
     if current_status == 'ON_HOLD':
@@ -3568,7 +3599,6 @@ def _build_public_tracking_response(shipment, queried_inv: str):
             "description": "Shipment placed on temporary hold for customs verification."
         })
 
-    # Event 5: Delivered
     if current_status == 'DELIVERED':
         events.append({
             "status": "DELIVERED",
@@ -3577,21 +3607,21 @@ def _build_public_tracking_response(shipment, queried_inv: str):
             "description": "Package successfully delivered to recipient."
         })
 
-    # Sort chronologically by timestamp
+    # Sort chronologically
     events.sort(key=lambda e: str(e['timestamp']))
 
-    rec_name = getattr(shipment, 'receiver_name', None) or "Recipient"
+    rec_name = str(getattr(shipment, 'receiver_name', None) or "Recipient")
 
     return {
-        "invoiceNumber": inv_no,
+        "invoiceNumber": str(inv_no),
         "status": current_status,
-        "originCity": origin_city,
-        "destinationCity": dest_city,
+        "originCity": str(origin_city),
+        "destinationCity": str(dest_city),
         "receiverName": rec_name,
         "scheduledShipmentDate": scheduled_date.isoformat(),
         "estimatedDeliveryDate": est_delivery_date.isoformat(),
         "timelineEvents": events,
-        "statusHistory": events
+        "statusHistory": list(events)
     }
 
 
@@ -3676,19 +3706,35 @@ def _resolve_shipment_by_invoice(invoice_str: str):
 @tracking_router.get("/{invoice_number}/", response=PublicTrackingResponseSchema)
 def get_public_tracking_by_path(request, invoice_number: str):
     _check_tracking_rate_limit(request)
-    shipment = _resolve_shipment_by_invoice(invoice_number)
-    return _build_public_tracking_response(shipment, invoice_number)
+    try:
+        shipment = _resolve_shipment_by_invoice(invoice_number)
+        return _build_public_tracking_response(shipment, invoice_number)
+    except HttpError:
+        raise
+    except Exception as exc:
+        import traceback
+        print(f"[Tracking API] Unexpected error for path '{invoice_number}': {exc}")
+        traceback.print_exc()
+        raise HttpError(500, "An unexpected error occurred. Please try again later.")
 
 
 @tracking_router.get("", response=PublicTrackingResponseSchema)
 @tracking_router.get("/", response=PublicTrackingResponseSchema)
-def get_public_tracking_by_query(request, invoice: Optional[str] = None, invoiceNumber: Optional[str] = None):
+def get_public_tracking_by_query(request, invoice: Optional[str] = None, invoiceNumber: Optional[str] = None, code: Optional[str] = None):
     _check_tracking_rate_limit(request)
-    inv_str = invoice or invoiceNumber
+    inv_str = (invoice or invoiceNumber or code or '').strip()
     if not inv_str:
-        raise HttpError(404, "No shipment found with this invoice number.")
-    shipment = _resolve_shipment_by_invoice(inv_str)
-    return _build_public_tracking_response(shipment, inv_str)
+        raise HttpError(404, "Please provide an invoice number or tracking ID.")
+    try:
+        shipment = _resolve_shipment_by_invoice(inv_str)
+        return _build_public_tracking_response(shipment, inv_str)
+    except HttpError:
+        raise
+    except Exception as exc:
+        import traceback
+        print(f"[Tracking API] Unexpected error for '{inv_str}': {exc}")
+        traceback.print_exc()
+        raise HttpError(500, "An unexpected error occurred. Please try again later.")
 
 
 
