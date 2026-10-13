@@ -18,6 +18,26 @@ services:
       - key: CORS_ALLOW_ALL_ORIGINS
         value: "True"
 
+      # --- Brevo Email Configuration ---
+      - key: BREVO_API_KEY
+        sync: false   # Set this secret manually in the Render dashboard
+      - key: DEFAULT_FROM_EMAIL
+        value: "mintanacrm@gmail.com"
+      - key: SMTP_HOST
+        value: "smtp-relay.brevo.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USE_TLS
+        value: "True"
+      - key: SMTP_USER
+        value: "mintanacrm@gmail.com"
+      - key: SMTP_PASS
+        sync: false   # Set this secret manually in the Render dashboard
+
+      # --- Frontend URL (for email action buttons) ---
+      - key: FRONTEND_URL
+        value: "https://mintana-crm-frontend.onrender.com"
+
   # 2. React Vite Frontend Static Site
   - type: web
     name: mintana-crm-frontend
