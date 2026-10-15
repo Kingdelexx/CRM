@@ -296,33 +296,35 @@ export default function Dashboard() {
               </span>
             )}
             
-            {sidebarNavItems.map((item) => {
-              const isActive = currentView === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavClick(item.id)}
-                  className={`w-full flex items-center ${
-                    isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-                  } rounded-lg text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-indigo-100/70 text-indigo-700 font-bold border border-indigo-200/80 shadow-xs'
-                      : 'hover:bg-slate-200/60 border border-transparent'
-                  } cursor-pointer`}
-                  title={item.label}
-                >
-                  {item.icon}
-                  {(!isSidebarCollapsed || isMobileSidebarOpen) && (
-                    <span 
-                      style={{ color: isActive ? undefined : '#1A202C' }} 
-                      className={isActive ? 'text-indigo-700 font-bold' : 'font-semibold text-[#1A202C]'}
-                    >
-                      {item.label}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {sidebarNavItems
+              .filter((item) => !(item.id === 'summary' && currentUser?.role !== 'ADMIN'))
+              .map((item) => {
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item.id)}
+                    className={`w-full flex items-center ${
+                      isSidebarCollapsed && !isMobileSidebarOpen ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
+                    } rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-indigo-100/70 text-indigo-700 font-bold border border-indigo-200/80 shadow-xs'
+                        : 'hover:bg-slate-200/60 border border-transparent'
+                    } cursor-pointer`}
+                    title={item.label}
+                  >
+                    {item.icon}
+                    {(!isSidebarCollapsed || isMobileSidebarOpen) && (
+                      <span 
+                        style={{ color: isActive ? undefined : '#1A202C' }} 
+                        className={isActive ? 'text-indigo-700 font-bold' : 'font-semibold text-[#1A202C]'}
+                      >
+                        {item.label}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
           </nav>
         </div>
 
