@@ -2316,6 +2316,124 @@ def list_shipments(
         qs = qs.filter(shipping_type=shipping_type)
     return qs.order_by('-created_at')
 
+
+def _resolve_or_create_contact_from_shipment(
+    organization,
+    contact_id=None,
+    name=None,
+    phone=None,
+    email=None,
+    address=None,
+    default_role_label="Contact",
+    assigned_to=None
+):
+    """
+    Resolves an existing Contact or creates a new Contact from shipment sender/receiver details.
+    - If contact_id is provided, loads the contact and updates any missing address/phone/email.
+    - If contact_id is not provided, but manual info is entered:
+        1. Checks for an existing Contact by phone, email, or first+last name in the organization.
+        2. If found, links to it and fills in any empty fields.
+        3. If not found, creates a new Contact in the organization with status CUSTOMER and source 'Shipment Booking'.
+    """
+    clean_name = str(name).strip() if name else ""
+    clean_phone = str(phone).strip() if phone else ""
+    clean_email = str(email).strip() if email else ""
+    clean_address = str(address).strip() if address else ""
+
+    if contact_id:
+        contact = Contact.objects.filter(id=contact_id, organization=organization).first()
+        if contact:
+            updated = False
+            if clean_address and not contact.address:
+                contact.address = clean_address
+                updated = True
+            if clean_phone and not contact.phone:
+                contact.phone = clean_phone[:20]
+                updated = True
+            if clean_email and not contact.email:
+                contact.email = clean_email[:254]
+                updated = True
+            if updated:
+                contact.save()
+            return contact
+
+    # If no contact_id and no manual fields provided, nothing to create
+    if not (clean_name or clean_phone or clean_email or clean_address):
+        return None
+
+    # Parse first_name and last_name
+    if clean_name:
+        name_parts = clean_name.split()
+        if len(name_parts) >= 2:
+            first_name = name_parts[0][:150]
+            last_name = " ".join(name_parts[1:])[:150]
+        else:
+            first_name = clean_name[:150]
+            last_name = "."
+    else:
+        first_name = (clean_phone or clean_email or default_role_label)[:150]
+        last_name = "."
+
+    # Check for existing contact by phone, email, or exact name
+    existing_contact = None
+    if clean_phone:
+        existing_contact = Contact.objects.filter(
+            organization=organization,
+            phone=clean_phone[:20]
+        ).first()
+        if not existing_contact:
+            compact_phone = clean_phone.replace(" ", "").replace("-", "")[:20]
+            if compact_phone != clean_phone[:20]:
+                existing_contact = Contact.objects.filter(
+                    organization=organization,
+                    phone=compact_phone
+                ).first()
+
+    if not existing_contact and clean_email:
+        existing_contact = Contact.objects.filter(
+            organization=organization,
+            email__iexact=clean_email
+        ).first()
+
+    if not existing_contact and clean_name and last_name != ".":
+        existing_contact = Contact.objects.filter(
+            organization=organization,
+            first_name__iexact=first_name,
+            last_name__iexact=last_name
+        ).first()
+
+    if existing_contact:
+        contact = existing_contact
+        updated = False
+        if clean_address and not contact.address:
+            contact.address = clean_address
+            updated = True
+        if clean_phone and not contact.phone:
+            contact.phone = clean_phone[:20]
+            updated = True
+        if clean_email and not contact.email:
+            contact.email = clean_email[:254]
+            updated = True
+        if updated:
+            contact.save()
+        return contact
+
+    # Create new Contact
+    contact = Contact.objects.create(
+        organization=organization,
+        first_name=first_name,
+        last_name=last_name,
+        email=clean_email[:254] if clean_email else None,
+        phone=clean_phone[:20] if clean_phone else None,
+        whatsapp_number=clean_phone[:50] if clean_phone else None,
+        address=clean_address or None,
+        status=Contact.CUSTOMER,
+        source="Shipment Booking",
+        assigned_to=assigned_to
+    )
+    return contact
+
+
 @shipments_router.post("", response={201: ShipmentSchema})
 @shipments_router.post("/", response={201: ShipmentSchema})
 def create_shipment(request, data: ShipmentCreateSchema):
@@ -2333,6 +2451,51 @@ def create_shipment(request, data: ShipmentCreateSchema):
     receiver_id = parse_uuid(payload.pop('receiver_id', None))
     partner_id = parse_uuid(payload.pop('partner_id', None))
     recorded_by_id = parse_uuid(payload.pop('recorded_by_id', None))
+
+    # Resolve or create contacts for sender and receiver (auto-saving manual input to contacts)
+    current_user = request.user if getattr(request.user, 'is_authenticated', False) else None
+
+    sender_contact = _resolve_or_create_contact_from_shipment(
+        organization=request.user.organization,
+        contact_id=sender_id,
+        name=payload.get('sender_name'),
+        phone=payload.get('sender_phone'),
+        email=payload.get('sender_email'),
+        address=payload.get('sender_address'),
+        default_role_label="Sender",
+        assigned_to=current_user
+    )
+    if sender_contact:
+        sender_id = sender_contact.id
+        if not payload.get('sender_name'):
+            payload['sender_name'] = f"{sender_contact.first_name} {sender_contact.last_name if sender_contact.last_name != '.' else ''}".strip()
+        if not payload.get('sender_phone') and sender_contact.phone:
+            payload['sender_phone'] = sender_contact.phone
+        if not payload.get('sender_email') and sender_contact.email:
+            payload['sender_email'] = sender_contact.email
+        if not payload.get('sender_address') and sender_contact.address:
+            payload['sender_address'] = sender_contact.address
+
+    receiver_contact = _resolve_or_create_contact_from_shipment(
+        organization=request.user.organization,
+        contact_id=receiver_id,
+        name=payload.get('receiver_name'),
+        phone=payload.get('receiver_phone'),
+        email=payload.get('receiver_email'),
+        address=payload.get('receiver_address'),
+        default_role_label="Receiver",
+        assigned_to=current_user
+    )
+    if receiver_contact:
+        receiver_id = receiver_contact.id
+        if not payload.get('receiver_name'):
+            payload['receiver_name'] = f"{receiver_contact.first_name} {receiver_contact.last_name if receiver_contact.last_name != '.' else ''}".strip()
+        if not payload.get('receiver_phone') and receiver_contact.phone:
+            payload['receiver_phone'] = receiver_contact.phone
+        if not payload.get('receiver_email') and receiver_contact.email:
+            payload['receiver_email'] = receiver_contact.email
+        if not payload.get('receiver_address') and receiver_contact.address:
+            payload['receiver_address'] = receiver_contact.address
 
     shipment_date_val = payload.pop('shipment_date', None)
     date_val = payload.pop('date', None)
@@ -2412,14 +2575,40 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
                 return None
         return None
 
-    if 'sender_id' in payload:
-        s_id = parse_uuid(payload.pop('sender_id'))
-        if s_id:
-            shipment.sender_id = s_id
-    if 'receiver_id' in payload:
-        r_id = parse_uuid(payload.pop('receiver_id'))
-        if r_id:
-            shipment.receiver_id = r_id
+    current_user = request.user if getattr(request.user, 'is_authenticated', False) else None
+
+    if 'sender_id' in payload or any(k in payload for k in ['sender_name', 'sender_phone', 'sender_email', 'sender_address']):
+        s_id = parse_uuid(payload.pop('sender_id')) if 'sender_id' in payload else shipment.sender_id
+        sender_contact = _resolve_or_create_contact_from_shipment(
+            organization=request.user.organization,
+            contact_id=s_id,
+            name=payload.get('sender_name', shipment.sender_name),
+            phone=payload.get('sender_phone', shipment.sender_phone),
+            email=payload.get('sender_email', shipment.sender_email),
+            address=payload.get('sender_address', shipment.sender_address),
+            default_role_label="Sender",
+            assigned_to=current_user
+        )
+        if sender_contact:
+            shipment.sender = sender_contact
+            shipment.sender_id = sender_contact.id
+
+    if 'receiver_id' in payload or any(k in payload for k in ['receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address']):
+        r_id = parse_uuid(payload.pop('receiver_id')) if 'receiver_id' in payload else shipment.receiver_id
+        receiver_contact = _resolve_or_create_contact_from_shipment(
+            organization=request.user.organization,
+            contact_id=r_id,
+            name=payload.get('receiver_name', shipment.receiver_name),
+            phone=payload.get('receiver_phone', shipment.receiver_phone),
+            email=payload.get('receiver_email', shipment.receiver_email),
+            address=payload.get('receiver_address', shipment.receiver_address),
+            default_role_label="Receiver",
+            assigned_to=current_user
+        )
+        if receiver_contact:
+            shipment.receiver = receiver_contact
+            shipment.receiver_id = receiver_contact.id
+
     if 'partner_id' in payload:
         p_id = parse_uuid(payload.pop('partner_id'))
         if p_id:
@@ -2813,35 +3002,7 @@ def get_shipment(request, id: UUID):
         raise HttpError(404, "Shipment not found.")
     return shipment
 
-@shipments_router.put("/{id}", response=ShipmentSchema)
-@shipments_router.put("/{id}/", response=ShipmentSchema)
-def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
-    shipment = Shipment.objects.filter(id=id, organization=request.user.organization).first()
-    if not shipment:
-        raise HttpError(404, "Shipment not found.")
-    
-    payload = data.dict(exclude_unset=True)
-    if 'shipment_date' in payload or 'date' in payload:
-        s_date = payload.get('shipment_date') or payload.get('date')
-        if s_date and str(s_date).strip():
-            c_date = str(s_date).strip()
-            payload['date'] = c_date
-            payload['shipment_date'] = c_date
-            shipment.manifest = get_or_create_daily_manifest(request.user.organization, c_date)
-        else:
-            payload['date'] = None
-            payload['shipment_date'] = None
-            shipment.manifest = get_or_create_daily_manifest(request.user.organization, None)
 
-    for attr, val in payload.items():
-        setattr(shipment, attr, val)
-    shipment.save()
-    try:
-        sync_shipment_invoice(shipment)
-    except Exception as e:
-        print(f"Failed to auto-sync invoice for shipment {shipment.id}: {e}")
-
-    return shipment
 
 @shipments_router.delete("/{id}", response={204: None})
 @shipments_router.delete("/{id}/", response={204: None})

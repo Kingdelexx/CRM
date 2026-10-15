@@ -638,6 +638,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts-select'] })
       setIsEditShipmentModalOpen(false)
       setEditingShipment(null)
       setFormError('')
@@ -964,6 +966,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     onSuccess: async (res: any) => {
       queryClient.invalidateQueries({ queryKey: ['shipments'] })
       queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts-select'] })
       setIsModalOpen(false)
       setFormError('')
       resetForm()
@@ -2169,8 +2173,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       <UserIcon className="h-4 w-4 text-emerald-400" /> Sender Information (Origin)
                     </h4>
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-400 font-semibold">
-                        Sender Contact / Select
+                      <label className="text-xs text-zinc-400 font-semibold flex items-center justify-between">
+                        <span>Sender Contact / Select</span>
+                        <span className="text-[10px] text-emerald-400/90 font-medium">Auto-saves to Contacts if typed</span>
                       </label>
                       <select
                         value={formData.sender_id}
@@ -2244,8 +2249,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       <UserIcon className="h-4 w-4 text-emerald-400" /> Receiver Information (Destination)
                     </h4>
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-400 font-semibold">
-                        Receiver Contact / Select
+                      <label className="text-xs text-zinc-400 font-semibold flex items-center justify-between">
+                        <span>Receiver Contact / Select</span>
+                        <span className="text-[10px] text-emerald-400/90 font-medium">Auto-saves to Contacts if typed</span>
                       </label>
                       <select
                         value={formData.receiver_id}
