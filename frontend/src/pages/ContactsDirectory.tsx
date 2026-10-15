@@ -28,6 +28,8 @@ import {
   FileUp
 } from 'lucide-react'
 import DetailDrawer from '@/components/DetailDrawer'
+import WhatsAppIcon from '@/components/WhatsAppIcon'
+import { formatWhatsAppUrl } from '@/lib/utils'
 
 export interface VCardImportItem {
   id: string
@@ -426,21 +428,70 @@ export default function ContactsDirectory() {
     },
     {
       accessorKey: 'email',
-      header: 'Email / Contact',
-      cell: (info: any) => (
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-1.5 text-xs text-zinc-300">
-            <Mail className="h-3.5 w-3.5 text-zinc-500" />
-            {info.getValue()}
+      header: 'Email / Phone',
+      cell: (info: any) => {
+        const contact = info.row.original
+        const primaryPhone = contact.whatsapp_number || contact.phone
+        const waUrl = formatWhatsAppUrl(primaryPhone, contact.country)
+        return (
+          <div className="space-y-1">
+            {contact.email && (
+              <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                <Mail className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+                <span className="truncate">{contact.email}</span>
+              </div>
+            )}
+            {primaryPhone && (
+              <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                <Phone className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
+                <span>{primaryPhone}</span>
+              </div>
+            )}
+            {waUrl && (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title={`Chat with ${contact.first_name} on WhatsApp`}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 hover:underline transition-colors pt-0.5"
+              >
+                <WhatsAppIcon className="h-3 w-3 text-emerald-400 flex-shrink-0" />
+                <span>WhatsApp Active</span>
+              </a>
+            )}
           </div>
-          {info.row.original.phone && (
-            <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-              <Phone className="h-3.5 w-3.5 text-zinc-500" />
-              {info.row.original.phone}
-            </div>
-          )}
-        </div>
-      )
+        )
+      }
+    },
+    {
+      id: 'whatsappAction',
+      header: 'WhatsApp Link',
+      cell: (info: any) => {
+        const contact = info.row.original
+        const targetNumber = contact.whatsapp_number || contact.phone
+        const waUrl = formatWhatsAppUrl(targetNumber, contact.country)
+        if (!waUrl) {
+          return (
+            <span className="text-zinc-600 text-xs italic">
+              No number
+            </span>
+          )
+        }
+        return (
+          <a
+            href={waUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title={`Connect directly via WhatsApp (${targetNumber})`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-600 border border-emerald-500/25 hover:border-emerald-500 text-emerald-400 hover:text-white text-xs font-semibold transition-all cursor-pointer shadow-sm group"
+          >
+            <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-400 group-hover:text-white transition-colors flex-shrink-0" />
+            <span>Chat on WhatsApp</span>
+          </a>
+        )
+      }
     },
     {
       accessorKey: 'company',
