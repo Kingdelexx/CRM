@@ -229,6 +229,8 @@ def list_departments(request):
 @router.post("/departments", response={201: DepartmentSchema}, auth=JWTAuth())
 @router.post("/departments/", response={201: DepartmentSchema}, auth=JWTAuth())
 def create_department(request, data: DepartmentCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage departments.")
     User = get_user_model()
     manager = None
     if data.manager_id:
@@ -243,6 +245,8 @@ def create_department(request, data: DepartmentCreateSchema):
 @router.put("/departments/{id}", response=DepartmentSchema, auth=JWTAuth())
 @router.put("/departments/{id}/", response=DepartmentSchema, auth=JWTAuth())
 def update_department(request, id: UUID, data: DepartmentCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage departments.")
     dept = Department.objects.filter(id=id, organization=request.user.organization).first()
     if not dept:
         raise HttpError(404, "Department not found.")
@@ -258,6 +262,8 @@ def update_department(request, id: UUID, data: DepartmentCreateSchema):
 @router.delete("/departments/{id}", response={204: None}, auth=JWTAuth())
 @router.delete("/departments/{id}/", response={204: None}, auth=JWTAuth())
 def delete_department(request, id: UUID):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage departments.")
     dept = Department.objects.filter(id=id, organization=request.user.organization).first()
     if not dept:
         raise HttpError(404, "Department not found.")
@@ -273,6 +279,8 @@ def list_teams(request):
 @router.post("/teams", response={201: TeamSchema}, auth=JWTAuth())
 @router.post("/teams/", response={201: TeamSchema}, auth=JWTAuth())
 def create_team(request, data: TeamCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage teams.")
     dept = Department.objects.filter(id=data.department_id, organization=request.user.organization).first()
     if not dept:
         raise HttpError(400, "Invalid department ID.")
@@ -291,6 +299,8 @@ def create_team(request, data: TeamCreateSchema):
 @router.put("/teams/{id}", response=TeamSchema, auth=JWTAuth())
 @router.put("/teams/{id}/", response=TeamSchema, auth=JWTAuth())
 def update_team(request, id: UUID, data: TeamCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage teams.")
     team = Team.objects.filter(id=id, organization=request.user.organization).first()
     if not team:
         raise HttpError(404, "Team not found.")
@@ -310,6 +320,8 @@ def update_team(request, id: UUID, data: TeamCreateSchema):
 @router.delete("/teams/{id}", response={204: None}, auth=JWTAuth())
 @router.delete("/teams/{id}/", response={204: None}, auth=JWTAuth())
 def delete_team(request, id: UUID):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage teams.")
     team = Team.objects.filter(id=id, organization=request.user.organization).first()
     if not team:
         raise HttpError(404, "Team not found.")
@@ -325,6 +337,8 @@ def list_roles(request):
 @router.post("/roles", response={201: RoleSchema}, auth=JWTAuth())
 @router.post("/roles/", response={201: RoleSchema}, auth=JWTAuth())
 def create_role(request, data: RoleCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage roles.")
     role = Role.objects.create(
         organization=request.user.organization,
         name=data.name,
@@ -335,6 +349,8 @@ def create_role(request, data: RoleCreateSchema):
 @router.put("/roles/{id}", response=RoleSchema, auth=JWTAuth())
 @router.put("/roles/{id}/", response=RoleSchema, auth=JWTAuth())
 def update_role(request, id: UUID, data: RoleCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage roles.")
     role = Role.objects.filter(id=id, organization=request.user.organization).first()
     if not role:
         raise HttpError(404, "Role not found.")
@@ -346,6 +362,8 @@ def update_role(request, id: UUID, data: RoleCreateSchema):
 @router.delete("/roles/{id}", response={204: None}, auth=JWTAuth())
 @router.delete("/roles/{id}/", response={204: None}, auth=JWTAuth())
 def delete_role(request, id: UUID):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives cannot manage roles.")
     role = Role.objects.filter(id=id, organization=request.user.organization).first()
     if not role:
         raise HttpError(404, "Role not found.")
@@ -357,6 +375,8 @@ def delete_role(request, id: UUID):
 @router.get("/dashboard-metrics/", auth=JWTAuth())
 def get_dashboard_metrics(request):
     user = request.user
+    if user.role != 'ADMIN':
+        raise HttpError(403, "Access restricted. Summary Analytics is reserved for Administrators only.")
     org = user.organization
     from apps.crm.models import Deal, Contact, Project
     from apps.planning.models import Task, Activity

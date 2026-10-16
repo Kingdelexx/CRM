@@ -994,6 +994,8 @@ def delete_project(request, id: UUID):
 @settings_router.get("/lifecycle", response=OrganizationLifecycleSettingsSchema)
 @settings_router.get("/lifecycle/", response=OrganizationLifecycleSettingsSchema)
 def get_lifecycle_settings(request):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives do not have access to Organization Settings.")
     org = request.user.organization
     return {
         "lead_lifecycle_timer_enabled": org.lead_lifecycle_timer_enabled,
@@ -1003,6 +1005,8 @@ def get_lifecycle_settings(request):
 @settings_router.put("/lifecycle", response=OrganizationLifecycleSettingsSchema)
 @settings_router.put("/lifecycle/", response=OrganizationLifecycleSettingsSchema)
 def update_lifecycle_settings(request, data: OrganizationLifecycleSettingsSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives do not have access to Organization Settings.")
     org = request.user.organization
     org.lead_lifecycle_timer_enabled = data.lead_lifecycle_timer_enabled
     org.default_lead_lifecycle_days = data.default_lead_lifecycle_days
@@ -1015,11 +1019,15 @@ def update_lifecycle_settings(request, data: OrganizationLifecycleSettingsSchema
 @settings_router.get("/lifecycle-rules", response=List[LeadLifecycleRuleSchema])
 @settings_router.get("/lifecycle-rules/", response=List[LeadLifecycleRuleSchema])
 def list_lifecycle_rules(request):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives do not have access to Organization Settings.")
     return LeadLifecycleRule.objects.filter(organization=request.user.organization)
 
 @settings_router.post("/lifecycle-rules", response={201: LeadLifecycleRuleSchema})
 @settings_router.post("/lifecycle-rules/", response={201: LeadLifecycleRuleSchema})
 def create_lifecycle_rule(request, data: LeadLifecycleRuleCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives do not have access to Organization Settings.")
     rule = LeadLifecycleRule.objects.create(
         organization=request.user.organization,
         **data.dict()
@@ -1029,6 +1037,8 @@ def create_lifecycle_rule(request, data: LeadLifecycleRuleCreateSchema):
 @settings_router.put("/lifecycle-rules/{id}", response=LeadLifecycleRuleSchema)
 @settings_router.put("/lifecycle-rules/{id}/", response=LeadLifecycleRuleSchema)
 def update_lifecycle_rule(request, id: UUID, data: LeadLifecycleRuleCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives do not have access to Organization Settings.")
     rule = LeadLifecycleRule.objects.filter(id=id, organization=request.user.organization).first()
     if not rule:
         raise HttpError(404, "Rule not found.")
@@ -1039,6 +1049,8 @@ def update_lifecycle_rule(request, id: UUID, data: LeadLifecycleRuleCreateSchema
 
 @settings_router.delete("/lifecycle-rules/{id}", response={204: None})
 def delete_lifecycle_rule(request, id: UUID):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives do not have access to Organization Settings.")
     rule = LeadLifecycleRule.objects.filter(id=id, organization=request.user.organization).first()
     if not rule:
         raise HttpError(404, "Rule not found.")
@@ -1179,6 +1191,8 @@ def list_custom_modules(request):
 @custom_modules_router.post("", response={201: CustomModuleSchema})
 @custom_modules_router.post("/", response={201: CustomModuleSchema})
 def create_custom_module(request, data: CustomModuleCreateSchema):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives do not have permission to create custom modules.")
     try:
         cm = CustomModule.objects.create(
             organization=request.user.organization,
@@ -1199,6 +1213,8 @@ def get_custom_module(request, id: UUID):
 @custom_modules_router.delete("/{id}", response={204: None})
 @custom_modules_router.delete("/{id}/", response={204: None})
 def delete_custom_module(request, id: UUID):
+    if request.user.role == 'SALES_REP':
+        raise HttpError(403, "Access restricted. Sales Representatives do not have permission to delete custom modules.")
     cm = CustomModule.objects.filter(id=id, organization=request.user.organization).first()
     if not cm:
         raise HttpError(404, "Custom module not found.")

@@ -15,7 +15,8 @@ import {
   TrendingUp,
   Activity as ActivityIcon,
   CheckSquare,
-  Users
+  Users,
+  ShieldAlert
 } from 'lucide-react'
 
 export default function SummaryDashboard() {
@@ -33,13 +34,28 @@ export default function SummaryDashboard() {
     }
   })
 
+  // Check user role
+  const userRole = me?.role || (() => {
+    const saved = localStorage.getItem('current_user')
+    if (saved) {
+      try {
+        return JSON.parse(saved)?.role
+      } catch {
+        return null
+      }
+    }
+    return null
+  })()
+  const isAdmin = userRole === 'ADMIN'
+
   // 2. Fetch role-tailored dashboard metrics
   const { data: metrics, isLoading: isLoadingMetrics } = useQuery<DashboardMetrics>({
     queryKey: ['dashboard-metrics'],
     queryFn: async () => {
       const response = await apiClient.get<DashboardMetrics>('/accounts/dashboard-metrics')
       return response.data
-    }
+    },
+    enabled: isAdmin
   })
 
   // 3. Fetch Deals for chart visualization
@@ -50,7 +66,8 @@ export default function SummaryDashboard() {
         params: { limit: 1000 }
       })
       return response.data
-    }
+    },
+    enabled: isAdmin
   })
 
   // 4. Fetch Stages
@@ -59,7 +76,8 @@ export default function SummaryDashboard() {
     queryFn: async () => {
       const response = await apiClient.get<Stage[]>('/stages/')
       return response.data
-    }
+    },
+    enabled: isAdmin
   })
 
   // 5. Fetch Tasks for dashboard status checklist
@@ -73,8 +91,23 @@ export default function SummaryDashboard() {
         res = await apiClient.get<Task[]>('/tasks/')
       }
       return Array.isArray(res.data) ? res.data : (res.data as any).items || []
-    }
+    },
+    enabled: isAdmin
   })
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-[400px] flex flex-col items-center justify-center text-center p-8 bg-white border border-slate-200 rounded-2xl shadow-sm">
+        <div className="h-12 w-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mb-4 border border-red-200">
+          <ShieldAlert className="h-6 w-6" />
+        </div>
+        <h2 className="text-lg font-bold text-slate-800">Access Restricted</h2>
+        <p className="text-sm text-slate-500 mt-1 max-w-md">
+          Summary Analytics is reserved for Administrators only. Sales Representatives and Managers cannot access this view.
+        </p>
+      </div>
+    )
+  }
 
   if (isLoadingMetrics || isLoadingDeals || isLoadingStages) {
     return (
@@ -118,10 +151,10 @@ export default function SummaryDashboard() {
   })
 
   // Determine user role badge info
-  const userRole = me?.role || 'SALES_REP'
-  const isEmployee = metrics?.mode === 'EMPLOYEE' || userRole === 'SALES_REP'
-  const isManager = metrics?.mode === 'MANAGER' || userRole === 'MANAGER'
-  const isBoss = metrics?.mode === 'BOSS' || userRole === 'ADMIN'
+  const effectiveRole = userRole || 'SALES_REP'
+  const isEmployee = metrics?.mode === 'EMPLOYEE' || effectiveRole === 'SALES_REP'
+  const isManager = metrics?.mode === 'MANAGER' || effectiveRole === 'MANAGER'
+  const isBoss = metrics?.mode === 'BOSS' || effectiveRole === 'ADMIN'
 
   return (
     <div className="space-y-8 select-none">

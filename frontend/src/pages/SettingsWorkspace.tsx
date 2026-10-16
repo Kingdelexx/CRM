@@ -33,13 +33,37 @@ export default function SettingsWorkspace() {
   // Settings Tab Selector: 'general' | 'hierarchy' | 'roles' | 'members' | 'lifecycle' | 'modules'
   const [activeTab, setActiveTab] = useState<'general' | 'hierarchy' | 'roles' | 'members' | 'lifecycle' | 'modules'>('general')
 
+  // User identity and role verification
+  const { data: me, refetch: refetchMe } = useQuery<User>({
+    queryKey: ['settings-me'],
+    queryFn: async () => {
+      const response = await apiClient.get<User>('/accounts/me')
+      return response.data
+    }
+  })
+
+  const userRole = me?.role || (() => {
+    const saved = localStorage.getItem('current_user')
+    if (saved) {
+      try {
+        return JSON.parse(saved)?.role
+      } catch {
+        return null
+      }
+    }
+    return null
+  })()
+  const isSalesRep = userRole === 'SALES_REP'
+  const isUserAdmin = userRole === 'ADMIN'
+
   // Lifecycle settings query and mutations
   const { data: lifecycleSettings, refetch: refetchLifecycleSettings } = useQuery<OrganizationLifecycleSettings>({
     queryKey: ['settings-lifecycle-settings'],
     queryFn: async () => {
       const response = await apiClient.get<OrganizationLifecycleSettings>('/crm-settings/lifecycle')
       return response.data
-    }
+    },
+    enabled: !isSalesRep
   })
 
   const [lifecycleSettingsForm, setLifecycleSettingsForm] = useState<OrganizationLifecycleSettings>({
@@ -70,7 +94,8 @@ export default function SettingsWorkspace() {
     queryFn: async () => {
       const response = await apiClient.get<LeadLifecycleRule[]>('/crm-settings/lifecycle-rules')
       return response.data
-    }
+    },
+    enabled: !isSalesRep
   })
 
   const createRuleMutation = useMutation({
@@ -98,7 +123,8 @@ export default function SettingsWorkspace() {
     queryFn: async () => {
       const response = await apiClient.get<Stage[]>('/stages/')
       return response.data
-    }
+    },
+    enabled: !isSalesRep
   })
 
   // Custom list of modules
@@ -107,7 +133,8 @@ export default function SettingsWorkspace() {
     queryFn: async () => {
       const response = await apiClient.get<CustomModule[]>('/custom-modules/')
       return response.data
-    }
+    },
+    enabled: !isSalesRep
   })
 
   const createModuleMutation = useMutation({
@@ -171,15 +198,6 @@ export default function SettingsWorkspace() {
     manager_id: ''
   })
   
-  // Organization Editing Form State loaded from request.user
-  const { data: me, refetch: refetchMe } = useQuery<User>({
-    queryKey: ['settings-me'],
-    queryFn: async () => {
-      const response = await apiClient.get<User>('/accounts/me')
-      return response.data
-    }
-  })
-
   // States for general org edits
   const [orgForm, setOrgForm] = useState({
     name: '',
@@ -229,7 +247,8 @@ export default function SettingsWorkspace() {
     queryFn: async () => {
       const response = await apiClient.get<User[]>('/accounts/')
       return response.data
-    }
+    },
+    enabled: !isSalesRep
   })
 
   const { data: departments = [], refetch: refetchDepts } = useQuery<Department[]>({
@@ -237,7 +256,8 @@ export default function SettingsWorkspace() {
     queryFn: async () => {
       const response = await apiClient.get<Department[]>('/accounts/departments')
       return response.data
-    }
+    },
+    enabled: !isSalesRep
   })
 
   const { data: teams = [], refetch: refetchTeams } = useQuery<Team[]>({
@@ -245,7 +265,8 @@ export default function SettingsWorkspace() {
     queryFn: async () => {
       const response = await apiClient.get<Team[]>('/accounts/teams')
       return response.data
-    }
+    },
+    enabled: !isSalesRep
   })
 
   const { data: roles = [], refetch: refetchRoles } = useQuery<CustomRole[]>({
@@ -253,7 +274,8 @@ export default function SettingsWorkspace() {
     queryFn: async () => {
       const response = await apiClient.get<CustomRole[]>('/accounts/roles')
       return response.data
-    }
+    },
+    enabled: !isSalesRep
   })
 
   // Mutations
@@ -408,7 +430,19 @@ export default function SettingsWorkspace() {
     onSuccess: () => refetchRoles()
   })
 
-  const isUserAdmin = me?.role === 'ADMIN'
+  if (isSalesRep) {
+    return (
+      <div className="min-h-[400px] flex flex-col items-center justify-center text-center p-8 bg-white border border-slate-200 rounded-2xl shadow-sm">
+        <div className="h-12 w-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mb-4 border border-red-200">
+          <ShieldAlert className="h-6 w-6" />
+        </div>
+        <h2 className="text-lg font-bold text-slate-800">Access Restricted</h2>
+        <p className="text-sm text-slate-500 mt-1 max-w-md">
+          Organization Settings are restricted. Sales Representatives (Staff) do not have access to Organization Settings.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 min-h-[600px]">

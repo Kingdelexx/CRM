@@ -95,7 +95,17 @@ export default function Dashboard() {
   const searchRef = useRef<HTMLDivElement>(null)
   
   // App States
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('current_user')
+    if (saved) {
+      try {
+        return JSON.parse(saved)
+      } catch {
+        return null
+      }
+    }
+    return null
+  })
   const [isLoading, setIsLoading] = useState(true)
   const [currentView, setCurrentView] = useState<DashboardView>('pipeline')
   
@@ -117,11 +127,24 @@ export default function Dashboard() {
       try {
         const response = await apiClient.get<User>('/accounts/me')
         setCurrentUser(response.data)
+        if (response.data?.role !== 'ADMIN' && currentView === 'summary') {
+          setCurrentView('pipeline')
+        }
+        if (response.data?.role === 'SALES_REP' && currentView === 'settings') {
+          setCurrentView('pipeline')
+        }
       } catch (err) {
         console.error('Failed to load user session', err)
         const saved = localStorage.getItem('current_user')
         if (saved) {
-          setCurrentUser(JSON.parse(saved))
+          const parsed = JSON.parse(saved)
+          setCurrentUser(parsed)
+          if (parsed?.role !== 'ADMIN' && currentView === 'summary') {
+            setCurrentView('pipeline')
+          }
+          if (parsed?.role === 'SALES_REP' && currentView === 'settings') {
+            setCurrentView('pipeline')
+          }
         } else {
           navigate('/login')
         }
@@ -130,7 +153,7 @@ export default function Dashboard() {
       }
     }
     fetchUser()
-  }, [navigate])
+  }, [navigate, currentView])
 
   // Close dropdown on click-away
   useEffect(() => {
@@ -233,6 +256,12 @@ export default function Dashboard() {
   }
 
   const handleNavClick = (view: DashboardView) => {
+    if (view === 'summary' && currentUser?.role !== 'ADMIN') {
+      return;
+    }
+    if (view === 'settings' && currentUser?.role === 'SALES_REP') {
+      return;
+    }
     setCurrentView(view);
     setIsMobileSidebarOpen(false);
   };
@@ -365,19 +394,21 @@ export default function Dashboard() {
                 </span>
               </div>
               
-              <div className="py-1 space-y-0.5">
-                <button
-                  onClick={() => {
-                    handleNavClick('settings');
-                    setIsProfileDropdownOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-[#1A202C] hover:bg-slate-100 rounded cursor-pointer text-left focus:outline-none"
-                  style={{ color: '#1A202C' }}
-                >
-                  <Settings className="h-3.5 w-3.5 text-[#1A202C]" />
-                  <span>Org Settings</span>
-                </button>
-              </div>
+              {currentUser?.role !== 'SALES_REP' && (
+                <div className="py-1 space-y-0.5">
+                  <button
+                    onClick={() => {
+                      handleNavClick('settings');
+                      setIsProfileDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-[#1A202C] hover:bg-slate-100 rounded cursor-pointer text-left focus:outline-none"
+                    style={{ color: '#1A202C' }}
+                  >
+                    <Settings className="h-3.5 w-3.5 text-[#1A202C]" />
+                    <span>Org Settings</span>
+                  </button>
+                </div>
+              )}
 
               <button
                 onClick={handleLogout}
@@ -606,7 +637,7 @@ export default function Dashboard() {
 
         {/* Scrollable View Area */}
         <div className="flex-1 p-4 sm:p-8 overflow-y-auto bg-[#F8FAFC]">
-          {currentView === 'summary' && <SummaryDashboard />}
+          {currentView === 'summary' && currentUser?.role === 'ADMIN' && <SummaryDashboard />}
           {currentView === 'leads' && <LeadsWorkspace />}
           {currentView === 'partners' && <PartnersWorkspace />}
           {(currentView === 'shipments' || currentView === 'escalations') && (
@@ -621,7 +652,7 @@ export default function Dashboard() {
           {currentView === 'whatsapp' && <WhatsAppWorkspace />}
           {currentView === 'automations' && <AutomationsWorkspace />}
           {currentView === 'approvals' && <ApprovalsWorkspace />}
-          {currentView === 'settings' && <SettingsWorkspace />}
+          {currentView === 'settings' && currentUser?.role !== 'SALES_REP' && <SettingsWorkspace />}
           {currentView === 'calendar' && <CalendarWorkspace />}
           {currentView === 'emails' && <EmailSyncWorkspace />}
           {currentView === 'invoices' && <InvoicesWorkspace />}
