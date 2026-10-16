@@ -654,6 +654,24 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   })
 
+  // Delete Shipment Mutation
+  const deleteShipmentMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiClient.delete(`/shipments/${id}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      setIsDetailDrawerOpen(false)
+      setSelectedShipment(null)
+      setIsEditShipmentModalOpen(false)
+      setEditingShipment(null)
+    },
+    onError: (err: any) => {
+      alert(`Failed to delete shipment: ${err?.response?.data?.detail || err.message}`)
+    }
+  })
+
   const handleOpenEditShipmentModal = (shipment: Shipment) => {
     setEditingShipment(shipment)
     setFormData({
@@ -781,6 +799,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       queryClient.invalidateQueries({ queryKey: ['shipment-escalations'] })
       setIsEscalationDrawerOpen(false)
       setSelectedEscalation(null)
+      setIsEditEscalationModalOpen(false)
+      setEditingEscalation(null)
+    },
+    onError: (err: any) => {
+      alert(`Failed to delete escalation: ${err?.response?.data?.detail || err.message}`)
     }
   })
 
@@ -1480,6 +1503,19 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           >
             <Edit3 className="h-4 w-4" />
           </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              const trackingOrInv = info.row.original.invoice_number || info.row.original.tracking_id || 'this shipment'
+              if (confirm(`Are you sure you want to delete shipment "${trackingOrInv}"? This action cannot be undone.`)) {
+                deleteShipmentMutation.mutate(info.row.original.id)
+              }
+            }}
+            title="Delete Shipment"
+            className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 rounded transition-colors cursor-pointer"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
         </div>
       )
     }
@@ -1593,6 +1629,18 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-amber-400 rounded transition-colors cursor-pointer"
           >
             <Edit3 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              if (confirm('Are you sure you want to delete this escalation record? This action cannot be undone.')) {
+                deleteEscalationMutation.mutate(info.row.original.id)
+              }
+            }}
+            title="Delete Escalation"
+            className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 rounded transition-colors cursor-pointer"
+          >
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       )
@@ -2941,6 +2989,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 </button>
                 <button
                   onClick={() => {
+                    const trackingOrInv = selectedShipment.invoice_number || selectedShipment.tracking_id || 'this shipment'
+                    if (confirm(`Are you sure you want to delete shipment "${trackingOrInv}"? This action cannot be undone.`)) {
+                      deleteShipmentMutation.mutate(selectedShipment.id)
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </button>
+                <button
+                  onClick={() => {
                     setIsDetailDrawerOpen(false)
                     setSelectedShipment(null)
                   }}
@@ -3114,6 +3173,31 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Action Footer */}
+            <div className="pt-4 border-t border-zinc-900 flex justify-between items-center">
+              <button
+                onClick={() => {
+                  const trackingOrInv = selectedShipment.invoice_number || selectedShipment.tracking_id || 'this shipment'
+                  if (confirm(`Are you sure you want to delete shipment "${trackingOrInv}"? This action cannot be undone.`)) {
+                    deleteShipmentMutation.mutate(selectedShipment.id)
+                  }
+                }}
+                className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete Shipment
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsDetailDrawerOpen(false)
+                  setSelectedShipment(null)
+                }}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-xs font-semibold cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -3399,6 +3483,16 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                 >
                   <Edit3 className="h-3.5 w-3.5" /> Edit
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm('Are you sure you want to delete this escalation record? This action cannot be undone.')) {
+                      deleteEscalationMutation.mutate(selectedEscalation.id)
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
                 </button>
                 <button
                   onClick={() => {
@@ -4338,7 +4432,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   </button>
                 )}
 
-                <div className="flex gap-3">
+                <div className="flex items-center gap-3">
+                  {editingShipment && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trackingOrInv = editingShipment.invoice_number || editingShipment.tracking_id || 'this shipment'
+                        if (confirm(`Are you sure you want to delete shipment "${trackingOrInv}"? This action cannot be undone.`)) {
+                          deleteShipmentMutation.mutate(editingShipment.id)
+                        }
+                      }}
+                      className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -4493,27 +4601,40 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-zinc-900 flex justify-end gap-3">
+              <div className="pt-4 border-t border-zinc-900 flex justify-between items-center">
                 <button
                   type="button"
                   onClick={() => {
-                    setIsEditEscalationModalOpen(false)
-                    setEditingEscalation(null)
+                    if (confirm('Are you sure you want to delete this escalation record? This action cannot be undone.')) {
+                      deleteEscalationMutation.mutate(editingEscalation.id)
+                    }
                   }}
-                  className="px-4 py-2 rounded-lg border border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs font-semibold cursor-pointer"
+                  className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
-                  Cancel
+                  <Trash2 className="h-3.5 w-3.5" /> Delete Escalation
                 </button>
-                <button
-                  type="submit"
-                  disabled={updateEscalationMutation.isPending}
-                  className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-lg shadow-amber-600/20 cursor-pointer flex items-center gap-2 disabled:opacity-50"
-                >
-                  {updateEscalationMutation.isPending && (
-                    <span className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin"></span>
-                  )}
-                  Update Escalation
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditEscalationModalOpen(false)
+                      setEditingEscalation(null)
+                    }}
+                    className="px-4 py-2 rounded-lg border border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs font-semibold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updateEscalationMutation.isPending}
+                    className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold shadow-lg shadow-amber-600/20 cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {updateEscalationMutation.isPending && (
+                      <span className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin"></span>
+                    )}
+                    Update Escalation
+                  </button>
+                </div>
               </div>
             </form>
           </div>
