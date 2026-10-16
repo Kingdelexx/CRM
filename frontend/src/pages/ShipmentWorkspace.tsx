@@ -318,6 +318,21 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const orgSeaShippingRate = Number(meData?.organization?.sea_shipping_rate) || 0
   const orgPromoRate = Number(meData?.organization?.promo_rate) || 0
 
+  // Check if current user is an admin
+  const isAdmin = useMemo(() => {
+    if (meData?.role) return meData.role === 'ADMIN'
+    const saved = localStorage.getItem('current_user')
+    if (saved) {
+      try {
+        const u = JSON.parse(saved)
+        return u?.role === 'ADMIN'
+      } catch {
+        return false
+      }
+    }
+    return false
+  }, [meData?.role])
+
   // Set default "Recorded By (Staff)" to current logged-in account owner
   useEffect(() => {
     if (meData?.id) {
@@ -1921,16 +1936,18 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       ) : (
         <div className="space-y-6">
           {/* METRICS CARDS BANNER */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
-              <div>
-                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Shipments</span>
-                <span className="text-2xl font-black text-white mt-1 block">{metrics.total}</span>
+          <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-4' : 'sm:grid-cols-2'} gap-4`}>
+            {isAdmin && (
+              <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Shipments</span>
+                  <span className="text-2xl font-black text-white mt-1 block">{metrics.total}</span>
+                </div>
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <Package className="h-5 w-5" />
+                </div>
               </div>
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                <Package className="h-5 w-5" />
-              </div>
-            </div>
+            )}
 
             <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
               <div>
@@ -1952,21 +1969,23 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               </div>
             </div>
 
-            <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
-              <div>
-                <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Revenue</span>
-                <span className="text-2xl font-black text-emerald-400 mt-1 block">
-                  NGN {metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0 })}
-                </span>
+            {isAdmin && (
+              <div className="bg-zinc-950/60 border border-zinc-900 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wider block">Total Revenue</span>
+                  <span className="text-2xl font-black text-emerald-400 mt-1 block">
+                    NGN {metrics.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <DollarSign className="h-5 w-5" />
+                </div>
               </div>
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                <DollarSign className="h-5 w-5" />
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* 24-HOUR STAFF SHIPMENT CREATION LEADERBOARD (Visible to Admins & Managers Only) */}
-          {(meData?.role === 'ADMIN' || meData?.role === 'MANAGER') && (
+          {/* 24-HOUR STAFF SHIPMENT CREATION LEADERBOARD (Visible to Admins Only) */}
+          {isAdmin && (
             <div className="bg-black border border-yellow-500/30 rounded-2xl p-5 shadow-2xl space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-yellow-500/20 pb-3">
                 <div className="flex items-center gap-2.5">

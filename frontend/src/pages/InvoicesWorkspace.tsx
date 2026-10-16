@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Invoice, Receipt, Contact } from '../types/crm';
+import type { Invoice, Receipt, Contact, User } from '../types/crm';
 import { apiClient as api } from '../api/client';
 import { MintanaInvoiceReceiptModal } from '../components/MintanaInvoiceReceiptModal';
 import { 
@@ -8,6 +8,20 @@ import {
 } from 'lucide-react';
 
 export const InvoicesWorkspace: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('current_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const isAdmin = currentUser?.role === 'ADMIN';
+
   const [activeTab, setActiveTab] = useState<'invoices' | 'receipts'>('invoices');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -111,11 +125,15 @@ export const InvoicesWorkspace: React.FC = () => {
         setContacts(Array.isArray(raw) ? raw : []);
       }
       if (meRes.status === 'fulfilled') {
-        if (meRes.value.data?.organization?.gbp_to_ngn_rate) {
-          setExchangeRate(Number(meRes.value.data.organization.gbp_to_ngn_rate) || 2000);
+        const u = meRes.value.data;
+        if (u) {
+          setCurrentUser(u);
         }
-        if (meRes.value.data?.organization?.per_kg_price !== undefined) {
-          setPerKgPrice(Number(meRes.value.data.organization.per_kg_price) || 0);
+        if (u?.organization?.gbp_to_ngn_rate) {
+          setExchangeRate(Number(u.organization.gbp_to_ngn_rate) || 2000);
+        }
+        if (u?.organization?.per_kg_price !== undefined) {
+          setPerKgPrice(Number(u.organization.per_kg_price) || 0);
         }
       }
     } catch (err) {
@@ -557,31 +575,34 @@ export const InvoicesWorkspace: React.FC = () => {
         </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
-          <div className="p-3 bg-sky-50 text-sky-600 rounded-xl">
-            <FileText className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Invoiced (NGN)</p>
-            <h3 className="text-xl font-bold text-slate-900 mt-0.5">
-              ₦{totalInvoicedNgn.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </h3>
-          </div>
-        </div>
+      <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2'} gap-4`}>
+        {isAdmin && (
+          <>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+              <div className="p-3 bg-sky-50 text-sky-600 rounded-xl">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Invoiced (NGN)</p>
+                <h3 className="text-xl font-bold text-slate-900 mt-0.5">
+                  ₦{totalInvoicedNgn.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </h3>
+              </div>
+            </div>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
-          <div className="p-3 bg-blue-50 text-blue-900 rounded-xl">
-            <DollarSign className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Invoiced (GBP)</p>
-            <h3 className="text-xl font-bold text-slate-900 mt-0.5">
-              £{totalInvoicedGbp.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </h3>
-          </div>
-        </div>
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+              <div className="p-3 bg-blue-50 text-blue-900 rounded-xl">
+                <DollarSign className="w-6 h-6" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Invoiced (GBP)</p>
+                <h3 className="text-xl font-bold text-slate-900 mt-0.5">
+                  £{totalInvoicedGbp.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </h3>
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
           <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
