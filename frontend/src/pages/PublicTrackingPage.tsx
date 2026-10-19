@@ -17,9 +17,9 @@ import {
 } from 'lucide-react'
 import axios from 'axios'
 import type { PublicTrackingResponse } from '@/types/tracking'
+import { API_BASE } from '@/api/client'
 
 // Unauthenticated axios instance – purely for public tracking, no JWT interceptors
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://mintana-crm-backend.onrender.com').replace(/\/$/, '')
 const publicAxios = axios.create({
   baseURL: `${API_BASE}/api`,
   headers: { 'Content-Type': 'application/json' },

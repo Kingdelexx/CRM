@@ -636,7 +636,7 @@ export default function Dashboard() {
         </header>
 
         {/* Scrollable View Area */}
-        <div className="flex-1 p-4 sm:p-8 overflow-y-auto bg-[#F8FAFC]">
+        <div className={`flex-1 ${currentView === 'chat' ? 'p-2 sm:p-6 lg:p-8' : 'p-4 sm:p-8'} overflow-y-auto bg-[#F8FAFC]`}>
           {currentView === 'summary' && currentUser?.role === 'ADMIN' && <SummaryDashboard />}
           {currentView === 'leads' && <LeadsWorkspace />}
           {currentView === 'partners' && <PartnersWorkspace />}

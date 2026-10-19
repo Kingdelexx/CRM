@@ -155,6 +155,12 @@ def invite_user(request, data: UserCreateSchema):
     # Dispatch welcome email with assigned temporary credentials & change password notice
     dispatch_async(send_new_staff_welcome_email, user, assigned_password, request.user)
 
+    if user.role == 'ADMIN':
+        from apps.chat.models import Conversation, ConversationParticipant
+        all_conv_ids = Conversation.objects.filter(organization=request.user.organization).values_list('id', flat=True)
+        for cid in all_conv_ids:
+            ConversationParticipant.objects.get_or_create(conversation_id=cid, user=user)
+
     return 201, user
 
 @router.delete("/users/{user_id}", response={204: None}, auth=JWTAuth())
@@ -217,6 +223,12 @@ def update_user(request, user_id: UUID, data: UserUpdateSchema):
 
     if password_updated:
         dispatch_async(send_staff_password_updated_email, user, payload['password'], request.user)
+
+    if user.role == 'ADMIN':
+        from apps.chat.models import Conversation, ConversationParticipant
+        all_conv_ids = Conversation.objects.filter(organization=request.user.organization).values_list('id', flat=True)
+        for cid in all_conv_ids:
+            ConversationParticipant.objects.get_or_create(conversation_id=cid, user=user)
 
     return user
 

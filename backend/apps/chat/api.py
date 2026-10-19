@@ -35,6 +35,22 @@ def _format_user_minimal(user: Optional[User]) -> Optional[UserMinimalSchema]:
     )
 
 
+def ensure_admins_in_conversation(conversation: Conversation):
+    """
+    Ensure all active administrators within the organization are participants in the conversation.
+    """
+    admins = User.objects.filter(
+        organization=conversation.organization,
+        role='ADMIN',
+        is_active=True
+    )
+    for admin in admins:
+        ConversationParticipant.objects.get_or_create(
+            conversation=conversation,
+            user=admin
+        )
+
+
 def _serialize_conversation(conversation: Conversation, current_user: User) -> ConversationSchema:
     # Fetch participants
     participants_qs = conversation.participants.select_related('user').all()
@@ -55,6 +71,41 @@ def _serialize_conversation(conversation: Conversation, current_user: User) -> C
                 user=_format_user_minimal(p.user)
             )
         )
+
+    # Compute contextual title for DIRECT chats
+    title = conversation.title
+    if conversation.type == Conversation.DIRECT:
+        party_ids = []
+        if conversation.direct_key and ':' in conversation.direct_key:
+            party_ids = [pid.strip() for pid in conversation.direct_key.split(':') if pid.strip()]
+        else:
+            party_ids = [str(p.user_id) for p in participants_qs]
+
+        is_current_user_primary = str(current_user.id) in party_ids
+
+        if is_current_user_primary:
+            # Show the other direct party's name
+            other_party_id = next((pid for pid in party_ids if str(pid) != str(current_user.id)), None)
+            other_p = next((p for p in participants_qs if str(p.user_id) == str(other_party_id)), None)
+            if other_p and other_p.user:
+                full_name = f"{other_p.user.first_name or ''} {other_p.user.last_name or ''}".strip()
+                title = full_name or other_p.user.email
+            else:
+                title = "Direct Message"
+        else:
+            # Current user is an observing Admin watching this 1-on-1 chat
+            primary_participants = [p.user for p in participants_qs if str(p.user_id) in party_ids]
+            if len(primary_participants) >= 2:
+                u1, u2 = primary_participants[0], primary_participants[1]
+                name1 = f"{u1.first_name or ''} {u1.last_name or ''}".strip() or u1.email
+                name2 = f"{u2.first_name or ''} {u2.last_name or ''}".strip() or u2.email
+                title = f"{name1} & {name2} (1-on-1)"
+            elif len(primary_participants) == 1:
+                u1 = primary_participants[0]
+                name1 = f"{u1.first_name or ''} {u1.last_name or ''}".strip() or u1.email
+                title = f"{name1} (1-on-1)"
+            else:
+                title = "Direct Message"
 
     # Unread messages count for current user
     unread_qs = conversation.messages.exclude(sender_id=current_user.id)
@@ -79,7 +130,7 @@ def _serialize_conversation(conversation: Conversation, current_user: User) -> C
 
     return ConversationSchema(
         id=conversation.id,
-        title=conversation.title,
+        title=title,
         type=conversation.type,
         created_by_id=conversation.created_by_id,
         created_at=conversation.created_at,
@@ -96,15 +147,30 @@ def list_conversations(request):
     """
     List all active conversations for the authenticated user
     with unread message counts and the latest message preview.
+    If the user is an ADMIN, ensure they are automatically enrolled in
+    all existing conversations in their organization.
     """
+    org = request.user.organization
+
+    if request.user.role == 'ADMIN':
+        all_conv_ids = Conversation.objects.filter(organization=org).values_list('id', flat=True)
+        missing_conv_ids = all_conv_ids.exclude(
+            participants__user=request.user
+        )
+        if missing_conv_ids.exists():
+            ConversationParticipant.objects.bulk_create([
+                ConversationParticipant(conversation_id=cid, user=request.user)
+                for cid in missing_conv_ids
+            ], ignore_conflicts=True)
+
     user_conversations_ids = ConversationParticipant.objects.filter(
         user=request.user,
-        conversation__organization=request.user.organization
+        conversation__organization=org
     ).values_list('conversation_id', flat=True)
 
     conversations = Conversation.objects.filter(
         id__in=user_conversations_ids,
-        organization=request.user.organization
+        organization=org
     ).prefetch_related('participants__user', 'messages__sender').order_by('-updated_at')
 
     return [_serialize_conversation(c, request.user) for c in conversations]
@@ -115,6 +181,7 @@ def list_conversations(request):
 def create_or_get_conversation(request, data: CreateConversationSchema):
     """
     Create or retrieve an existing 1-on-1 direct chat, or initialize a group chat.
+    All organization admins are automatically added as participants to every conversation.
     """
     org = request.user.organization
 
@@ -122,7 +189,6 @@ def create_or_get_conversation(request, data: CreateConversationSchema):
         # Determine target recipient ID
         target_recipient_id = data.recipient_id
         if not target_recipient_id and data.participant_ids:
-            # Pick first participant that is not current user
             for pid in data.participant_ids:
                 if str(pid) != str(request.user.id):
                     target_recipient_id = pid
@@ -135,27 +201,44 @@ def create_or_get_conversation(request, data: CreateConversationSchema):
         if not recipient:
             raise HttpError(404, "Recipient user not found in your organization.")
 
-        # Check if 1-on-1 direct chat already exists between request.user and recipient
+        direct_key = f"{min(str(request.user.id), str(recipient.id))}:{max(str(request.user.id), str(recipient.id))}"
+
+        # 1. Search by canonical direct_key
         existing = Conversation.objects.filter(
             organization=org,
-            type=Conversation.DIRECT
-        ).filter(
-            participants__user=request.user
-        ).filter(
-            participants__user=recipient
-        ).distinct().first()
+            type=Conversation.DIRECT,
+            direct_key=direct_key
+        ).first()
+
+        # 2. Backward compatibility search for older direct chats without direct_key
+        if not existing:
+            existing = Conversation.objects.filter(
+                organization=org,
+                type=Conversation.DIRECT
+            ).filter(
+                participants__user=request.user
+            ).filter(
+                participants__user=recipient
+            ).distinct().first()
+
+            if existing and not existing.direct_key:
+                existing.direct_key = direct_key
+                existing.save(update_fields=['direct_key'])
 
         if existing:
+            ensure_admins_in_conversation(existing)
             return 200, _serialize_conversation(existing, request.user)
 
         # Create new DIRECT conversation
         conv = Conversation.objects.create(
             organization=org,
             type=Conversation.DIRECT,
+            direct_key=direct_key,
             created_by=request.user
         )
-        ConversationParticipant.objects.create(conversation=conv, user=request.user)
-        ConversationParticipant.objects.create(conversation=conv, user=recipient)
+        ConversationParticipant.objects.get_or_create(conversation=conv, user=request.user)
+        ConversationParticipant.objects.get_or_create(conversation=conv, user=recipient)
+        ensure_admins_in_conversation(conv)
 
         return 201, _serialize_conversation(conv, request.user)
 
@@ -171,7 +254,7 @@ def create_or_get_conversation(request, data: CreateConversationSchema):
         )
 
         # Always add creator
-        ConversationParticipant.objects.create(conversation=conv, user=request.user)
+        ConversationParticipant.objects.get_or_create(conversation=conv, user=request.user)
 
         # Add additional participants
         if data.participant_ids:
@@ -182,6 +265,9 @@ def create_or_get_conversation(request, data: CreateConversationSchema):
 
             for u in other_users:
                 ConversationParticipant.objects.get_or_create(conversation=conv, user=u)
+
+        # Ensure all admins in organization are automatically in the group chat
+        ensure_admins_in_conversation(conv)
 
         return 201, _serialize_conversation(conv, request.user)
 
@@ -200,6 +286,12 @@ def list_messages(request, id: UUID, limit: int = 50, offset: int = 0):
         user=request.user,
         conversation__organization=request.user.organization
     ).exists()
+
+    if not is_participant and request.user.role == 'ADMIN':
+        conv = Conversation.objects.filter(id=id, organization=request.user.organization).first()
+        if conv:
+            ConversationParticipant.objects.get_or_create(conversation=conv, user=request.user)
+            is_participant = True
 
     if not is_participant:
         raise HttpError(404, "Conversation not found or access denied.")
@@ -240,6 +332,11 @@ def send_message(request, id: UUID, data: CreateChatMessageSchema):
         user=request.user,
         conversation__organization=request.user.organization
     ).first()
+
+    if not participant and request.user.role == 'ADMIN':
+        conv = Conversation.objects.filter(id=id, organization=request.user.organization).first()
+        if conv:
+            participant, _ = ConversationParticipant.objects.get_or_create(conversation=conv, user=request.user)
 
     if not participant:
         raise HttpError(404, "Conversation not found or access denied.")

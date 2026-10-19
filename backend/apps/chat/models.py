@@ -20,6 +20,7 @@ class Conversation(TimeStampedModel):
         related_name='conversations'
     )
     title = models.CharField(max_length=255, null=True, blank=True)
+    direct_key = models.CharField(max_length=120, null=True, blank=True, db_index=True)
     type = models.CharField(
         max_length=20,
         choices=TYPE_CHOICES,
