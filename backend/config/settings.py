@@ -125,10 +125,16 @@ AUTHENTICATION_BACKENDS = [
 CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
     "http://localhost:5173",
     "http://localhost:3000",
+    "https://mintana.online",
+    "https://www.mintana.online",
 ])
 CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS', default=False)
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[
+    "https://mintana.online",
+    "https://www.mintana.online",
+    "https://api.mintana.online",
+])
 
 # Ninja JWT Token settings
 NINJA_JWT = {

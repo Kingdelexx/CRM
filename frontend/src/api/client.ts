@@ -1,6 +1,13 @@
 import axios from 'axios'
 
-export const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+// Automatically resolve to https://api.mintana.online when running on mintana.online if build-time env var is omitted
+const defaultApiUrl =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'mintana.online' || window.location.hostname === 'www.mintana.online')
+    ? 'https://api.mintana.online'
+    : ''
+
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || defaultApiUrl).replace(/\/$/, '')
 
 // Axios client mapping to backend API
 export const apiClient = axios.create({
