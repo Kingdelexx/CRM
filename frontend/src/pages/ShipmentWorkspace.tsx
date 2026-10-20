@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import type { Shipment, Invoice, Contact, User, ShipmentEscalation, EscalationType, EscalationPriority, EscalationStatus, LogisticsItem, LogisticsService } from '@/types/crm'
 import { MintanaInvoiceReceiptModal } from '../components/MintanaInvoiceReceiptModal'
+import ContactSearchCombobox from '../components/ContactSearchCombobox'
 import {
   useLegacyTable as useReactTable,
   getCoreRowModel
@@ -2239,23 +2240,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                       <UserIcon className="h-4 w-4 text-emerald-400" /> Sender Information (Origin)
                     </h4>
+                    <ContactSearchCombobox
+                      label="Sender Contact / Search"
+                      sublabel="Auto-saves to Contacts if typed"
+                      placeholder="Type name, phone, or email to search sender..."
+                      contacts={contactsData}
+                      selectedContactId={formData.sender_id}
+                      onSelect={handleSenderSelect}
+                      onClear={() => handleSenderSelect('')}
+                    />
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-400 font-semibold flex items-center justify-between">
-                        <span>Sender Contact / Select</span>
-                        <span className="text-[10px] text-emerald-400/90 font-medium">Auto-saves to Contacts if typed</span>
-                      </label>
-                      <select
-                        value={formData.sender_id}
-                        onChange={(e) => handleSenderSelect(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer mb-1"
-                      >
-                        <option value="" className="bg-zinc-950">Select existing contact as sender...</option>
-                        {contactsData?.map(c => (
-                          <option key={c.id} value={c.id} className="bg-zinc-950">
-                            {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email || c.phone || 'Contact'})
-                          </option>
-                        ))}
-                      </select>
+                      <label className="text-xs text-zinc-400 font-semibold">Sender Name *</label>
                       <input
                         type="text"
                         name="sender_name"
@@ -2315,23 +2310,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                       <UserIcon className="h-4 w-4 text-emerald-400" /> Receiver Information (Destination)
                     </h4>
+                    <ContactSearchCombobox
+                      label="Receiver Contact / Search"
+                      sublabel="Auto-saves to Contacts if typed"
+                      placeholder="Type name, phone, or email to search receiver..."
+                      contacts={contactsData}
+                      selectedContactId={formData.receiver_id}
+                      onSelect={handleReceiverSelect}
+                      onClear={() => handleReceiverSelect('')}
+                    />
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-400 font-semibold flex items-center justify-between">
-                        <span>Receiver Contact / Select</span>
-                        <span className="text-[10px] text-emerald-400/90 font-medium">Auto-saves to Contacts if typed</span>
-                      </label>
-                      <select
-                        value={formData.receiver_id}
-                        onChange={(e) => handleReceiverSelect(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer mb-1"
-                      >
-                        <option value="" className="bg-zinc-950">Select existing contact as receiver...</option>
-                        {contactsData?.map(c => (
-                          <option key={c.id} value={c.id} className="bg-zinc-950">
-                            {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email || c.phone || 'Contact'})
-                          </option>
-                        ))}
-                      </select>
+                      <label className="text-xs text-zinc-400 font-semibold">Receiver Name *</label>
                       <input
                         type="text"
                         name="receiver_name"
@@ -3778,21 +3767,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-xs text-zinc-400 font-semibold">Select Sender Contact</label>
-                        <select
-                          value={formData.sender_id}
-                          onChange={(e) => handleSenderSelect(e.target.value)}
-                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
-                        >
-                          <option value="" className="bg-zinc-950">-- Direct Input (No Link) --</option>
-                          {contactsData?.map(c => (
-                            <option key={c.id} value={c.id} className="bg-zinc-950">
-                              {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email || c.phone || 'No Contact Info'})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <ContactSearchCombobox
+                        label="Select Sender Contact"
+                        placeholder="Search sender by name, phone, or email..."
+                        contacts={contactsData}
+                        selectedContactId={formData.sender_id}
+                        onSelect={handleSenderSelect}
+                        onClear={() => handleSenderSelect('')}
+                      />
 
                       <div className="space-y-1.5">
                         <label className="text-xs text-zinc-400 font-semibold">Sender Name</label>
@@ -3849,21 +3831,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-xs text-zinc-400 font-semibold">Select Receiver Contact</label>
-                        <select
-                          value={formData.receiver_id}
-                          onChange={(e) => handleReceiverSelect(e.target.value)}
-                          className="w-full bg-zinc-950 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
-                        >
-                          <option value="" className="bg-zinc-950">-- Direct Input (No Link) --</option>
-                          {contactsData?.map(c => (
-                            <option key={c.id} value={c.id} className="bg-zinc-950">
-                              {c.first_name} {c.last_name === '.' ? '' : c.last_name} ({c.email || c.phone || 'No Contact Info'})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <ContactSearchCombobox
+                        label="Select Receiver Contact"
+                        placeholder="Search receiver by name, phone, or email..."
+                        contacts={contactsData}
+                        selectedContactId={formData.receiver_id}
+                        onSelect={handleReceiverSelect}
+                        onClear={() => handleReceiverSelect('')}
+                      />
 
                       <div className="space-y-1.5">
                         <label className="text-xs text-zinc-400 font-semibold">Receiver Name *</label>
