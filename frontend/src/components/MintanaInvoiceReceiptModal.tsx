@@ -182,7 +182,6 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
       `${formattedAmount}\n` +
       `*Status:* ${isPaid ? '✅ PAID' : '⏳ PENDING PAYMENT'}\n` +
       `----------------------------------------\n` +
-      `Shipping Terms & SLA: ${slaUrl}\n\n` +
       `Thank you for shipping with Mintana Global Logistics!`;
 
     // No phone number — WhatsApp opens the contact picker so the user can choose any contact
@@ -449,26 +448,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
               )}
 
-              {!receipt && (
-                <div className="mb-4 bg-sky-50 border border-sky-200 rounded-lg p-2 text-left sm:text-right shadow-sm">
-                  <p className="text-[11px] font-bold text-slate-700">
-                    Please{' '}
-                    <a
-                      href={slaUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sky-600 hover:text-sky-800 underline font-extrabold inline-flex items-center space-x-1"
-                    >
-                      <span>click here</span>
-                      <ExternalLink className="w-3 h-3 inline" />
-                    </a>{' '}
-                    to view our
-                  </p>
-                  <p className="text-[11px] font-extrabold text-blue-900">
-                    Shipping Terms & Conditions & SLA
-                  </p>
-                </div>
-              )}
+
 
               {/* Bank Payment Account Card matching displayCurrency */}
               <div className="text-left text-[11px] w-full max-w-[220px] sm:ml-auto">
