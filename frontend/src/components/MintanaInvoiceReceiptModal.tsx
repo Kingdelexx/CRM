@@ -190,7 +190,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
 
   return (
     <>
-      {/* Bulletproof Print Media Stylesheet to prevent blank pages on PDF download */}
+      {/* Bulletproof Print Media Stylesheet to enforce exactly 2 pages on PDF download */}
       <style>{`
         @media print {
           /* Hide non-printable elements */
@@ -246,12 +246,19 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
             position: relative !important;
             width: 100% !important;
             margin: 0 !important;
-            padding: 10px 15px !important;
+            padding: 2px 4px !important;
             background: white !important;
             color: #0f172a !important;
             overflow: visible !important;
             box-shadow: none !important;
             border: none !important;
+          }
+
+          /* Page 1 - Prevent unwanted overflow onto page 2 */
+          #printable-invoice-page1 {
+            display: block !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
 
           .page-break {
@@ -260,8 +267,60 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
           }
 
           @page {
-            margin: 8mm;
+            margin: 8mm 10mm;
             size: A4 portrait;
+          }
+
+          /* PAGE 2: Terms & Conditions - 2 columns side by side, fitting exactly on 1 page */
+          #printable-terms-document {
+            display: block !important;
+            page-break-before: always !important;
+            break-before: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+            border: none !important;
+          }
+
+          #printable-terms-grid,
+          .terms-grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            column-gap: 12px !important;
+            row-gap: 4px !important;
+            font-size: 5.5pt !important;
+            line-height: 1.2 !important;
+          }
+
+          #printable-terms-grid > div {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+
+          #printable-terms-clause-13,
+          .terms-full-width,
+          #printable-terms-grid > div:last-child {
+            grid-column: span 2 / span 2 !important;
+          }
+
+          #printable-terms-grid h3 {
+            font-size: 6.1pt !important;
+            margin-bottom: 1px !important;
+            padding-bottom: 1px !important;
+          }
+
+          #printable-terms-grid ul {
+            margin-top: 1px !important;
+          }
+
+          #printable-terms-grid li {
+            margin-bottom: 1px !important;
+          }
+
+          table, tr, td, th {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
@@ -377,165 +436,165 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
             )}
 
             {/* Printable Document Body */}
-            <div className="p-6 sm:p-8 bg-white text-slate-800 text-sm relative pt-8" id="printable-invoice-document">
+            <div className="p-6 sm:p-8 bg-white text-slate-800 text-sm relative pt-8 print:p-0 print:pt-2" id="printable-invoice-document">
               
-              {/* Top Geometric Branding Bar */}
-              <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-sky-600 via-sky-400 to-blue-900" />
+              {/* PAGE 1: Invoice Content Wrapper */}
+              <div id="printable-invoice-page1" className="print:block">
+                {/* Top Geometric Branding Bar */}
+                <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-sky-600 via-sky-400 to-blue-900 print:h-2" />
 
-              {/* Header Layout */}
-              <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-2 mb-6">
-            
-            {/* Title & Document Info */}
-            <div className="relative">
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-blue-950 tracking-wider">
-                {receipt ? 'RECEIPT' : 'INVOICE'}
-              </h1>
+                {/* Header Layout */}
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-4 pt-2 mb-6 print:mb-2 print:pt-0.5 print:gap-2">
               
-              {isPaid && (
-                <div className="mt-2 inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300">
-                  <CheckCircle className="w-4 h-4 text-emerald-600" />
-                  <span>PAID & VERIFIED</span>
-                </div>
-              )}
-
-              <div className="mt-4 space-y-1 text-slate-600 text-xs">
-                <p><span className="font-semibold text-slate-800">Date:</span> {docDate}</p>
-                <p>
-                  <span className="font-semibold text-slate-800">
-                    No. {receipt ? 'Receipt' : 'Invoice'}:
-                  </span>{' '}
-                  <span className="font-mono text-base font-bold text-sky-700 underline decoration-sky-300 decoration-2">
-                    {docNumber}
-                  </span>
-                </p>
-                <p className="pt-2 font-semibold text-slate-800">Bill to:</p>
-                <p className="font-bold text-slate-900 text-sm">{receiverName}</p>
-              </div>
-            </div>
-
-            {/* Company Branding Logo & SLA Link & Bank Accounts */}
-            <div className="text-left sm:text-right w-full sm:max-w-md">
-              <div className="flex flex-col sm:items-end mb-3">
-                <img 
-                  src="/mintana-logo.jpg" 
-                  alt="Mintana Global Logistics Limited ...Connecting Africa..." 
-                  className="h-14 sm:h-16 md:h-20 object-contain mix-blend-multiply" 
-                />
-                <p className="text-[11px] text-slate-600 font-semibold mt-1">
-                  📞 +234 806 756 7457, +234 814 547 4526
-                </p>
-              </div>
-
-              {/* Video Link & Shipping Terms & Conditions SLA Link */}
-              {activeInvoice?.video_link && (
-                <div className="mb-2 bg-purple-50 border border-purple-200 rounded-lg p-2 text-left sm:text-right shadow-sm">
-                  <p className="text-[11px] font-bold text-slate-700">
-                    Please{' '}
-                    <a
-                      href={activeInvoice.video_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-purple-600 hover:text-purple-800 underline font-extrabold inline-flex items-center space-x-1"
-                    >
-                      <span>click here</span>
-                      <ExternalLink className="w-3 h-3 inline" />
-                    </a>{' '}
-                    to view your
-                  </p>
-                  <p className="text-[11px] font-extrabold text-purple-900">
-                    Parcel / Shipment Video
-                  </p>
-                </div>
-              )}
-
-
-
-              {/* Bank Payment Account Card matching displayCurrency */}
-              <div className="text-left text-[11px] w-full max-w-[220px] sm:ml-auto">
-                {displayCurrency === 'GBP' ? (
-                  <div className="border-2 border-sky-500 bg-white rounded overflow-hidden shadow-sm">
-                    <div className="bg-sky-600 text-white font-bold px-2 py-0.5 text-center text-[10px] tracking-wider">
-                      POUNDS PAYMENT ACCOUNT
-                    </div>
-                    <div className="p-1.5 space-y-0.5 text-slate-700">
-                      <p><span className="font-medium">Account:</span> Mintana Limited</p>
-                      <p><span className="font-medium">Sort Code:</span> 20-18-17</p>
-                      <p><span className="font-medium">Account No:</span> <strong className="text-slate-900 font-mono">53798267</strong></p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="border-2 border-blue-900 bg-white rounded overflow-hidden shadow-sm">
-                    <div className="bg-blue-900 text-white font-bold px-2 py-0.5 text-center text-[10px] tracking-wider">
-                      NAIRA PAYMENT ACCOUNT
-                    </div>
-                    <div className="p-1.5 space-y-0.5 text-slate-700">
-                      <p><span className="font-medium">Account:</span> Mintana Logistics</p>
-                      <p><span className="font-medium">Bank:</span> UBA</p>
-                      <p><span className="font-medium">Account No:</span> <strong className="text-slate-900 font-mono">1027269922</strong></p>
-                    </div>
+              {/* Title & Document Info */}
+              <div className="relative">
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-blue-950 tracking-wider print:text-2xl print:leading-tight">
+                  {receipt ? 'RECEIPT' : 'INVOICE'}
+                </h1>
+                
+                {isPaid && (
+                  <div className="mt-2 inline-flex items-center space-x-1 bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full text-xs font-bold border border-emerald-300 print:mt-1 print:px-2 print:py-0.5 print:text-[10px]">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 print:w-3.5 print:h-3.5" />
+                    <span>PAID & VERIFIED</span>
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
 
-          {/* Customer Details Table */}
-          <div className="mb-6 overflow-hidden rounded-lg border border-sky-200">
-            <div className="bg-gradient-to-r from-sky-600 to-blue-800 px-4 py-1.5 text-white font-bold text-xs uppercase tracking-wider flex justify-between">
-              <span>Customer Details</span>
-              <span>Details</span>
+                <div className="mt-4 space-y-1 text-slate-600 text-xs print:mt-1.5 print:space-y-0.5 print:text-[10px]">
+                  <p><span className="font-semibold text-slate-800">Date:</span> {docDate}</p>
+                  <p>
+                    <span className="font-semibold text-slate-800">
+                      No. {receipt ? 'Receipt' : 'Invoice'}:
+                    </span>{' '}
+                    <span className="font-mono text-base font-bold text-sky-700 underline decoration-sky-300 decoration-2 print:text-sm">
+                      {docNumber}
+                    </span>
+                  </p>
+                  <p className="pt-2 font-semibold text-slate-800 print:pt-0.5">Bill to:</p>
+                  <p className="font-bold text-slate-900 text-sm print:text-xs">{receiverName}</p>
+                </div>
+              </div>
+
+              {/* Company Branding Logo & SLA Link & Bank Accounts */}
+              <div className="text-left sm:text-right w-full sm:max-w-md">
+                <div className="flex flex-col sm:items-end mb-3 print:mb-1">
+                  <img 
+                    src="/mintana-logo.jpg" 
+                    alt="Mintana Global Logistics Limited ...Connecting Africa..." 
+                    className="h-14 sm:h-16 md:h-20 object-contain mix-blend-multiply print:h-11" 
+                  />
+                  <p className="text-[11px] text-slate-600 font-semibold mt-1 print:text-[9.5px] print:mt-0.5">
+                    📞 +234 806 756 7457, +234 814 547 4526
+                  </p>
+                </div>
+
+                {/* Video Link & Shipping Terms & Conditions SLA Link */}
+                {activeInvoice?.video_link && (
+                  <div className="mb-2 bg-purple-50 border border-purple-200 rounded-lg p-2 text-left sm:text-right shadow-sm print:mb-1 print:p-1 print:text-[9.5px]">
+                    <p className="text-[11px] font-bold text-slate-700 print:text-[9.5px]">
+                      Please{' '}
+                      <a
+                        href={activeInvoice.video_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-600 hover:text-purple-800 underline font-extrabold inline-flex items-center space-x-1"
+                      >
+                        <span>click here</span>
+                        <ExternalLink className="w-3 h-3 inline" />
+                      </a>{' '}
+                      to view your
+                    </p>
+                    <p className="text-[11px] font-extrabold text-purple-900 print:text-[9.5px]">
+                      Parcel / Shipment Video
+                    </p>
+                  </div>
+                )}
+
+                {/* Bank Payment Account Card matching displayCurrency */}
+                <div className="text-left text-[11px] w-full max-w-[220px] sm:ml-auto print:max-w-[190px] print:text-[9.5px]">
+                  {displayCurrency === 'GBP' ? (
+                    <div className="border-2 border-sky-500 bg-white rounded overflow-hidden shadow-sm">
+                      <div className="bg-sky-600 text-white font-bold px-2 py-0.5 text-center text-[10px] tracking-wider print:text-[9px] print:py-0">
+                        POUNDS PAYMENT ACCOUNT
+                      </div>
+                      <div className="p-1.5 space-y-0.5 text-slate-700 print:p-1 print:space-y-0">
+                        <p><span className="font-medium">Account:</span> Mintana Limited</p>
+                        <p><span className="font-medium">Sort Code:</span> 20-18-17</p>
+                        <p><span className="font-medium">Account No:</span> <strong className="text-slate-900 font-mono">53798267</strong></p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border-2 border-blue-900 bg-white rounded overflow-hidden shadow-sm">
+                      <div className="bg-blue-900 text-white font-bold px-2 py-0.5 text-center text-[10px] tracking-wider print:text-[9px] print:py-0">
+                        NAIRA PAYMENT ACCOUNT
+                      </div>
+                      <div className="p-1.5 space-y-0.5 text-slate-700 print:p-1 print:space-y-0">
+                        <p><span className="font-medium">Account:</span> Mintana Logistics</p>
+                        <p><span className="font-medium">Bank:</span> UBA</p>
+                        <p><span className="font-medium">Account No:</span> <strong className="text-slate-900 font-mono">1027269922</strong></p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="divide-y divide-slate-200 text-xs">
-              <div className="grid grid-cols-3 p-2 bg-slate-50">
-                <span className="font-semibold text-slate-700">Receiver's Name</span>
-                <span className="col-span-2 font-bold text-slate-900">{receiverName}</span>
+
+            {/* Customer Details Table */}
+            <div className="mb-6 overflow-hidden rounded-lg border border-sky-200 print:mb-2">
+              <div className="bg-gradient-to-r from-sky-600 to-blue-800 px-4 py-1.5 text-white font-bold text-xs uppercase tracking-wider flex justify-between print:px-3 print:py-0.5 print:text-[10px]">
+                <span>Customer Details</span>
+                <span>Details</span>
               </div>
-              <div className="grid grid-cols-3 p-2">
-                <span className="font-semibold text-slate-700">Receiver's Tel</span>
-                <span className="col-span-2 text-slate-800">{receiverTel}</span>
-              </div>
-              <div className="grid grid-cols-3 p-2 bg-slate-50">
-                <span className="font-semibold text-slate-700">Receiver's Email</span>
-                <span className="col-span-2 text-slate-800">{receiverEmail}</span>
-              </div>
-              <div className="grid grid-cols-3 p-2">
-                <span className="font-semibold text-slate-700">Receiver's Address</span>
-                <span className="col-span-2 text-slate-800">{receiverAddress}</span>
-              </div>
-              <div className="grid grid-cols-3 p-2 bg-slate-50">
-                <span className="font-semibold text-slate-700">Total Value of Items</span>
-                <span className="col-span-2 font-bold text-slate-900">
-                  ₦{totalValueItems.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 p-2">
-                <span className="font-semibold text-slate-700">Expected Parcel No</span>
-                <span className="col-span-2 font-mono font-bold text-sky-700">{expectedParcelNo}</span>
-              </div>
-              <div className="grid grid-cols-3 p-2 bg-slate-50">
-                <span className="font-semibold text-slate-700">Parcel Handler</span>
-                <span className="col-span-2 text-slate-800">{parcelHandler}</span>
+              <div className="divide-y divide-slate-200 text-xs print:text-[9.5px]">
+                <div className="grid grid-cols-3 p-2 bg-slate-50 print:py-0.5 print:px-2">
+                  <span className="font-semibold text-slate-700">Receiver's Name</span>
+                  <span className="col-span-2 font-bold text-slate-900">{receiverName}</span>
+                </div>
+                <div className="grid grid-cols-3 p-2 print:py-0.5 print:px-2">
+                  <span className="font-semibold text-slate-700">Receiver's Tel</span>
+                  <span className="col-span-2 text-slate-800">{receiverTel}</span>
+                </div>
+                <div className="grid grid-cols-3 p-2 bg-slate-50 print:py-0.5 print:px-2">
+                  <span className="font-semibold text-slate-700">Receiver's Email</span>
+                  <span className="col-span-2 text-slate-800">{receiverEmail}</span>
+                </div>
+                <div className="grid grid-cols-3 p-2 print:py-0.5 print:px-2">
+                  <span className="font-semibold text-slate-700">Receiver's Address</span>
+                  <span className="col-span-2 text-slate-800">{receiverAddress}</span>
+                </div>
+                <div className="grid grid-cols-3 p-2 bg-slate-50 print:py-0.5 print:px-2">
+                  <span className="font-semibold text-slate-700">Total Value of Items</span>
+                  <span className="col-span-2 font-bold text-slate-900">
+                    ₦{totalValueItems.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 p-2 print:py-0.5 print:px-2">
+                  <span className="font-semibold text-slate-700">Expected Parcel No</span>
+                  <span className="col-span-2 font-mono font-bold text-sky-700">{expectedParcelNo}</span>
+                </div>
+                <div className="grid grid-cols-3 p-2 bg-slate-50 print:py-0.5 print:px-2">
+                  <span className="font-semibold text-slate-700">Parcel Handler</span>
+                  <span className="col-span-2 text-slate-800">{parcelHandler}</span>
+                </div>
               </div>
             </div>
-          </div>
 
           {/* Item Breakdown Table */}
-          <div className="mb-6 overflow-x-auto rounded-lg border border-sky-200">
-            <table className="w-full text-left text-xs border-collapse min-w-[450px]">
+          <div className="mb-6 overflow-x-auto rounded-lg border border-sky-200 print:mb-2">
+            <table className="w-full text-left text-xs border-collapse min-w-[450px] print:min-w-0 print:text-[10px]">
               <thead>
-                <tr className="bg-sky-500 text-white font-bold text-[11px] uppercase">
-                  <th className="py-2 px-3 border-r border-sky-400">D.O.S</th>
-                  <th className="py-2 px-3 border-r border-sky-400">Nature of Item</th>
-                  <th className="py-2 px-3 border-r border-sky-400 text-center">Weight (Kg)</th>
+                <tr className="bg-sky-500 text-white font-bold text-[11px] uppercase print:text-[9.5px]">
+                  <th className="py-2 px-3 border-r border-sky-400 print:py-1 print:px-2">D.O.S</th>
+                  <th className="py-2 px-3 border-r border-sky-400 print:py-1 print:px-2">Nature of Item</th>
+                  <th className="py-2 px-3 border-r border-sky-400 text-center print:py-1 print:px-2">Weight (Kg)</th>
                   {displayCurrency === 'NGN' ? (
                     <>
-                      <th className="py-2 px-3 border-r border-sky-400 text-right">Price (NGN)</th>
-                      <th className="py-2 px-3 text-right">Total (NGN)</th>
+                      <th className="py-2 px-3 border-r border-sky-400 text-right print:py-1 print:px-2">Price (NGN)</th>
+                      <th className="py-2 px-3 text-right print:py-1 print:px-2">Total (NGN)</th>
                     </>
                   ) : (
                     <>
-                      <th className="py-2 px-3 border-r border-sky-400 text-right">Price (GBP)</th>
-                      <th className="py-2 px-3 text-right">Total (GBP)</th>
+                      <th className="py-2 px-3 border-r border-sky-400 text-right print:py-1 print:px-2">Price (GBP)</th>
+                      <th className="py-2 px-3 text-right print:py-1 print:px-2">Total (GBP)</th>
                     </>
                   )}
                 </tr>
@@ -544,16 +603,16 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 {items.length > 0 ? (
                   items.map((item, idx) => (
                     <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      <td className="py-2 px-3 border-r border-slate-200">{item.dos || docDate}</td>
-                      <td className="py-2 px-3 border-r border-slate-200 font-bold uppercase text-slate-900">
+                      <td className="py-2 px-3 border-r border-slate-200 print:py-1 print:px-2">{item.dos || docDate}</td>
+                      <td className="py-2 px-3 border-r border-slate-200 font-bold uppercase text-slate-900 print:py-1 print:px-2">
                         {item.nature_of_item}
                       </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-center font-medium">
+                      <td className="py-2 px-3 border-r border-slate-200 text-center font-medium print:py-1 print:px-2">
                         {item.weight_kg ? `${item.weight_kg} kg` : '-'}
                       </td>
                       {displayCurrency === 'NGN' ? (
                         <>
-                          <td className="py-2 px-3 border-r border-slate-200 text-right">
+                          <td className="py-2 px-3 border-r border-slate-200 text-right print:py-1 print:px-2">
                             {item.original_price_ngn && item.original_price_ngn > (item.price_ngn || 0) ? (
                               <span className="line-through text-slate-400 font-normal mr-1.5">
                                 ₦{item.weight_kg ? (item.original_price_ngn / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(item.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -563,7 +622,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                               ₦{item.weight_kg ? ((Number(item.price_ngn) || 0) / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-right font-semibold">
+                          <td className="py-2 px-3 text-right font-semibold print:py-1 print:px-2">
                             {item.original_price_ngn && item.original_price_ngn > (item.price_ngn || 0) ? (
                               <span className="line-through text-slate-400 font-normal mr-1.5">
                                 ₦{Number(item.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -576,7 +635,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                         </>
                       ) : (
                         <>
-                          <td className="py-2 px-3 border-r border-slate-200 text-right">
+                          <td className="py-2 px-3 border-r border-slate-200 text-right print:py-1 print:px-2">
                             {item.original_price_gbp && item.original_price_gbp > (item.price_gbp || 0) ? (
                               <span className="line-through text-slate-400 font-normal mr-1.5">
                                 £{item.weight_kg ? (item.original_price_gbp / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(item.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -586,7 +645,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                               £{item.weight_kg ? ((Number(item.price_gbp) || 0) / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-right font-semibold">
+                          <td className="py-2 px-3 text-right font-semibold print:py-1 print:px-2">
                             {item.original_price_gbp && item.original_price_gbp > (item.price_gbp || 0) ? (
                               <span className="line-through text-slate-400 font-normal mr-1.5">
                                 £{Number(item.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -602,30 +661,30 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                   ))
                 ) : (
                   <tr className="bg-white">
-                    <td className="py-2 px-3 border-r border-slate-200">{docDate}</td>
-                    <td className="py-2 px-3 border-r border-slate-200 font-bold uppercase text-slate-900">
+                    <td className="py-2 px-3 border-r border-slate-200 print:py-1 print:px-2">{docDate}</td>
+                    <td className="py-2 px-3 border-r border-slate-200 font-bold uppercase text-slate-900 print:py-1 print:px-2">
                       CLOTHES AND BEADS
                     </td>
-                    <td className="py-2 px-3 border-r border-slate-200 text-center">-</td>
+                    <td className="py-2 px-3 border-r border-slate-200 text-center print:py-1 print:px-2">-</td>
                     {displayCurrency === 'NGN' ? (
                       <>
-                        <td className="py-2 px-3 border-r border-slate-200 text-right">₦0.00</td>
-                        <td className="py-2 px-3 text-right font-semibold">₦0.00</td>
+                        <td className="py-2 px-3 border-r border-slate-200 text-right print:py-1 print:px-2">₦0.00</td>
+                        <td className="py-2 px-3 text-right font-semibold print:py-1 print:px-2">₦0.00</td>
                       </>
                     ) : (
                       <>
-                        <td className="py-2 px-3 border-r border-slate-200 text-right">£0.00</td>
-                        <td className="py-2 px-3 text-right font-semibold">£0.00</td>
+                        <td className="py-2 px-3 border-r border-slate-200 text-right print:py-1 print:px-2">£0.00</td>
+                        <td className="py-2 px-3 text-right font-semibold print:py-1 print:px-2">£0.00</td>
                       </>
                     )}
                   </tr>
                 )}
                 {/* Total Row */}
                 <tr className="bg-sky-100 font-bold text-sky-950">
-                  <td colSpan={3} className="py-2 px-3 text-center uppercase tracking-wider">
+                  <td colSpan={3} className="py-2 px-3 text-center uppercase tracking-wider print:py-1 print:px-2">
                     TOTAL
                   </td>
-                  <td colSpan={2} className="py-2 px-3 text-right">
+                  <td colSpan={2} className="py-2 px-3 text-right print:py-1 print:px-2">
                     {displayCurrency === 'NGN' ? (
                       itemsOriginalTotalNgn > itemsTotalNgn ? (
                         <span>
@@ -661,13 +720,13 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
 
           {/* Additional Services Table */}
           {services && services.length > 0 && (
-            <div className="mb-6 overflow-x-auto rounded-lg border border-sky-200">
-              <table className="w-full text-left text-xs border-collapse min-w-[350px]">
+            <div className="mb-6 overflow-x-auto rounded-lg border border-sky-200 print:mb-2">
+              <table className="w-full text-left text-xs border-collapse min-w-[350px] print:min-w-0 print:text-[10px]">
                 <thead>
-                  <tr className="bg-blue-600 text-white font-bold text-[11px] uppercase">
-                    <th className="py-2 px-3 border-r border-blue-500 w-12 text-center">S/N</th>
-                    <th className="py-2 px-3 border-r border-blue-500">Services</th>
-                    <th className="py-2 px-3 text-right">
+                  <tr className="bg-blue-600 text-white font-bold text-[11px] uppercase print:text-[9.5px]">
+                    <th className="py-2 px-3 border-r border-blue-500 w-12 text-center print:py-1 print:px-2">S/N</th>
+                    <th className="py-2 px-3 border-r border-blue-500 print:py-1 print:px-2">Services</th>
+                    <th className="py-2 px-3 text-right print:py-1 print:px-2">
                       {displayCurrency === 'NGN' ? 'Price (NGN)' : 'Price (GBP)'}
                     </th>
                   </tr>
@@ -675,13 +734,13 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 <tbody className="divide-y divide-slate-200">
                   {services.map((srv, idx) => (
                     <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      <td className="py-2 px-3 border-r border-slate-200 text-center font-bold text-slate-700">
+                      <td className="py-2 px-3 border-r border-slate-200 text-center font-bold text-slate-700 print:py-1 print:px-2">
                         {srv.sn || idx + 1}
                       </td>
-                      <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-800">
+                      <td className="py-2 px-3 border-r border-slate-200 font-medium text-slate-800 print:py-1 print:px-2">
                         {srv.service_name}
                       </td>
-                      <td className="py-2 px-3 text-right font-medium">
+                      <td className="py-2 px-3 text-right font-medium print:py-1 print:px-2">
                         {displayCurrency === 'NGN' ? (
                           srv.original_price_ngn && srv.original_price_ngn > (srv.price_ngn || 0) ? (
                             <div className="flex items-center justify-end space-x-1.5">
@@ -714,10 +773,10 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                   ))}
                   {/* Services Total */}
                   <tr className="bg-sky-100 font-bold text-sky-950">
-                    <td colSpan={2} className="py-2 px-3 text-center uppercase tracking-wider">
+                    <td colSpan={2} className="py-2 px-3 text-center uppercase tracking-wider print:py-1 print:px-2">
                       TOTAL
                     </td>
-                    <td className="py-2 px-3 text-right">
+                    <td className="py-2 px-3 text-right print:py-1 print:px-2">
                       {displayCurrency === 'NGN' ? (
                         servicesOriginalTotalNgn > servicesTotalNgn ? (
                           <span>
@@ -753,12 +812,12 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
           )}
 
           {/* Grand Totals Display */}
-          <div className="flex justify-end mb-8">
-            <div className="w-full sm:w-80">
+          <div className="flex justify-end mb-8 print:mb-2">
+            <div className="w-full sm:w-80 print:w-72">
               {displayCurrency === 'NGN' ? (
                 originalTotalNgn > totalNgn ? (
-                  <div className="flex flex-col bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl shadow-md space-y-1">
-                    <div className="flex justify-between items-center text-xs opacity-90 border-b border-sky-400/50 pb-1">
+                  <div className="flex flex-col bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl shadow-md space-y-1 print:px-3 print:py-1.5 print:rounded-lg">
+                    <div className="flex justify-between items-center text-xs opacity-90 border-b border-sky-400/50 pb-1 print:pb-0.5 print:text-[10px]">
                       <span>Standard Rate Total (NGN)</span>
                       <span className="line-through text-sky-200">
                         ₦{originalTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -767,23 +826,23 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                     <div className="flex justify-between items-center pt-0.5">
                       <span className="flex items-center gap-1.5">
                         <span>Total Payable (NGN)</span>
-                        <span className="bg-amber-400 text-sky-950 text-[9px] font-black uppercase px-1.5 py-0.5 rounded tracking-wide">PROMO</span>
+                        <span className="bg-amber-400 text-sky-950 text-[9px] font-black uppercase px-1.5 py-0.5 rounded tracking-wide print:text-[8px] print:px-1">PROMO</span>
                       </span>
-                      <span className="text-amber-300 font-black text-lg">
+                      <span className="text-amber-300 font-black text-lg print:text-base">
                         ₦{totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex justify-between items-center bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md">
+                  <div className="flex justify-between items-center bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md print:px-3 print:py-1.5 print:rounded-lg print:text-sm">
                     <span>Total (NGN)</span>
                     <span>₦{totalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )
               ) : (
                 originalTotalGbp > totalGbp ? (
-                  <div className="flex flex-col bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl shadow-md space-y-1">
-                    <div className="flex justify-between items-center text-xs opacity-90 border-b border-blue-700/50 pb-1">
+                  <div className="flex flex-col bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl shadow-md space-y-1 print:px-3 print:py-1.5 print:rounded-lg">
+                    <div className="flex justify-between items-center text-xs opacity-90 border-b border-blue-700/50 pb-1 print:pb-0.5 print:text-[10px]">
                       <span>Standard Rate Total (GBP)</span>
                       <span className="line-through text-blue-200">
                         £{originalTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -792,15 +851,15 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                     <div className="flex justify-between items-center pt-0.5">
                       <span className="flex items-center gap-1.5">
                         <span>Total Payable (GBP)</span>
-                        <span className="bg-amber-400 text-blue-950 text-[9px] font-black uppercase px-1.5 py-0.5 rounded tracking-wide">PROMO</span>
+                        <span className="bg-amber-400 text-blue-950 text-[9px] font-black uppercase px-1.5 py-0.5 rounded tracking-wide print:text-[8px] print:px-1">PROMO</span>
                       </span>
-                      <span className="text-amber-300 font-black text-lg">
+                      <span className="text-amber-300 font-black text-lg print:text-base">
                         £{totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex justify-between items-center bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md">
+                  <div className="flex justify-between items-center bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl text-base shadow-md print:px-3 print:py-1.5 print:rounded-lg print:text-sm">
                     <span>Total (GBP)</span>
                     <span>£{totalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
@@ -810,10 +869,10 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
           </div>
 
           {/* Footer Branding, Contacts & Notes */}
-          <div className="border-t border-slate-300 pt-6 mt-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 text-xs text-slate-600">
+          <div className="border-t border-slate-300 pt-6 mt-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 text-xs text-slate-600 print:mt-2 print:pt-1.5 print:gap-3 print:text-[9.5px] print:flex-row print:items-end">
             {/* Contact Details */}
-            <div className="space-y-1.5 max-w-md">
-              <h4 className="text-xl font-black text-blue-950 tracking-wider">THANK YOU!</h4>
+            <div className="space-y-1.5 max-w-md print:space-y-0.5">
+              <h4 className="text-xl font-black text-blue-950 tracking-wider print:text-base print:mb-0.5">THANK YOU!</h4>
               <p className="flex items-center space-x-2">
                 <span>📞</span>
                 <span className="font-semibold">+234 806 756 7457, +234 814 547 4526</span>
@@ -826,73 +885,74 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 <span>🌐</span>
                 <span className="font-semibold">www.mintana.co.uk</span>
               </p>
-              <p className="flex items-start space-x-2 text-[11px] leading-snug text-slate-500 pt-1">
+              <p className="flex items-start space-x-2 text-[11px] leading-snug text-slate-500 pt-1 print:text-[9px] print:pt-0">
                 <span>📍</span>
                 <span>19, Moshesa Street, Off Ogunsolu Street, Cement Bus-stop, Along Iyana Ipaja Road, Ikeja, Lagos</span>
               </p>
             </div>
 
             {/* Insurance Note & Shipping Disclaimer */}
-            <div className="text-right max-w-md space-y-2">
-              <div className="border-t border-b border-slate-300 py-2 space-y-1">
-                <p className="font-bold text-slate-800 uppercase text-[10px] tracking-wide">
+            <div className="text-right max-w-md space-y-2 print:space-y-1">
+              <div className="border-t border-b border-slate-300 py-2 space-y-1 print:py-1 print:space-y-0.5">
+                <p className="font-bold text-slate-800 uppercase text-[10px] tracking-wide print:text-[8.5px]">
                   ALL CONSIGNMENTS ARE INSURED TO THEIR DECLARED VALUE UP TO 100 GBP
                 </p>
-                <p className="font-black text-sky-800 uppercase text-[10px]">
+                <p className="font-black text-sky-800 uppercase text-[10px] print:text-[8.5px]">
                   NOTE: PAYMENT VALIDATES SHIPPING!
                 </p>
               </div>
-              <p className="font-extrabold text-blue-950 underline text-[11px]">
+              <p className="font-extrabold text-blue-950 underline text-[11px] print:text-[9.5px]">
                 KINDLY ATTACH RECEIPT OF PAYMENT ONCE MADE
               </p>
             </div>
           </div>
 
           {/* Tagline */}
-          <div className="mt-8 text-center border-t border-sky-100 pt-3">
-            <span className="text-lg font-black tracking-widest text-sky-800 uppercase">
+          <div className="mt-8 text-center border-t border-sky-100 pt-3 print:mt-1.5 print:pt-1">
+            <span className="text-lg font-black tracking-widest text-sky-800 uppercase print:text-xs">
               LOGISTICS <span className="text-blue-950">|</span> EXPORTATION
             </span>
           </div>
 
           {/* Bottom Corner Accent Page 1 */}
           <div className="absolute bottom-0 right-0 w-32 h-12 bg-gradient-to-l from-sky-600 to-transparent rounded-tl-full opacity-20 pointer-events-none print:hidden" />
+        </div>
 
           {/* PAGE 2: TERMS & CONDITIONS / SERVICE LEVEL AGREEMENT (Invoices Only) */}
           {!receipt && (
-            <div className="page-break pt-8 border-t-2 border-slate-200 mt-8 print:mt-0 print:border-none print:pt-2 text-[6pt] leading-tight text-slate-700 bg-white" id="printable-terms-document">
+            <div className="page-break pt-8 border-t-2 border-slate-200 mt-8 print:mt-0 print:border-none print:pt-1 text-[6pt] leading-tight text-slate-700 bg-white" id="printable-terms-document">
               {/* Header / Accent Bar for Page 2 */}
-              <div className="flex justify-between items-center border-b-2 border-sky-700 pb-2 mb-3">
+              <div className="flex justify-between items-center border-b-2 border-sky-700 pb-2 mb-3 print:pb-1 print:mb-1.5">
                 <div>
-                  <h2 className="text-[9pt] font-extrabold text-blue-950 uppercase tracking-wide">
+                  <h2 className="text-[9pt] font-extrabold text-blue-950 uppercase tracking-wide print:text-[8pt]">
                     Mintana Global Logistics — Terms & Conditions / Service Level Agreement (SLA)
                   </h2>
-                  <p className="text-[6pt] text-slate-500 font-medium">
+                  <p className="text-[6pt] text-slate-500 font-medium print:text-[5.5pt]">
                     Document Reference: SLA-MINT-{docNumber} | Effective Version: 2026.1
                   </p>
                 </div>
                 <img 
                   src="/mintana-logo.jpg" 
                   alt="Mintana" 
-                  className="h-8 object-contain mix-blend-multiply" 
+                  className="h-8 object-contain mix-blend-multiply print:h-6" 
                 />
               </div>
 
-              <p className="mb-2 italic text-slate-800 font-medium">
+              <p className="mb-2 italic text-slate-800 font-medium print:mb-1.5 print:text-[5.5pt]">
                 This Agreement is between Mintana ("Mintana", "we", "us") and the customer named on this invoice ("Customer", "you"), and governs all shipping and courier services provided by Mintana. It takes effect automatically upon payment of this invoice, as set out in the notice above.
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-[6pt]">
+              <div id="printable-terms-grid" className="terms-grid grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-x-4 gap-y-2 print:gap-x-3 print:gap-y-1 text-[6pt] print:text-[5.5pt] print:leading-[1.2]">
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">1. Scope of Service</h3>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">1. Scope of Service</h3>
                   <p>
                     Mintana agrees to collect, transport, and deliver the consignment described on this invoice to the stated destination, using reasonable care and skill. Estimated delivery timeframes are provided in good faith and are not guaranteed unless a specific guaranteed-delivery service is separately purchased.
                   </p>
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">2. Insurance & Goods-in-Transit Cover</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">2. Insurance & Goods-in-Transit Cover</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li><strong>Standard cover:</strong> every consignment shipped with Mintana is automatically covered, at no extra cost, for loss or damage occurring while in Mintana's custody, up to a maximum of £100 (or the declared value of the goods, whichever is lower).</li>
                     <li><strong>Enhanced cover:</strong> for goods with a declared value above £100, the Customer may request Enhanced Cover for an additional premium at the time of booking. If Enhanced Cover is not purchased, Mintana's maximum liability remains capped at £100 regardless of the item's actual value.</li>
                     <li>It is the Customer's responsibility to accurately declare the value of goods at the point of booking. Under-declared or undeclared items will be compensated based on the declared value only.</li>
@@ -902,8 +962,8 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">3. Loss, Damage & Refund Policy</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">3. Loss, Damage & Refund Policy</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li>If a consignment is confirmed lost or damaged beyond use while in Mintana's custody, Mintana will pay the Customer a single lump-sum refund, capped at £100 per consignment (or the declared value / Enhanced Cover amount, whichever applies).</li>
                     <li>Refunds are issued as a one-off payment — Mintana does not offer instalment-based repayment for lost-item claims under the standard scheme.</li>
                     <li>Refunds will be paid within 10 business days of a claim being approved, by bank transfer to the Customer's nominated account.</li>
@@ -912,8 +972,8 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">4. Claims Process & Timelines</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">4. Claims Process & Timelines</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li>Claims must be reported in writing (email or in-app) within 7 calendar days of the expected delivery date. Claims made after this window may be declined.</li>
                     <li>The Customer must provide the tracking/waybill number, proof of value (receipt, invoice, or equivalent), and a description of the goods.</li>
                     <li>Mintana will investigate and respond to a claim within 14 business days of receiving all required information.</li>
@@ -923,8 +983,8 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">5. Exclusions & Limitations</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">5. Exclusions & Limitations</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li>No cover is provided for prohibited, restricted, perishable, fragile-without-adequate-packaging, or illegal items, or for cash, jewellery, or negotiable instruments unless separately agreed in writing.</li>
                     <li>Mintana is not liable for delays or losses caused by events beyond its reasonable control (force majeure), including customs delays, extreme weather, strikes, or incorrect address information provided by the Customer.</li>
                     <li>Compensation will not be paid where loss or damage results from inadequate packaging by the Customer, inherent defect in the goods, or the Customer's own act or omission.</li>
@@ -933,8 +993,8 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">6. Liability Limits & Risk Transfer</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">6. Liability Limits & Risk Transfer</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li>Mintana's total liability under this Agreement is limited to the compensation set out in Clauses 2 and 3. Mintana is not liable for any indirect or consequential loss arising from delay, loss, or damage to a consignment, including but not limited to loss of income, loss of business or contracts, loss of opportunity, or distress.</li>
                     <li><strong>Self-packed items:</strong> where the Customer or Sender packs an item themselves rather than Mintana's staff, the packaging-standard evidence described in Clause 2 does not apply to that item. Mintana's acceptance of a self-packed item for carriage does not amount to an inspection or approval of its packaging, and the Customer accepts a higher risk of damage where packaging is inadequate.</li>
                     <li><strong>Proof of delivery & risk transfer:</strong> once a consignment has been delivered to the recipient's address and evidenced by a signature, photograph, PIN confirmation, or equivalent proof of delivery, risk in the goods passes to the recipient and Mintana's responsibility under this Agreement ends, save for claims validly reported within the timeframe in Clause 4 concerning the condition of the goods at the point of delivery.</li>
@@ -942,8 +1002,8 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">7. Perishable Goods</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">7. Perishable Goods</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li>Mintana does not, as a general rule, accept perishable goods for shipment, including but not limited to plantain, fruit, vegetables, flowers, and other fresh food items. Where Mintana agrees, at its sole discretion, to ship a perishable item, the following applies in addition to the rest of this Agreement:</li>
                     <li>By handing a perishable item to Mintana, the Sender confirms it is fresh, ripe-appropriate for the expected transit time, and fit for shipment at the point of collection.</li>
                     <li>Mintana will not be held liable where a perishable item arrives spoiled, overripe, or otherwise inedible/unusable, as this results from the condition and nature of the goods at the time they were handed to Mintana, and the natural process of decay during transit, rather than from any act or omission of Mintana.</li>
@@ -953,16 +1013,16 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">8. Customs, Duties & Unclaimed Goods</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">8. Customs, Duties & Unclaimed Goods</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li>The recipient (or Customer) is responsible for any customs duties, import taxes, tariffs, or clearance charges arising in connection with a consignment. Mintana is not liable for delays, additional charges, or seizure of goods resulting from customs or other regulatory processes.</li>
                     <li>If a consignment cannot be delivered because the recipient is uncontactable, refuses delivery, or fails to collect it within 14 calendar days of the first delivery attempt, Mintana may charge reasonable storage fees and, after a further 14 days' written notice to the Customer, dispose of, return at the Customer's cost, or donate the goods, without further liability to the Customer.</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">9. Fraud, Misdeclared Goods & Indemnity</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">9. Fraud, Misdeclared Goods & Indemnity</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li>The Customer/Sender warrants that the contents of a consignment are accurately described, lawfully permitted to be shipped, and not prohibited or restricted goods under Clause 5. The Customer agrees to indemnify Mintana against any loss, fine, cost, or liability Mintana incurs as a result of misdeclared, prohibited, or illegal contents shipped by the Customer.</li>
                     <li>Mintana reserves the right to investigate any claim it reasonably suspects to be false, exaggerated, or fraudulent, and to decline payment on such claims. A knowingly false or fraudulent claim may result in Mintana refusing future service to the Customer and pursuing recovery of any costs incurred.</li>
                     <li>Where the Customer disputes or reverses a card/bank payment after accepting this Agreement under Clause 11, without first raising the issue through the claims process in Clause 4, Mintana may treat this as a breach of this Agreement and pursue recovery of the disputed amount plus any related costs.</li>
@@ -971,31 +1031,31 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">10. Governing Law & Jurisdiction</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">10. Governing Law & Jurisdiction</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li>This Agreement is governed primarily by the laws of the Federal Republic of Nigeria. Where the Customer is based in, or the shipment originates from or is delivered within, the United Kingdom, nothing in this Agreement excludes or limits any statutory right the Customer has under UK consumer protection law (including the Consumer Rights Act 2015) that cannot lawfully be excluded or restricted by contract; where any clause conflicts with such mandatory UK protections, the mandatory protection applies to that extent only.</li>
                     <li>Disputes will first be addressed through good-faith negotiation between the parties. If unresolved within 30 days, either party may refer the dispute to arbitration or the competent courts of Lagos, Nigeria, save that UK-based consumers retain the right to bring proceedings in their local courts where required by applicable law.</li>
                   </ul>
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">11. Acceptance by Payment</h3>
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">11. Acceptance by Payment</h3>
                   <p>
                     As stated on the face of this invoice, payment of any amount against this invoice — whether in full or as a deposit/part-payment — constitutes the Customer's electronic signature and binding acceptance of this Agreement in its entirety, to the same extent as if signed by hand. If the Customer does not agree to these terms, they must not make payment and should contact Mintana before doing so.
                   </p>
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5 border-b border-slate-200 pb-0.5">12. General Terms</h3>
-                  <ul className="list-disc pl-3 space-y-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 border-b border-slate-200 pb-0.5 print:mb-0.5 print:pb-0.5">12. General Terms</h3>
+                  <ul className="list-disc pl-3 space-y-0.5 print:space-y-0">
                     <li><strong>Amendments:</strong> Mintana may update this Agreement from time to time. The version in effect at the time an invoice is issued and paid governs the shipment(s) on that invoice.</li>
                     <li><strong>Severability:</strong> if any provision of this Agreement is found unenforceable, that provision will be limited or removed to the minimum extent necessary, and the remaining provisions will continue in full force.</li>
                     <li><strong>Entire Agreement:</strong> this Agreement, together with the invoice it accompanies, represents the entire agreement between the parties regarding the consignment(s) described, and supersedes any prior discussions or agreements on the same subject.</li>
                   </ul>
                 </div>
 
-                <div className="md:col-span-2 mt-1 border-t border-slate-200 pt-1">
-                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] mb-0.5">13. Contact & Complaints</h3>
+                <div id="printable-terms-clause-13" className="terms-full-width md:col-span-2 print:col-span-2 mt-1 border-t border-slate-200 pt-1 print:mt-1 print:pt-0.5">
+                  <h3 className="font-bold text-blue-900 uppercase text-[6.5pt] print:text-[6pt] mb-0.5 print:mb-0.5">13. Contact & Complaints</h3>
                   <p>
                     For claims, disputes, or questions about this Agreement, contact Mintana at <strong>contact@mintanaltd.com</strong> or <strong>09019081819</strong> / <strong>+234 814 547 4526</strong>. We aim to acknowledge all enquiries within 2 business days.
                   </p>
