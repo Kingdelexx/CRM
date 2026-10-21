@@ -1241,11 +1241,6 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       setActiveTab('shipment')
       return
     }
-    if (!formData.video_link.trim()) {
-      setFormError('Video Link is required.')
-      setActiveTab('package')
-      return
-    }
     createShipmentMutation.mutate(formData)
   }
 
@@ -2492,15 +2487,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <ExternalLink className="h-3.5 w-3.5 text-sky-400" /> Video Link <span className="text-rose-400">*</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-sky-400" /> Video Link <span className="text-zinc-500 font-normal">(Optional)</span>
                       </label>
                       <input
                         type="url"
                         name="video_link"
-                        required
                         value={formData.video_link}
                         onChange={handleInputChange}
-                        placeholder="https://..."
+                        placeholder="https://... (optional)"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-sky-500 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>
@@ -3714,11 +3708,6 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   setActiveTab('shipment')
                   return
                 }
-                if (!formData.video_link.trim()) {
-                  setFormError('Video Link is required.')
-                  setActiveTab('package')
-                  return
-                }
                 updateShipmentMutation.mutate({ id: editingShipment.id, payload: formData })
               }}
               className="p-6 space-y-4 flex-1 overflow-y-auto max-h-[75vh]"
@@ -3997,15 +3986,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-900/50 p-3 rounded-xl border border-zinc-800/80">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
-                        <ExternalLink className="h-3.5 w-3.5 text-sky-400" /> Video Link <span className="text-rose-400">*</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-sky-400" /> Video Link <span className="text-zinc-500 font-normal">(Optional)</span>
                       </label>
                       <input
                         type="url"
                         name="video_link"
-                        required
                         value={formData.video_link}
                         onChange={handleInputChange}
-                        placeholder="https://..."
+                        placeholder="https://... (optional)"
                         className="w-full bg-zinc-900 border border-zinc-800 focus:border-sky-500 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 placeholder-zinc-600 font-mono"
                       />
                     </div>
