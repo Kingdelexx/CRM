@@ -545,35 +545,35 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                 <span>Details</span>
               </div>
               <div className="divide-y divide-slate-200 text-xs print:text-[9.5px]">
-                <div className="grid grid-cols-3 p-2 bg-slate-50 print:py-0.5 print:px-2">
+                <div className="grid grid-cols-3 px-4 py-2 bg-slate-50 print:py-0.5 print:px-3">
                   <span className="font-semibold text-slate-700">Receiver's Name</span>
-                  <span className="col-span-2 font-bold text-slate-900">{receiverName}</span>
+                  <span className="col-span-2 font-bold text-slate-900 text-right">{receiverName}</span>
                 </div>
-                <div className="grid grid-cols-3 p-2 print:py-0.5 print:px-2">
+                <div className="grid grid-cols-3 px-4 py-2 print:py-0.5 print:px-3">
                   <span className="font-semibold text-slate-700">Receiver's Tel</span>
-                  <span className="col-span-2 text-slate-800">{receiverTel}</span>
+                  <span className="col-span-2 text-slate-800 text-right">{receiverTel}</span>
                 </div>
-                <div className="grid grid-cols-3 p-2 bg-slate-50 print:py-0.5 print:px-2">
+                <div className="grid grid-cols-3 px-4 py-2 bg-slate-50 print:py-0.5 print:px-3">
                   <span className="font-semibold text-slate-700">Receiver's Email</span>
-                  <span className="col-span-2 text-slate-800">{receiverEmail}</span>
+                  <span className="col-span-2 text-slate-800 text-right">{receiverEmail}</span>
                 </div>
-                <div className="grid grid-cols-3 p-2 print:py-0.5 print:px-2">
+                <div className="grid grid-cols-3 px-4 py-2 print:py-0.5 print:px-3">
                   <span className="font-semibold text-slate-700">Receiver's Address</span>
-                  <span className="col-span-2 text-slate-800">{receiverAddress}</span>
+                  <span className="col-span-2 text-slate-800 text-right">{receiverAddress}</span>
                 </div>
-                <div className="grid grid-cols-3 p-2 bg-slate-50 print:py-0.5 print:px-2">
+                <div className="grid grid-cols-3 px-4 py-2 bg-slate-50 print:py-0.5 print:px-3">
                   <span className="font-semibold text-slate-700">Total Value of Items</span>
-                  <span className="col-span-2 font-bold text-slate-900">
+                  <span className="col-span-2 font-bold text-slate-900 text-right">
                     ₦{totalValueItems.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 p-2 print:py-0.5 print:px-2">
+                <div className="grid grid-cols-3 px-4 py-2 print:py-0.5 print:px-3">
                   <span className="font-semibold text-slate-700">Expected Parcel No</span>
-                  <span className="col-span-2 font-mono font-bold text-sky-700">{expectedParcelNo}</span>
+                  <span className="col-span-2 font-mono font-bold text-sky-700 text-right">{expectedParcelNo}</span>
                 </div>
-                <div className="grid grid-cols-3 p-2 bg-slate-50 print:py-0.5 print:px-2">
+                <div className="grid grid-cols-3 px-4 py-2 bg-slate-50 print:py-0.5 print:px-3">
                   <span className="font-semibold text-slate-700">Parcel Handler</span>
-                  <span className="col-span-2 text-slate-800">{parcelHandler}</span>
+                  <span className="col-span-2 text-slate-800 text-right">{parcelHandler}</span>
                 </div>
               </div>
             </div>
