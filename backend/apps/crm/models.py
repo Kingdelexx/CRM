@@ -674,7 +674,7 @@ class Invoice(TimeStampedModel):
     
     # Terms & SLA Link & Video Link
     sla_terms_url = models.CharField(max_length=500, default='https://www.mintana.co.uk/terms-and-conditions')
-    video_link = models.CharField(max_length=500, null=True, blank=True)
+    video_link = models.TextField(null=True, blank=True)
     notes = models.TextField(null=True, blank=True)
 
     def __str__(self):
@@ -822,7 +822,7 @@ class Shipment(TimeStampedModel):
     has_doorstep_delivery = models.BooleanField(default=False)
     extra_charges = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
     dpd = models.BooleanField(default=False)
-    video_link = models.CharField(max_length=500, null=True, blank=True)
+    video_link = models.TextField(null=True, blank=True)
     is_promo = models.BooleanField(default=False)
     promo_packaging_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     promo_doorstep_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
