@@ -88,4 +88,14 @@
     color: transparent !important;
     opacity: 0 !important;
   }
+
+  /* Custom pricing inputs text & placeholder styling */
+  .custom-pricing-input {
+    color: #000000 !important;
+  }
+  .custom-pricing-input::placeholder {
+    color: #000000 !important;
+    opacity: 0.75;
+  }
 }
+

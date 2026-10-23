@@ -44,7 +44,8 @@ import {
   Anchor,
   Percent,
   Download,
-  CreditCard
+  CreditCard,
+  Sliders
 } from 'lucide-react'
 
 interface ShipmentWorkspaceProps {
@@ -347,6 +348,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   const [hasPackaging, setHasPackaging] = useState<'NO' | 'YES'>('NO')
   const [hasDoorstepDelivery, setHasDoorstepDelivery] = useState<'NO' | 'YES'>('NO')
 
+  // Custom Pricing (Manual Rate Breakdown Override) State
+  const [isCustomPricing, setIsCustomPricing] = useState<boolean>(false)
+  const [customPerKgRate, setCustomPerKgRate] = useState<string>('')
+  const [customPackagingFee, setCustomPackagingFee] = useState<string>('')
+  const [customDoorstepFee, setCustomDoorstepFee] = useState<string>('')
+  const [customExchangeRate, setCustomExchangeRate] = useState<string>('')
+
   const createPromoPkgRef = useRef<HTMLInputElement>(null)
   const editPromoPkgRef = useRef<HTMLInputElement>(null)
 
@@ -362,7 +370,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     isPromoOverride?: boolean,
     promoPackagingFeeOverride?: string,
     promoDoorstepFeeOverride?: string,
-    extraChargesStr?: string
+    extraChargesStr?: string,
+    customPricingActiveOverride?: boolean,
+    customPerKgOverride?: string,
+    customPackagingFeeOverride?: string,
+    customDoorstepFeeOverride?: string,
+    customExchangeRateOverride?: string
   ) => {
     const numParcels = parseInt(parcelCountStr) || 0
     const weightKg = parseFloat(weightKgStr !== undefined ? weightKgStr : formData.weight_kg) || 0
@@ -377,23 +390,41 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const promoDsFeeStr = promoDoorstepFeeOverride !== undefined ? promoDoorstepFeeOverride : String(formData.promo_doorstep_fee ?? '')
     const extraChargesVal = parseFloat(extraChargesStr !== undefined ? extraChargesStr : formData.extra_charges) || 0
 
-    let parcelFee = currentHasPackaging === 'YES' ? (numParcels * orgParcelRate) : 0
-    if (isPromo && currentHasPackaging === 'YES' && promoPkgFeeStr !== '' && !isNaN(parseFloat(promoPkgFeeStr))) {
-      parcelFee = parseFloat(promoPkgFeeStr)
+    // Determine active custom pricing & exchange rate
+    const activeCustom = customPricingActiveOverride !== undefined ? customPricingActiveOverride : isCustomPricing
+    const cExRate = customExchangeRateOverride !== undefined ? customExchangeRateOverride : customExchangeRate
+    const effectiveExRate = (activeCustom && cExRate !== '' && !isNaN(parseFloat(cExRate))) ? parseFloat(cExRate) : orgExchangeRate
+
+    let parcelFee = 0
+    if (currentHasPackaging === 'YES') {
+      const cPkg = customPackagingFeeOverride !== undefined ? customPackagingFeeOverride : customPackagingFee
+      if (activeCustom && cPkg !== '' && !isNaN(parseFloat(cPkg))) {
+        parcelFee = numParcels * parseFloat(cPkg)
+      } else if (isPromo && promoPkgFeeStr !== '' && !isNaN(parseFloat(promoPkgFeeStr))) {
+        parcelFee = parseFloat(promoPkgFeeStr)
+      } else {
+        parcelFee = numParcels * orgParcelRate
+      }
     }
 
     let doorstepFee = 0
     if (currentHasDoorstep === 'YES') {
       const parcelsForDoorstep = numParcels > 0 ? numParcels : 1
-      if (isPromo && promoDsFeeStr !== '' && !isNaN(parseFloat(promoDsFeeStr))) {
-        doorstepFee = parseFloat(promoDsFeeStr) * orgExchangeRate
+      const cDs = customDoorstepFeeOverride !== undefined ? customDoorstepFeeOverride : customDoorstepFee
+      if (activeCustom && cDs !== '' && !isNaN(parseFloat(cDs))) {
+        doorstepFee = parcelsForDoorstep * parseFloat(cDs) * effectiveExRate
+      } else if (isPromo && promoDsFeeStr !== '' && !isNaN(parseFloat(promoDsFeeStr))) {
+        doorstepFee = parseFloat(promoDsFeeStr) * effectiveExRate
       } else {
-        doorstepFee = parcelsForDoorstep * orgDoorstepRate * orgExchangeRate
+        doorstepFee = parcelsForDoorstep * orgDoorstepRate * effectiveExRate
       }
     }
 
     let effectivePerKgPrice = orgPerKgPrice
-    if (isPromo && orgPromoRate > 0) {
+    const cPerKg = customPerKgOverride !== undefined ? customPerKgOverride : customPerKgRate
+    if (activeCustom && cPerKg !== '' && !isNaN(parseFloat(cPerKg))) {
+      effectivePerKgPrice = parseFloat(cPerKg)
+    } else if (isPromo && orgPromoRate > 0) {
       effectivePerKgPrice = orgPromoRate
     } else if (shipType === 'SEA' && orgSeaShippingRate > 0) {
       effectivePerKgPrice = orgSeaShippingRate
@@ -401,15 +432,180 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       effectivePerKgPrice = orgPartnerPerKgPrice
     }
 
-    const weightFee = weightKg * effectivePerKgPrice * orgExchangeRate
-    const extraChargesNgn = formData.currency === 'GBP' ? extraChargesVal * orgExchangeRate : extraChargesVal
+    const weightFee = weightKg * effectivePerKgPrice * effectiveExRate
+    const extraChargesNgn = formData.currency === 'GBP' ? extraChargesVal * effectiveExRate : extraChargesVal
     const subtotalNgn = parcelFee + doorstepFee + weightFee + extraChargesNgn
 
     const discountPct = parseFloat(discountStr !== undefined ? discountStr : formData.discount_percentage) || 0
     const discountNgn = subtotalNgn * (discountPct / 100)
 
     const finalTotalNgn = Math.max(0, subtotalNgn - discountNgn).toFixed(2)
-    handleAmountNgnChange(finalTotalNgn)
+    handleAmountNgnChange(finalTotalNgn, effectiveExRate)
+  }
+
+  const handleCustomPricingToggle = (enable: boolean) => {
+    setIsCustomPricing(enable)
+    if (enable) {
+      const isPartner = Boolean((formData.partner_id && formData.partner_id.trim() !== '') || (formData.partner_name && formData.partner_name.trim() !== ''))
+      const shipType = formData.shipping_type
+      const isPromo = Boolean(formData.is_promo)
+      let baseKg = orgPerKgPrice
+      if (isPromo && orgPromoRate > 0) baseKg = orgPromoRate
+      else if (shipType === 'SEA' && orgSeaShippingRate > 0) baseKg = orgSeaShippingRate
+      else if (isPartner && orgPartnerPerKgPrice > 0) baseKg = orgPartnerPerKgPrice
+
+      const initPerKg = customPerKgRate || String(baseKg || '3.90')
+      const initPkg = customPackagingFee || String(orgParcelRate || '3000')
+      const initDs = customDoorstepFee || String(orgDoorstepRate || '15')
+      const initEx = customExchangeRate || String(orgExchangeRate || '2000')
+
+      setCustomPerKgRate(initPerKg)
+      setCustomPackagingFee(initPkg)
+      setCustomDoorstepFee(initDs)
+      setCustomExchangeRate(initEx)
+
+      setFormData(prev => ({
+        ...prev,
+        conversion_rate: initEx,
+        promo_packaging_fee: initPkg,
+        promo_doorstep_fee: initDs
+      }))
+
+      recalculateTotalAmount(
+        hasPackaging,
+        formData.number_of_carton,
+        hasDoorstepDelivery,
+        formData.weight_kg,
+        formData.discount_percentage,
+        formData.partner_id,
+        formData.partner_name,
+        formData.shipping_type,
+        formData.is_promo,
+        initPkg,
+        initDs,
+        formData.extra_charges,
+        true,
+        initPerKg,
+        initPkg,
+        initDs,
+        initEx
+      )
+    } else {
+      setCustomPerKgRate('')
+      setCustomPackagingFee('')
+      setCustomDoorstepFee('')
+      setCustomExchangeRate('')
+      setFormData(prev => ({
+        ...prev,
+        conversion_rate: String(orgExchangeRate),
+        promo_packaging_fee: '',
+        promo_doorstep_fee: ''
+      }))
+      recalculateTotalAmount(
+        hasPackaging,
+        formData.number_of_carton,
+        hasDoorstepDelivery,
+        formData.weight_kg,
+        formData.discount_percentage,
+        formData.partner_id,
+        formData.partner_name,
+        formData.shipping_type,
+        formData.is_promo,
+        '',
+        '',
+        formData.extra_charges,
+        false
+      )
+    }
+  }
+
+  const handleCustomPerKgChange = (val: string) => {
+    setCustomPerKgRate(val)
+    recalculateTotalAmount(
+      hasPackaging,
+      formData.number_of_carton,
+      hasDoorstepDelivery,
+      formData.weight_kg,
+      formData.discount_percentage,
+      formData.partner_id,
+      formData.partner_name,
+      formData.shipping_type,
+      formData.is_promo,
+      undefined,
+      undefined,
+      formData.extra_charges,
+      true,
+      val
+    )
+  }
+
+  const handleCustomPkgFeeChange = (val: string) => {
+    setCustomPackagingFee(val)
+    setFormData(prev => ({ ...prev, promo_packaging_fee: val }))
+    recalculateTotalAmount(
+      hasPackaging,
+      formData.number_of_carton,
+      hasDoorstepDelivery,
+      formData.weight_kg,
+      formData.discount_percentage,
+      formData.partner_id,
+      formData.partner_name,
+      formData.shipping_type,
+      formData.is_promo,
+      val,
+      undefined,
+      formData.extra_charges,
+      true,
+      undefined,
+      val
+    )
+  }
+
+  const handleCustomDsFeeChange = (val: string) => {
+    setCustomDoorstepFee(val)
+    setFormData(prev => ({ ...prev, promo_doorstep_fee: val }))
+    recalculateTotalAmount(
+      hasPackaging,
+      formData.number_of_carton,
+      hasDoorstepDelivery,
+      formData.weight_kg,
+      formData.discount_percentage,
+      formData.partner_id,
+      formData.partner_name,
+      formData.shipping_type,
+      formData.is_promo,
+      undefined,
+      val,
+      formData.extra_charges,
+      true,
+      undefined,
+      undefined,
+      val
+    )
+  }
+
+  const handleCustomExRateChange = (val: string) => {
+    setCustomExchangeRate(val)
+    setFormData(prev => ({ ...prev, conversion_rate: val }))
+    recalculateTotalAmount(
+      hasPackaging,
+      formData.number_of_carton,
+      hasDoorstepDelivery,
+      formData.weight_kg,
+      formData.discount_percentage,
+      formData.partner_id,
+      formData.partner_name,
+      formData.shipping_type,
+      formData.is_promo,
+      undefined,
+      undefined,
+      formData.extra_charges,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      val
+    )
   }
 
   const handlePromoToggle = (val: 'YES' | 'NO') => {
@@ -452,16 +648,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     recalculateTotalAmount(hasPackaging, formData.number_of_carton, val)
   }
 
-  const handleAmountNgnChange = (val: string) => {
+  const handleAmountNgnChange = (val: string, exRateOverride?: number) => {
+    const currentEx = exRateOverride || ((isCustomPricing && customExchangeRate && !isNaN(parseFloat(customExchangeRate))) ? parseFloat(customExchangeRate) : orgExchangeRate)
     setAmountNgn(val)
     const valNum = parseFloat(val)
     if (!isNaN(valNum) && val !== '') {
-      const convGbp = (valNum / orgExchangeRate).toFixed(2)
+      const convGbp = (valNum / currentEx).toFixed(2)
       setAmountGbp(convGbp)
       if (formData.currency === 'GBP') {
-        setFormData(prev => ({ ...prev, amount: convGbp, conversion_rate: String(orgExchangeRate) }))
+        setFormData(prev => ({ ...prev, amount: convGbp, conversion_rate: String(currentEx) }))
       } else {
-        setFormData(prev => ({ ...prev, amount: val, conversion_rate: String(orgExchangeRate) }))
+        setFormData(prev => ({ ...prev, amount: val, conversion_rate: String(currentEx) }))
       }
     } else {
       setAmountGbp('')
@@ -469,14 +666,15 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   }
 
-  const handleAmountGbpChange = (val: string) => {
+  const handleAmountGbpChange = (val: string, exRateOverride?: number) => {
+    const currentEx = exRateOverride || ((isCustomPricing && customExchangeRate && !isNaN(parseFloat(customExchangeRate))) ? parseFloat(customExchangeRate) : orgExchangeRate)
     setAmountGbp(val)
     const valNum = parseFloat(val)
     if (!isNaN(valNum) && val !== '') {
-      const convNgn = (valNum * orgExchangeRate).toFixed(2)
+      const convNgn = (valNum * currentEx).toFixed(2)
       setAmountNgn(convNgn)
       if (formData.currency === 'GBP') {
-        setFormData(prev => ({ ...prev, amount: val, conversion_rate: String(orgExchangeRate) }))
+        setFormData(prev => ({ ...prev, amount: val, conversion_rate: String(currentEx) }))
       } else {
         setFormData(prev => ({ ...prev, amount: convNgn, conversion_rate: '1.0000' }))
       }
@@ -633,8 +831,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         video_link: payload.video_link || null,
         is_promo: Boolean(payload.is_promo),
-        promo_packaging_fee: (payload.is_promo && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
-        promo_doorstep_fee: (payload.is_promo && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
+        promo_packaging_fee: ((payload.is_promo || isCustomPricing) && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
+        promo_doorstep_fee: ((payload.is_promo || isCustomPricing) && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
         extra_charges: parseFloat(payload.extra_charges) || 0.0,
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
@@ -753,12 +951,19 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
     setHasPackaging(shipment.has_packaging ? 'YES' : 'NO')
     setHasDoorstepDelivery(shipment.has_doorstep_delivery ? 'YES' : 'NO')
+    const hasCustomRates = Boolean(shipment.promo_packaging_fee || shipment.promo_doorstep_fee || (shipment.conversion_rate && Number(shipment.conversion_rate) !== 1 && Number(shipment.conversion_rate) !== orgExchangeRate))
+    setIsCustomPricing(hasCustomRates)
+    setCustomPerKgRate('')
+    setCustomPackagingFee(shipment.promo_packaging_fee ? String(shipment.promo_packaging_fee) : '')
+    setCustomDoorstepFee(shipment.promo_doorstep_fee ? String(shipment.promo_doorstep_fee) : '')
+    setCustomExchangeRate(shipment.conversion_rate ? String(shipment.conversion_rate) : '')
+    const activeEx = (hasCustomRates && shipment.conversion_rate && Number(shipment.conversion_rate) > 0) ? Number(shipment.conversion_rate) : orgExchangeRate
     if (shipment.currency === 'GBP') {
       setAmountGbp(amt > 0 ? String(amt) : '')
-      setAmountNgn(amt > 0 ? (amt * orgExchangeRate).toFixed(2) : '')
+      setAmountNgn(amt > 0 ? (amt * activeEx).toFixed(2) : '')
     } else {
       setAmountNgn(amt > 0 ? String(amt) : '')
-      setAmountGbp(amt > 0 ? (amt / orgExchangeRate).toFixed(2) : '')
+      setAmountGbp(amt > 0 ? (amt / activeEx).toFixed(2) : '')
     }
     setActiveTab('shipment')
     setIsEditShipmentModalOpen(true)
@@ -983,8 +1188,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         has_doorstep_delivery: hasDoorstepDelivery === 'YES',
         video_link: payload.video_link || null,
         is_promo: Boolean(payload.is_promo),
-        promo_packaging_fee: (payload.is_promo && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
-        promo_doorstep_fee: (payload.is_promo && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
+        promo_packaging_fee: ((payload.is_promo || isCustomPricing) && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
+        promo_doorstep_fee: ((payload.is_promo || isCustomPricing) && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
         extra_charges: parseFloat(payload.extra_charges) || 0.0,
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
@@ -1131,6 +1336,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     setAmountGbp('')
     setHasPackaging('NO')
     setHasDoorstepDelivery('NO')
+    setIsCustomPricing(false)
+    setCustomPerKgRate('')
+    setCustomPackagingFee('')
+    setCustomDoorstepFee('')
+    setCustomExchangeRate('')
     setActiveTab('shipment')
   }
 
@@ -2570,9 +2780,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     const isPartner = Boolean((formData.partner_id && formData.partner_id !== '') || (formData.partner_name && formData.partner_name.trim() !== ''))
                     const isSea = formData.shipping_type === 'SEA'
                     const isPromo = Boolean(formData.is_promo)
+                    const activeExRate = (isCustomPricing && customExchangeRate && !isNaN(parseFloat(customExchangeRate))) ? parseFloat(customExchangeRate) : orgExchangeRate
                     let currentPerKgRate = orgPerKgPrice
                     let rateLabel = ''
-                    if (isPromo && orgPromoRate > 0) {
+                    if (isCustomPricing && customPerKgRate !== '' && !isNaN(parseFloat(customPerKgRate))) {
+                      currentPerKgRate = parseFloat(customPerKgRate)
+                      rateLabel = '(Custom Rate)'
+                    } else if (isPromo && orgPromoRate > 0) {
                       currentPerKgRate = orgPromoRate
                       rateLabel = '(Promo Rate)'
                     } else if (isSea && orgSeaShippingRate > 0) {
@@ -2584,40 +2798,64 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     }
 
                     const weightVal = parseFloat(formData.weight_kg) || 0
-                    const weightFeeVal = weightVal * currentPerKgRate * orgExchangeRate
+                    const weightFeeVal = weightVal * currentPerKgRate * activeExRate
 
-                    let packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
-                    if (isPromo && hasPackaging === 'YES' && formData.promo_packaging_fee !== undefined && formData.promo_packaging_fee !== null && String(formData.promo_packaging_fee) !== '') {
-                      packagingFeeVal = parseFloat(String(formData.promo_packaging_fee)) || 0
+                    let packagingFeeVal = 0
+                    if (hasPackaging === 'YES') {
+                      if (isCustomPricing && customPackagingFee !== '' && !isNaN(parseFloat(customPackagingFee))) {
+                        packagingFeeVal = (parseInt(formData.number_of_carton) || 0) * (parseFloat(customPackagingFee) || 0)
+                      } else if (isPromo && formData.promo_packaging_fee !== undefined && formData.promo_packaging_fee !== null && String(formData.promo_packaging_fee) !== '') {
+                        packagingFeeVal = parseFloat(String(formData.promo_packaging_fee)) || 0
+                      } else {
+                        packagingFeeVal = ((parseInt(formData.number_of_carton) || 0) * orgParcelRate)
+                      }
                     }
 
-                    let doorstepFeeVal = hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0
-                    if (isPromo && hasDoorstepDelivery === 'YES' && formData.promo_doorstep_fee !== undefined && formData.promo_doorstep_fee !== null && String(formData.promo_doorstep_fee) !== '') {
-                      doorstepFeeVal = (parseFloat(String(formData.promo_doorstep_fee)) || 0) * orgExchangeRate
+                    let doorstepFeeVal = 0
+                    if (hasDoorstepDelivery === 'YES') {
+                      const parcelsForDoorstep = (parseInt(formData.number_of_carton) || 1)
+                      if (isCustomPricing && customDoorstepFee !== '' && !isNaN(parseFloat(customDoorstepFee))) {
+                        doorstepFeeVal = parcelsForDoorstep * (parseFloat(customDoorstepFee) || 0) * activeExRate
+                      } else if (isPromo && formData.promo_doorstep_fee !== undefined && formData.promo_doorstep_fee !== null && String(formData.promo_doorstep_fee) !== '') {
+                        doorstepFeeVal = (parseFloat(String(formData.promo_doorstep_fee)) || 0) * activeExRate
+                      } else {
+                        doorstepFeeVal = parcelsForDoorstep * orgDoorstepRate * activeExRate
+                      }
                     }
 
-                    const subtotalVal = packagingFeeVal + doorstepFeeVal + weightFeeVal
+                    const extraChargesNgn = formData.currency === 'GBP' ? ((parseFloat(formData.extra_charges) || 0) * activeExRate) : (parseFloat(formData.extra_charges) || 0)
+                    const subtotalVal = packagingFeeVal + doorstepFeeVal + weightFeeVal + extraChargesNgn
                     const discountVal = (subtotalVal * (parseFloat(formData.discount_percentage) || 0)) / 100
 
-                    return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
+                    return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0 || isCustomPricing) && (
                       <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
+                        {isCustomPricing && (
+                          <div className="flex items-center justify-between pb-1 border-b border-emerald-500/20 text-[11px]">
+                            <span className="flex items-center gap-1.5 font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                              <Sliders className="h-3 w-3" /> Custom Pricing Mode Active
+                            </span>
+                            <span className="text-zinc-400 font-mono text-[10px]">
+                              Rate: £1 = ₦{activeExRate.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         <div className="text-xs text-zinc-300 space-y-1 pt-1">
-                          {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo) && (
+                          {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo || isCustomPricing) && (
                             <div className="flex justify-between text-purple-400 font-medium">
-                              <span>Packaging Fee {isPromo && formData.promo_packaging_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 0)} × ₦${orgParcelRate.toLocaleString()})`}:</span>
+                              <span>Packaging Fee {isCustomPricing && customPackagingFee ? `(${(parseInt(formData.number_of_carton) || 0)} × ₦${(parseFloat(customPackagingFee) || 0).toLocaleString()} [Custom])` : isPromo && formData.promo_packaging_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 0)} × ₦${orgParcelRate.toLocaleString()})`}:</span>
                               <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
-                          {hasDoorstepDelivery === 'YES' && (doorstepFeeVal > 0 || isPromo) && (
+                          {hasDoorstepDelivery === 'YES' && (doorstepFeeVal > 0 || isPromo || isCustomPricing) && (
                             <div className="flex justify-between text-sky-400 font-medium">
-                              <span>Doorstep Delivery Fee {isPromo && formData.promo_doorstep_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${orgDoorstepRate.toLocaleString()} @ ₦${orgExchangeRate.toLocaleString()}/£)`}:</span>
+                              <span>Doorstep Delivery Fee {isCustomPricing && customDoorstepFee ? `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${(parseFloat(customDoorstepFee) || 0).toLocaleString()} @ ₦${activeExRate.toLocaleString()}/£ [Custom])` : isPromo && formData.promo_doorstep_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${orgDoorstepRate.toLocaleString()} @ ₦${orgExchangeRate.toLocaleString()}/£)`}:</span>
                               <span>₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                           {weightVal > 0 && currentPerKgRate > 0 && (
                             <div className="flex justify-between text-emerald-400 font-medium">
                               <span>
-                                {isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {rateLabel} @ ₦{orgExchangeRate.toLocaleString()}/£):
+                                {isCustomPricing ? 'Weight Fee (Custom)' : isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {rateLabel} @ ₦{activeExRate.toLocaleString()}/£):
                               </span>
                               <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
@@ -2849,12 +3087,121 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
                   {/* Currency, Conversion Rate, Discount & Auto Currency Conversion Fields (Last Card on Package Details) */}
                   <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3 mt-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Currency, Discount & Exchange Conversion</span>
-                      <span className="text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold">
-                        Configured Rate: £1 = ₦{orgExchangeRate.toLocaleString()}
-                      </span>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-zinc-800 pb-2.5">
+                      <div>
+                        <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <DollarSign className="h-4 w-4 text-emerald-400" /> Currency & Pricing Configuration
+                        </span>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          {isCustomPricing ? 'Custom Pricing Mode Active (overriding default rates)' : `Configured Rate: £1 = ₦${orgExchangeRate.toLocaleString()}`}
+                        </p>
+                      </div>
+
+                      {/* Custom Pricing Toggle */}
+                      <div className="flex items-center gap-2 bg-zinc-950/80 px-3 py-1.5 rounded-lg border border-zinc-800">
+                        <span className="text-xs font-semibold text-zinc-300">
+                          Custom Pricing:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCustomPricingToggle(!isCustomPricing)}
+                          className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            isCustomPricing ? 'bg-emerald-600' : 'bg-zinc-700'
+                          }`}
+                          role="switch"
+                          aria-checked={isCustomPricing}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              isCustomPricing ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                        <span className={`text-[11px] font-bold ${isCustomPricing ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                          {isCustomPricing ? 'ON (Manual)' : 'OFF (Default)'}
+                        </span>
+                      </div>
                     </div>
+
+                    {isCustomPricing && (
+                      <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3 space-y-2.5 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                            <Sliders className="h-3.5 w-3.5" /> Itemized Custom Rates Override
+                          </div>
+                          <span className="text-[10px] text-zinc-400">
+                            Custom values override organization defaults for this shipment
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                              <span>Price / Kg (£)</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">Org: £{orgPerKgPrice}</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customPerKgRate}
+                              onChange={(e) => handleCustomPerKgChange(e.target.value)}
+                              placeholder={`e.g. ${orgPerKgPrice || '3.90'}`}
+                              style={{ color: '#000000' }}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                              <span>Packaging / Carton (₦)</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">Org: ₦{orgParcelRate}</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="100"
+                              value={customPackagingFee}
+                              onChange={(e) => handleCustomPkgFeeChange(e.target.value)}
+                              placeholder={`e.g. ${orgParcelRate || '3000'}`}
+                              style={{ color: '#000000' }}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                              <span>Doorstep Delivery (£)</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">Org: £{orgDoorstepRate}</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customDoorstepFee}
+                              onChange={(e) => handleCustomDsFeeChange(e.target.value)}
+                              placeholder={`e.g. ${orgDoorstepRate || '15.00'}`}
+                              style={{ color: '#000000' }}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                              <span>Exchange Rate (₦ / £)</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">Org: ₦{orgExchangeRate}</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="1"
+                              value={customExchangeRate}
+                              onChange={(e) => handleCustomExRateChange(e.target.value)}
+                              placeholder={`e.g. ${orgExchangeRate || '2000'}`}
+                              style={{ color: '#000000' }}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                       <div className="space-y-1">
@@ -4069,9 +4416,13 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     const isPartner = Boolean((formData.partner_id && formData.partner_id !== '') || (formData.partner_name && formData.partner_name.trim() !== ''))
                     const isSea = formData.shipping_type === 'SEA'
                     const isPromo = Boolean(formData.is_promo)
+                    const activeExRate = (isCustomPricing && customExchangeRate && !isNaN(parseFloat(customExchangeRate))) ? parseFloat(customExchangeRate) : orgExchangeRate
                     let currentPerKgRate = orgPerKgPrice
                     let rateLabel = ''
-                    if (isPromo && orgPromoRate > 0) {
+                    if (isCustomPricing && customPerKgRate !== '' && !isNaN(parseFloat(customPerKgRate))) {
+                      currentPerKgRate = parseFloat(customPerKgRate)
+                      rateLabel = '(Custom Rate)'
+                    } else if (isPromo && orgPromoRate > 0) {
                       currentPerKgRate = orgPromoRate
                       rateLabel = '(Promo Rate)'
                     } else if (isSea && orgSeaShippingRate > 0) {
@@ -4083,39 +4434,65 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     }
 
                     const weightVal = parseFloat(formData.weight_kg) || 0
-                    const weightFeeVal = weightVal * currentPerKgRate * orgExchangeRate
+                    const weightFeeVal = weightVal * currentPerKgRate * activeExRate
 
-                    let packagingFeeVal = hasPackaging === 'YES' ? ((parseInt(formData.number_of_carton) || 0) * orgParcelRate) : 0
-                    if (isPromo && hasPackaging === 'YES' && formData.promo_packaging_fee !== undefined && formData.promo_packaging_fee !== null && String(formData.promo_packaging_fee) !== '') {
-                      packagingFeeVal = parseFloat(String(formData.promo_packaging_fee)) || 0
+                    let packagingFeeVal = 0
+                    if (hasPackaging === 'YES') {
+                      if (isCustomPricing && customPackagingFee !== '' && !isNaN(parseFloat(customPackagingFee))) {
+                        packagingFeeVal = (parseInt(formData.number_of_carton) || 0) * (parseFloat(customPackagingFee) || 0)
+                      } else if (isPromo && formData.promo_packaging_fee !== undefined && formData.promo_packaging_fee !== null && String(formData.promo_packaging_fee) !== '') {
+                        packagingFeeVal = parseFloat(String(formData.promo_packaging_fee)) || 0
+                      } else {
+                        packagingFeeVal = ((parseInt(formData.number_of_carton) || 0) * orgParcelRate)
+                      }
                     }
 
-                    let doorstepFeeVal = hasDoorstepDelivery === 'YES' ? ((parseInt(formData.number_of_carton) || 1) * orgDoorstepRate * orgExchangeRate) : 0
-                    if (isPromo && hasDoorstepDelivery === 'YES' && formData.promo_doorstep_fee !== undefined && formData.promo_doorstep_fee !== null && String(formData.promo_doorstep_fee) !== '') {
-                      doorstepFeeVal = (parseFloat(String(formData.promo_doorstep_fee)) || 0) * orgExchangeRate
+                    let doorstepFeeVal = 0
+                    if (hasDoorstepDelivery === 'YES') {
+                      const parcelsForDoorstep = (parseInt(formData.number_of_carton) || 1)
+                      if (isCustomPricing && customDoorstepFee !== '' && !isNaN(parseFloat(customDoorstepFee))) {
+                        doorstepFeeVal = parcelsForDoorstep * (parseFloat(customDoorstepFee) || 0) * activeExRate
+                      } else if (isPromo && formData.promo_doorstep_fee !== undefined && formData.promo_doorstep_fee !== null && String(formData.promo_doorstep_fee) !== '') {
+                        doorstepFeeVal = (parseFloat(String(formData.promo_doorstep_fee)) || 0) * activeExRate
+                      } else {
+                        doorstepFeeVal = parcelsForDoorstep * orgDoorstepRate * activeExRate
+                      }
                     }
 
-                    const subtotalVal = packagingFeeVal + doorstepFeeVal + weightFeeVal
+                    const extraChargesNgn = formData.currency === 'GBP' ? ((parseFloat(formData.extra_charges) || 0) * activeExRate) : (parseFloat(formData.extra_charges) || 0)
+                    const subtotalVal = packagingFeeVal + doorstepFeeVal + weightFeeVal + extraChargesNgn
                     const discountVal = (subtotalVal * (parseFloat(formData.discount_percentage) || 0)) / 100
 
-                    return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0) && (
+                    return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0 || isCustomPricing) && (
                       <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
+                        {isCustomPricing && (
+                          <div className="flex items-center justify-between pb-1 border-b border-emerald-500/20 text-[11px]">
+                            <span className="flex items-center gap-1.5 font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                              <Sliders className="h-3 w-3" /> Custom Pricing Mode Active
+                            </span>
+                            <span className="text-zinc-400 font-mono text-[10px]">
+                              Rate: £1 = ₦{activeExRate.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         <div className="text-xs text-zinc-300 space-y-1 pt-1">
-                          {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo) && (
+                          {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo || isCustomPricing) && (
                             <div className="flex justify-between text-purple-400 font-medium">
-                              <span>Packaging Fee {isPromo && formData.promo_packaging_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 0)} × ₦${orgParcelRate.toLocaleString()})`}:</span>
+                              <span>Packaging Fee {isCustomPricing && customPackagingFee ? `(${(parseInt(formData.number_of_carton) || 0)} × ₦${(parseFloat(customPackagingFee) || 0).toLocaleString()} [Custom])` : isPromo && formData.promo_packaging_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 0)} × ₦${orgParcelRate.toLocaleString()})`}:</span>
                               <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
-                          {hasDoorstepDelivery === 'YES' && (doorstepFeeVal > 0 || isPromo) && (
+                          {hasDoorstepDelivery === 'YES' && (doorstepFeeVal > 0 || isPromo || isCustomPricing) && (
                             <div className="flex justify-between text-sky-400 font-medium">
-                              <span>Doorstep Delivery Fee {isPromo && formData.promo_doorstep_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${orgDoorstepRate.toLocaleString()} @ ₦${orgExchangeRate.toLocaleString()}/£)`}:</span>
+                              <span>Doorstep Delivery Fee {isCustomPricing && customDoorstepFee ? `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${(parseFloat(customDoorstepFee) || 0).toLocaleString()} @ ₦${activeExRate.toLocaleString()}/£ [Custom])` : isPromo && formData.promo_doorstep_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${orgDoorstepRate.toLocaleString()} @ ₦${orgExchangeRate.toLocaleString()}/£)`}:</span>
                               <span>₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                           {weightVal > 0 && currentPerKgRate > 0 && (
                             <div className="flex justify-between text-emerald-400 font-medium">
-                              <span>Weight Fee ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {rateLabel} @ ₦{orgExchangeRate.toLocaleString()}/£):</span>
+                              <span>
+                                {isCustomPricing ? 'Weight Fee (Custom)' : isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {rateLabel} @ ₦{activeExRate.toLocaleString()}/£):
+                              </span>
                               <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
@@ -4318,12 +4695,121 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
                   {/* Currency, Conversion Rate, Discount & Auto Currency Conversion Fields (Last Card on Package Details) */}
                   <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 space-y-3 mt-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider">Currency, Discount & Exchange Conversion</span>
-                      <span className="text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-0.5 rounded-full font-bold">
-                        Configured Rate: £1 = ₦{orgExchangeRate.toLocaleString()}
-                      </span>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-zinc-800 pb-2.5">
+                      <div>
+                        <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+                          <DollarSign className="h-4 w-4 text-emerald-400" /> Currency & Pricing Configuration
+                        </span>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          {isCustomPricing ? 'Custom Pricing Mode Active (overriding default rates)' : `Configured Rate: £1 = ₦${orgExchangeRate.toLocaleString()}`}
+                        </p>
+                      </div>
+
+                      {/* Custom Pricing Toggle */}
+                      <div className="flex items-center gap-2 bg-zinc-950/80 px-3 py-1.5 rounded-lg border border-zinc-800">
+                        <span className="text-xs font-semibold text-zinc-300">
+                          Custom Pricing:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCustomPricingToggle(!isCustomPricing)}
+                          className={`relative inline-flex h-5 w-10 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            isCustomPricing ? 'bg-emerald-600' : 'bg-zinc-700'
+                          }`}
+                          role="switch"
+                          aria-checked={isCustomPricing}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              isCustomPricing ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                        <span className={`text-[11px] font-bold ${isCustomPricing ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                          {isCustomPricing ? 'ON (Manual)' : 'OFF (Default)'}
+                        </span>
+                      </div>
                     </div>
+
+                    {isCustomPricing && (
+                      <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3 space-y-2.5 animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                            <Sliders className="h-3.5 w-3.5" /> Itemized Custom Rates Override
+                          </div>
+                          <span className="text-[10px] text-zinc-400">
+                            Custom values override organization defaults for this shipment
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                              <span>Price / Kg (£)</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">Org: £{orgPerKgPrice}</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customPerKgRate}
+                              onChange={(e) => handleCustomPerKgChange(e.target.value)}
+                              placeholder={`e.g. ${orgPerKgPrice || '3.90'}`}
+                              style={{ color: '#000000' }}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                              <span>Packaging / Carton (₦)</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">Org: ₦{orgParcelRate}</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="100"
+                              value={customPackagingFee}
+                              onChange={(e) => handleCustomPkgFeeChange(e.target.value)}
+                              placeholder={`e.g. ${orgParcelRate || '3000'}`}
+                              style={{ color: '#000000' }}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                              <span>Doorstep Delivery (£)</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">Org: £{orgDoorstepRate}</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={customDoorstepFee}
+                              onChange={(e) => handleCustomDsFeeChange(e.target.value)}
+                              placeholder={`e.g. ${orgDoorstepRate || '15.00'}`}
+                              style={{ color: '#000000' }}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
+                              <span>Exchange Rate (₦ / £)</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">Org: ₦{orgExchangeRate}</span>
+                            </label>
+                            <input
+                              type="number"
+                              step="1"
+                              value={customExchangeRate}
+                              onChange={(e) => handleCustomExRateChange(e.target.value)}
+                              placeholder={`e.g. ${orgExchangeRate || '2000'}`}
+                              style={{ color: '#000000' }}
+                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                       <div className="space-y-1">
