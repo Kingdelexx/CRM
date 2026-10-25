@@ -492,6 +492,8 @@ export interface Shipment extends BaseEntity {
   weight_kg: number;
   tracking_id?: string;
   dpd_tracking_number?: string;
+  tracking_number?: string;
+  total_parcels?: number;
   payment_reference_number?: string;
   value: number;
   note?: string;

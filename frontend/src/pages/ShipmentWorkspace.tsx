@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import type { Shipment, Invoice, Contact, User, ShipmentEscalation, EscalationType, EscalationPriority, EscalationStatus, LogisticsItem, LogisticsService } from '@/types/crm'
 import { MintanaInvoiceReceiptModal } from '../components/MintanaInvoiceReceiptModal'
+import { ShipmentThermalLabelModal } from '../components/ShipmentThermalLabelModal'
 import ContactSearchCombobox from '../components/ContactSearchCombobox'
 import {
   useLegacyTable as useReactTable,
@@ -45,7 +46,8 @@ import {
   Percent,
   Download,
   CreditCard,
-  Sliders
+  Sliders,
+  Printer
 } from 'lucide-react'
 
 interface ShipmentWorkspaceProps {
@@ -351,6 +353,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
   // Custom Pricing (Manual Rate Breakdown Override) State
   const [isCustomPricing, setIsCustomPricing] = useState<boolean>(false)
   const [customPerKgRate, setCustomPerKgRate] = useState<string>('')
+  const [customPerKgCurrency, setCustomPerKgCurrency] = useState<'GBP' | 'NGN'>('GBP')
   const [customPackagingFee, setCustomPackagingFee] = useState<string>('')
   const [customDoorstepFee, setCustomDoorstepFee] = useState<string>('')
   const [customExchangeRate, setCustomExchangeRate] = useState<string>('')
@@ -375,7 +378,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     customPerKgOverride?: string,
     customPackagingFeeOverride?: string,
     customDoorstepFeeOverride?: string,
-    customExchangeRateOverride?: string
+    customExchangeRateOverride?: string,
+    customPerKgCurrencyOverride?: 'GBP' | 'NGN'
   ) => {
     const numParcels = parseInt(parcelCountStr) || 0
     const weightKg = parseFloat(weightKgStr !== undefined ? weightKgStr : formData.weight_kg) || 0
@@ -421,9 +425,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
 
     let effectivePerKgPrice = orgPerKgPrice
+    let isRateInNgn = false
+    const activePerKgCurrency = customPerKgCurrencyOverride !== undefined ? customPerKgCurrencyOverride : customPerKgCurrency
     const cPerKg = customPerKgOverride !== undefined ? customPerKgOverride : customPerKgRate
     if (activeCustom && cPerKg !== '' && !isNaN(parseFloat(cPerKg))) {
       effectivePerKgPrice = parseFloat(cPerKg)
+      if (activePerKgCurrency === 'NGN') {
+        isRateInNgn = true
+      }
     } else if (isPromo && orgPromoRate > 0) {
       effectivePerKgPrice = orgPromoRate
     } else if (shipType === 'SEA' && orgSeaShippingRate > 0) {
@@ -432,7 +441,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       effectivePerKgPrice = orgPartnerPerKgPrice
     }
 
-    const weightFee = weightKg * effectivePerKgPrice * effectiveExRate
+    const weightFee = isRateInNgn
+      ? weightKg * effectivePerKgPrice
+      : weightKg * effectivePerKgPrice * effectiveExRate
     const extraChargesNgn = formData.currency === 'GBP' ? extraChargesVal * effectiveExRate : extraChargesVal
     const subtotalNgn = parcelFee + doorstepFee + weightFee + extraChargesNgn
 
@@ -454,10 +465,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       else if (shipType === 'SEA' && orgSeaShippingRate > 0) baseKg = orgSeaShippingRate
       else if (isPartner && orgPartnerPerKgPrice > 0) baseKg = orgPartnerPerKgPrice
 
-      const initPerKg = customPerKgRate || String(baseKg || '3.90')
+      const initEx = customExchangeRate || String(orgExchangeRate || '2000')
+      const exNum = parseFloat(initEx) || 2000
+      const initPerKg = customPerKgRate || (customPerKgCurrency === 'NGN' ? String(Math.round(baseKg * exNum)) : String(baseKg || '3.90'))
       const initPkg = customPackagingFee || String(orgParcelRate || '3000')
       const initDs = customDoorstepFee || String(orgDoorstepRate || '15')
-      const initEx = customExchangeRate || String(orgExchangeRate || '2000')
 
       setCustomPerKgRate(initPerKg)
       setCustomPackagingFee(initPkg)
@@ -488,13 +500,15 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         initPerKg,
         initPkg,
         initDs,
-        initEx
+        initEx,
+        customPerKgCurrency
       )
     } else {
       setCustomPerKgRate('')
       setCustomPackagingFee('')
       setCustomDoorstepFee('')
       setCustomExchangeRate('')
+      setCustomPerKgCurrency('GBP')
       setFormData(prev => ({
         ...prev,
         conversion_rate: String(orgExchangeRate),
@@ -514,9 +528,52 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         '',
         '',
         formData.extra_charges,
-        false
+        false,
+        '',
+        '',
+        '',
+        String(orgExchangeRate),
+        'GBP'
       )
     }
+  }
+
+  const handleCustomPerKgCurrencyChange = (newCurr: 'GBP' | 'NGN') => {
+    if (newCurr === customPerKgCurrency) return
+    setCustomPerKgCurrency(newCurr)
+    const effectiveEx = (customExchangeRate && !isNaN(parseFloat(customExchangeRate))) ? parseFloat(customExchangeRate) : orgExchangeRate
+
+    let updatedVal = customPerKgRate
+    if (customPerKgRate && !isNaN(parseFloat(customPerKgRate))) {
+      const curVal = parseFloat(customPerKgRate)
+      if (newCurr === 'NGN') {
+        updatedVal = String(Math.round(curVal * effectiveEx))
+      } else {
+        updatedVal = String(parseFloat((curVal / effectiveEx).toFixed(2)))
+      }
+      setCustomPerKgRate(updatedVal)
+    }
+
+    recalculateTotalAmount(
+      hasPackaging,
+      formData.number_of_carton,
+      hasDoorstepDelivery,
+      formData.weight_kg,
+      formData.discount_percentage,
+      formData.partner_id,
+      formData.partner_name,
+      formData.shipping_type,
+      formData.is_promo,
+      undefined,
+      undefined,
+      formData.extra_charges,
+      isCustomPricing,
+      updatedVal,
+      undefined,
+      undefined,
+      undefined,
+      newCurr
+    )
   }
 
   const handleCustomPerKgChange = (val: string) => {
@@ -535,7 +592,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       undefined,
       formData.extra_charges,
       true,
-      val
+      val,
+      undefined,
+      undefined,
+      undefined,
+      customPerKgCurrency
     )
   }
 
@@ -796,6 +857,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     manifestCode?: string;
   } | null>(null)
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false)
+  const [selectedShipmentForLabels, setSelectedShipmentForLabels] = useState<Shipment | null>(null)
+  const [isThermalLabelModalOpen, setIsThermalLabelModalOpen] = useState(false)
 
   // Edit Shipment State & Mutation
   const [editingShipment, setEditingShipment] = useState<Shipment | null>(null)
@@ -954,6 +1017,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const hasCustomRates = Boolean(shipment.promo_packaging_fee || shipment.promo_doorstep_fee || (shipment.conversion_rate && Number(shipment.conversion_rate) !== 1 && Number(shipment.conversion_rate) !== orgExchangeRate))
     setIsCustomPricing(hasCustomRates)
     setCustomPerKgRate('')
+    setCustomPerKgCurrency('GBP')
     setCustomPackagingFee(shipment.promo_packaging_fee ? String(shipment.promo_packaging_fee) : '')
     setCustomDoorstepFee(shipment.promo_doorstep_fee ? String(shipment.promo_doorstep_fee) : '')
     setCustomExchangeRate(shipment.conversion_rate ? String(shipment.conversion_rate) : '')
@@ -1338,6 +1402,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     setHasDoorstepDelivery('NO')
     setIsCustomPricing(false)
     setCustomPerKgRate('')
+    setCustomPerKgCurrency('GBP')
     setCustomPackagingFee('')
     setCustomDoorstepFee('')
     setCustomExchangeRate('')
@@ -1713,6 +1778,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-sky-400 rounded transition-colors cursor-pointer"
           >
             <Download className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setSelectedShipmentForLabels(info.row.original)
+              setIsThermalLabelModalOpen(true)
+            }}
+            title="Print Shipping Labels (Thermal)"
+            className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-indigo-400 rounded transition-colors cursor-pointer"
+          >
+            <Printer className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => {
@@ -2798,7 +2874,10 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     }
 
                     const weightVal = parseFloat(formData.weight_kg) || 0
-                    const weightFeeVal = weightVal * currentPerKgRate * activeExRate
+                    const isCustomPerKgInNgn = Boolean(isCustomPricing && customPerKgCurrency === 'NGN' && customPerKgRate !== '' && !isNaN(parseFloat(customPerKgRate)))
+                    const weightFeeVal = isCustomPerKgInNgn
+                      ? weightVal * currentPerKgRate
+                      : weightVal * currentPerKgRate * activeExRate
 
                     let packagingFeeVal = 0
                     if (hasPackaging === 'YES') {
@@ -2855,7 +2934,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                           {weightVal > 0 && currentPerKgRate > 0 && (
                             <div className="flex justify-between text-emerald-400 font-medium">
                               <span>
-                                {isCustomPricing ? 'Weight Fee (Custom)' : isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {rateLabel} @ ₦{activeExRate.toLocaleString()}/£):
+                                {isCustomPricing ? 'Weight Fee (Custom)' : isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × {isCustomPerKgInNgn ? `₦${currentPerKgRate.toLocaleString()}` : `£${currentPerKgRate.toLocaleString()}`} {rateLabel}{!isCustomPerKgInNgn ? ` @ ₦${activeExRate.toLocaleString()}/£` : ''}):
                               </span>
                               <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
@@ -3138,18 +3217,32 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
                           <div className="space-y-1">
                             <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
-                              <span>Price / Kg (£)</span>
-                              <span className="text-[10px] text-zinc-500 font-normal">Org: £{orgPerKgPrice}</span>
+                              <span>Price / Kg</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">
+                                Org: {customPerKgCurrency === 'NGN' ? `₦${Math.round(orgPerKgPrice * orgExchangeRate).toLocaleString()}` : `£${orgPerKgPrice}`}
+                              </span>
                             </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={customPerKgRate}
-                              onChange={(e) => handleCustomPerKgChange(e.target.value)}
-                              placeholder={`e.g. ${orgPerKgPrice || '3.90'}`}
-                              style={{ color: '#000000' }}
-                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
-                            />
+                            <div className="flex rounded-lg border border-zinc-700 focus-within:border-emerald-500 overflow-hidden bg-zinc-900">
+                              <input
+                                type="number"
+                                step={customPerKgCurrency === 'NGN' ? '100' : '0.01'}
+                                value={customPerKgRate}
+                                onChange={(e) => handleCustomPerKgChange(e.target.value)}
+                                placeholder={customPerKgCurrency === 'NGN' ? `e.g. ${Math.round(orgPerKgPrice * orgExchangeRate)}` : `e.g. ${orgPerKgPrice || '3.90'}`}
+                                style={{ color: '#000000' }}
+                                className="w-full bg-zinc-900 p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input focus:outline-none flex-1 min-w-0"
+                              />
+                              <select
+                                value={customPerKgCurrency}
+                                onChange={(e) => handleCustomPerKgCurrencyChange(e.target.value as 'GBP' | 'NGN')}
+                                aria-label="Price per Kg currency"
+                                title="Choose currency symbol: £ or ₦"
+                                className="bg-zinc-800 text-emerald-400 text-xs font-bold px-2 py-2 border-l border-zinc-700 focus:outline-none cursor-pointer hover:bg-zinc-700/80 transition-colors shrink-0"
+                              >
+                                <option value="GBP" className="bg-zinc-900 text-zinc-100">£</option>
+                                <option value="NGN" className="bg-zinc-900 text-zinc-100">₦</option>
+                              </select>
+                            </div>
                           </div>
 
                           <div className="space-y-1">
@@ -4434,7 +4527,10 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     }
 
                     const weightVal = parseFloat(formData.weight_kg) || 0
-                    const weightFeeVal = weightVal * currentPerKgRate * activeExRate
+                    const isCustomPerKgInNgn = Boolean(isCustomPricing && customPerKgCurrency === 'NGN' && customPerKgRate !== '' && !isNaN(parseFloat(customPerKgRate)))
+                    const weightFeeVal = isCustomPerKgInNgn
+                      ? weightVal * currentPerKgRate
+                      : weightVal * currentPerKgRate * activeExRate
 
                     let packagingFeeVal = 0
                     if (hasPackaging === 'YES') {
@@ -4491,7 +4587,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                           {weightVal > 0 && currentPerKgRate > 0 && (
                             <div className="flex justify-between text-emerald-400 font-medium">
                               <span>
-                                {isCustomPricing ? 'Weight Fee (Custom)' : isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × £{currentPerKgRate.toLocaleString()} {rateLabel} @ ₦{activeExRate.toLocaleString()}/£):
+                                {isCustomPricing ? 'Weight Fee (Custom)' : isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × {isCustomPerKgInNgn ? `₦${currentPerKgRate.toLocaleString()}` : `£${currentPerKgRate.toLocaleString()}`} {rateLabel}{!isCustomPerKgInNgn ? ` @ ₦${activeExRate.toLocaleString()}/£` : ''}):
                               </span>
                               <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
@@ -4746,18 +4842,32 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
                           <div className="space-y-1">
                             <label className="text-[11px] font-semibold text-zinc-300 flex items-center justify-between">
-                              <span>Price / Kg (£)</span>
-                              <span className="text-[10px] text-zinc-500 font-normal">Org: £{orgPerKgPrice}</span>
+                              <span>Price / Kg</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">
+                                Org: {customPerKgCurrency === 'NGN' ? `₦${Math.round(orgPerKgPrice * orgExchangeRate).toLocaleString()}` : `£${orgPerKgPrice}`}
+                              </span>
                             </label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={customPerKgRate}
-                              onChange={(e) => handleCustomPerKgChange(e.target.value)}
-                              placeholder={`e.g. ${orgPerKgPrice || '3.90'}`}
-                              style={{ color: '#000000' }}
-                              className="w-full bg-zinc-900 border border-zinc-700 focus:border-emerald-500 focus:outline-none rounded-lg p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input"
-                            />
+                            <div className="flex rounded-lg border border-zinc-700 focus-within:border-emerald-500 overflow-hidden bg-zinc-900">
+                              <input
+                                type="number"
+                                step={customPerKgCurrency === 'NGN' ? '100' : '0.01'}
+                                value={customPerKgRate}
+                                onChange={(e) => handleCustomPerKgChange(e.target.value)}
+                                placeholder={customPerKgCurrency === 'NGN' ? `e.g. ${Math.round(orgPerKgPrice * orgExchangeRate)}` : `e.g. ${orgPerKgPrice || '3.90'}`}
+                                style={{ color: '#000000' }}
+                                className="w-full bg-zinc-900 p-2 text-xs text-black placeholder:text-black placeholder-black font-mono font-medium custom-pricing-input focus:outline-none flex-1 min-w-0"
+                              />
+                              <select
+                                value={customPerKgCurrency}
+                                onChange={(e) => handleCustomPerKgCurrencyChange(e.target.value as 'GBP' | 'NGN')}
+                                aria-label="Price per Kg currency"
+                                title="Choose currency symbol: £ or ₦"
+                                className="bg-zinc-800 text-emerald-400 text-xs font-bold px-2 py-2 border-l border-zinc-700 focus:outline-none cursor-pointer hover:bg-zinc-700/80 transition-colors shrink-0"
+                              >
+                                <option value="GBP" className="bg-zinc-900 text-zinc-100">£</option>
+                                <option value="NGN" className="bg-zinc-900 text-zinc-100">₦</option>
+                              </select>
+                            </div>
                           </div>
 
                           <div className="space-y-1">
@@ -5205,6 +5315,16 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
             {/* Modal Actions */}
             <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedShipmentForLabels(createdShipmentSuccessData.shipment)
+                  setIsThermalLabelModalOpen(true)
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/20 cursor-pointer flex items-center gap-1.5"
+              >
+                <Printer className="h-3.5 w-3.5" /> Print Shipping Labels
+              </button>
               {selectedInvoiceForModal && (
                 <button
                   type="button"
@@ -5240,6 +5360,18 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           setAutoPrintInvoiceModal(false)
         }}
       />
+
+      {/* Shipment Thermal Label Modal */}
+      {isThermalLabelModalOpen && selectedShipmentForLabels && (
+        <ShipmentThermalLabelModal
+          isOpen={isThermalLabelModalOpen}
+          onClose={() => {
+            setIsThermalLabelModalOpen(false)
+            setSelectedShipmentForLabels(null)
+          }}
+          shipment={selectedShipmentForLabels}
+        />
+      )}
     </>
   )
 }

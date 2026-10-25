@@ -854,6 +854,14 @@ class Shipment(TimeStampedModel):
         related_name='recorded_shipments'
     )
 
+    @property
+    def total_parcels(self):
+        return self.number_of_carton or 1
+
+    @property
+    def tracking_number(self):
+        return self.tracking_id or self.dpd_tracking_number or self.invoice_number or ""
+
     def __str__(self):
         return f"Shipment {self.invoice_number or self.tracking_id} - {self.receiver_name or 'Receiver'}"
 

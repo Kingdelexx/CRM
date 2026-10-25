@@ -403,6 +403,8 @@ class ShipmentSchema(ModelSchema):
     partner: Optional[ContactSchema] = None
     recorded_by: Optional[UserSchema] = None
     manifest: Optional[DailyManifestSchema] = None
+    total_parcels: Optional[int] = 1
+    tracking_number: Optional[str] = None
 
     class Meta:
         model = Shipment
@@ -413,6 +415,14 @@ class ShipmentSchema(ModelSchema):
             'discount_percentage', 'invoice_number', 'number_of_carton', 'has_packaging', 'has_doorstep_delivery', 'extra_charges', 'dpd', 'video_link', 'is_promo', 'promo_packaging_fee', 'promo_doorstep_fee', 'packager', 'partner_name', 'item_received', 'items_shipped',
             'items_recieved', 'weight_kg', 'tracking_id', 'dpd_tracking_number', 'payment_reference_number', 'value', 'note', 'manifest', 'created_at', 'updated_at'
         ]
+
+    @staticmethod
+    def resolve_total_parcels(obj):
+        return getattr(obj, 'total_parcels', None) or getattr(obj, 'number_of_carton', None) or 1
+
+    @staticmethod
+    def resolve_tracking_number(obj):
+        return getattr(obj, 'tracking_number', None) or getattr(obj, 'tracking_id', None) or getattr(obj, 'dpd_tracking_number', None) or getattr(obj, 'invoice_number', None) or ""
 
 
 class ShipmentCreateSchema(Schema):

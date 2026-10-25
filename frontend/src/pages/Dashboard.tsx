@@ -17,12 +17,14 @@ import { InvoicesWorkspace } from './InvoicesWorkspace'
 import LeadsWorkspace from './LeadsWorkspace'
 import PartnersWorkspace from './PartnersWorkspace'
 import ShipmentWorkspace from './ShipmentWorkspace'
+import ShippingLabelsWorkspace from './ShippingLabelsWorkspace'
 import TasksWorkspace from './TasksWorkspace'
 import ChatWorkspace from './ChatWorkspace'
 import DetailDrawer from '@/components/DetailDrawer'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
 import {
   LogOut,
+  Printer,
   Users,
   Target,
   Handshake,
@@ -58,6 +60,7 @@ type DashboardView =
   | 'leads'
   | 'partners'
   | 'shipments'
+  | 'labels'
   | 'escalations'
   | 'tasks'
   | 'chat'
@@ -80,6 +83,7 @@ const sidebarNavItems: { id: DashboardView; label: string; icon: React.ReactNode
   { id: 'leads', label: 'Leads', icon: <Target className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
   { id: 'partners', label: 'Partners', icon: <Handshake className="h-4.5 w-4.5 flex-shrink-0 text-emerald-600" /> },
   { id: 'shipments', label: 'Shipments', icon: <Truck className="h-4.5 w-4.5 flex-shrink-0 text-sky-600" /> },
+  { id: 'labels', label: 'Shipping Labels', icon: <Printer className="h-4.5 w-4.5 flex-shrink-0 text-amber-600" /> },
   { id: 'escalations', label: 'Escalations', icon: <ShieldAlert className="h-4.5 w-4.5 flex-shrink-0 text-red-600" /> },
   { id: 'tasks', label: 'Tasks', icon: <CheckSquare className="h-4.5 w-4.5 flex-shrink-0 text-amber-600" /> },
   { id: 'contacts', label: 'Contacts', icon: <Users className="h-4.5 w-4.5 flex-shrink-0 text-blue-600" /> },
@@ -89,7 +93,7 @@ const sidebarNavItems: { id: DashboardView; label: string; icon: React.ReactNode
   { id: 'reports', label: 'Reports Visualizer', icon: <BarChart3 className="h-4.5 w-4.5 flex-shrink-0 text-indigo-600" /> },
 ]
 
-export default function Dashboard() {
+export default function Dashboard({ defaultView }: { defaultView?: DashboardView }) {
   const navigate = useNavigate()
   const dropdownRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
@@ -107,7 +111,13 @@ export default function Dashboard() {
     return null
   })
   const [isLoading, setIsLoading] = useState(true)
-  const [currentView, setCurrentView] = useState<DashboardView>('pipeline')
+  const [currentView, setCurrentView] = useState<DashboardView>(defaultView || 'pipeline')
+
+  useEffect(() => {
+    if (defaultView) {
+      setCurrentView(defaultView)
+    }
+  }, [defaultView])
   
   // UI States
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
@@ -656,6 +666,7 @@ export default function Dashboard() {
           {currentView === 'calendar' && <CalendarWorkspace />}
           {currentView === 'emails' && <EmailSyncWorkspace />}
           {currentView === 'invoices' && <InvoicesWorkspace />}
+          {currentView === 'labels' && <ShippingLabelsWorkspace />}
         </div>
       </main>
 

@@ -89,6 +89,22 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/labels"
+            element={
+              <ProtectedRoute>
+                <Dashboard defaultView="labels" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/shipments/labels"
+            element={
+              <ProtectedRoute>
+                <Dashboard defaultView="labels" />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Root Redirect fallback */}
           <Route
