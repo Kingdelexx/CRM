@@ -35,6 +35,7 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
 
 import ManifestLookupPage from '@/pages/ManifestLookupPage'
 import PublicTrackingPage from '@/pages/PublicTrackingPage'
+import PromoLandingPage from '@/pages/PromoLandingPage'
 
 export default function App() {
   useEffect(() => {
@@ -73,6 +74,10 @@ export default function App() {
               </AuthRoute>
             }
           />
+
+          {/* Public Standalone Landing Page for Ads */}
+          <Route path="/promo" element={<PromoLandingPage />} />
+          <Route path="/promo/*" element={<PromoLandingPage />} />
 
           {/* Public Tracking & Manifest Lookup Routes */}
           <Route path="/tracking" element={<PublicTrackingPage />} />
