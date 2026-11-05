@@ -5370,6 +5370,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             setSelectedShipmentForLabels(null)
           }}
           shipment={selectedShipmentForLabels}
+          onDelete={(shipment) => {
+            deleteShipmentMutation.mutate(shipment.id)
+          }}
         />
       )}
     </>

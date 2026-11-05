@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import type { Shipment } from '@/types/crm'
 import {
@@ -21,7 +21,9 @@ import {
   Anchor,
   FileText,
   Sliders,
-  ChevronDown
+  ChevronDown,
+  Trash2,
+  Loader2
 } from 'lucide-react'
 import {
   ShipmentThermalLabelModal
@@ -34,11 +36,14 @@ import {
 } from '@/components/ShipmentThermalLabel'
 
 export default function ShippingLabelsWorkspace() {
+  const queryClient = useQueryClient()
   const [searchTerm, setSearchTerm] = useState('')
   const [shippingTypeFilter, setShippingTypeFilter] = useState<'ALL' | 'AIR' | 'SEA'>('ALL')
   const [partnerFilter, setPartnerFilter] = useState<'ALL' | 'DIRECT' | 'PARTNER'>('ALL')
   const [dateFilter, setDateFilter] = useState('')
   const [selectedShipmentIds, setSelectedShipmentIds] = useState<Set<string>>(new Set())
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isBatchDeleting, setIsBatchDeleting] = useState(false)
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -153,6 +158,59 @@ export default function ShippingLabelsWorkspace() {
     setIsModalOpen(true)
   }
 
+  // Delete a single shipping label / shipment
+  const handleDeleteSingle = async (shipment: Shipment) => {
+    const trk = getShipmentTrackingNumber(shipment)
+    const identifier = shipment.receiver_name ? `${shipment.receiver_name} (${trk})` : trk
+    if (!window.confirm(`Are you sure you want to delete the shipping label for "${identifier}"? This action cannot be undone.`)) {
+      return
+    }
+
+    setDeletingId(shipment.id)
+    try {
+      await apiClient.delete(`/shipments/${shipment.id}`)
+      setSelectedShipmentIds(prev => {
+        const next = new Set(prev)
+        next.delete(shipment.id)
+        return next
+      })
+      await queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      await queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      refetch()
+    } catch (err: any) {
+      console.error('Failed to delete shipping label:', err)
+      alert(`Failed to delete shipping label: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  // Batch delete selected shipping labels / shipments
+  const handleDeleteBatchLabels = async () => {
+    const count = selectedShipmentIds.size
+    if (count === 0) return
+
+    if (!window.confirm(`Are you sure you want to delete ${count} selected shipping label(s)? This action cannot be undone.`)) {
+      return
+    }
+
+    setIsBatchDeleting(true)
+    try {
+      const ids = Array.from(selectedShipmentIds)
+      await Promise.all(ids.map(id => apiClient.delete(`/shipments/${id}`)))
+      setSelectedShipmentIds(new Set())
+      await queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      await queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      refetch()
+    } catch (err: any) {
+      console.error('Failed to delete selected shipping labels:', err)
+      alert(`Failed to delete selected shipping labels: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`)
+      refetch()
+    } finally {
+      setIsBatchDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Banner / Module Header */}
@@ -186,14 +244,31 @@ export default function ShippingLabelsWorkspace() {
           </button>
 
           {selectedShipmentIds.size > 0 && (
-            <button
-              type="button"
-              onClick={() => handleOpenBatchLabels(false)}
-              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-md shadow-amber-600/20 transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <Printer className="h-4 w-4" />
-              <span>Print Selected ({selectedShipmentIds.size} shipments, {selectedParcelsCount} parcels)</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => handleOpenBatchLabels(false)}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-md shadow-amber-600/20 transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Print Selected ({selectedShipmentIds.size} shipments, {selectedParcelsCount} parcels)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteBatchLabels}
+                disabled={isBatchDeleting}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                title="Delete selected shipping labels"
+              >
+                {isBatchDeleting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                <span>Delete Selected ({selectedShipmentIds.size})</span>
+              </button>
+            </>
           )}
 
           {filteredShipments.length > 0 && selectedShipmentIds.size === 0 && (
@@ -367,9 +442,25 @@ export default function ShippingLabelsWorkspace() {
           </div>
 
           {selectedShipmentIds.size > 0 && (
-            <span className="text-amber-700 font-bold bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-              {selectedShipmentIds.size} selected ({selectedParcelsCount} labels ready)
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-amber-700 font-bold bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                {selectedShipmentIds.size} selected ({selectedParcelsCount} labels ready)
+              </span>
+              <button
+                type="button"
+                onClick={handleDeleteBatchLabels}
+                disabled={isBatchDeleting}
+                className="text-red-600 hover:text-red-700 font-bold bg-red-50 hover:bg-red-100 px-2.5 py-0.5 rounded-full border border-red-200 flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                title="Delete selected shipping labels"
+              >
+                {isBatchDeleting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+                <span>Delete Selected</span>
+              </button>
+            </div>
           )}
         </div>
 
@@ -498,6 +589,21 @@ export default function ShippingLabelsWorkspace() {
                       >
                         <Printer className="h-4 w-4" />
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSingle(s)}
+                        disabled={deletingId === s.id || isBatchDeleting}
+                        className="p-2 rounded-xl border border-slate-200 hover:border-red-300 hover:bg-red-50 text-slate-400 hover:text-red-600 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                        title="Delete shipping label"
+                        aria-label="Delete shipping label"
+                      >
+                        {deletingId === s.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-red-500" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -516,6 +622,7 @@ export default function ShippingLabelsWorkspace() {
         }}
         shipments={modalShipments}
         autoPrint={modalAutoPrint}
+        onDelete={handleDeleteSingle}
       />
     </div>
   )

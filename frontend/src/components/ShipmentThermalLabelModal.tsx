@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react'
 import {
   SingleThermalLabelView,
@@ -30,6 +31,7 @@ interface ShipmentThermalLabelModalProps {
   shipment?: Shipment // Convenience single shipment prop
   initialShipmentIndex?: number
   autoPrint?: boolean
+  onDelete?: (shipment: Shipment) => void | Promise<void>
 }
 
 export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps> = ({
@@ -39,6 +41,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
   shipment,
   initialShipmentIndex = 0,
   autoPrint = false,
+  onDelete,
 }) => {
   const activeShipments = useMemo(() => {
     if (shipments && shipments.length > 0) return shipments
@@ -223,6 +226,25 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
           </div>
 
           <div className="flex items-center gap-2">
+            {onDelete && activeShipments.length === 1 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const targetShipment = activeShipments[0]
+                  const trk = getShipmentTrackingNumber(targetShipment)
+                  const identifier = targetShipment.receiver_name ? `${targetShipment.receiver_name} (${trk})` : trk
+                  if (window.confirm(`Are you sure you want to delete the shipping label for "${identifier}"? This action cannot be undone.`)) {
+                    await onDelete(targetShipment)
+                    onClose()
+                  }
+                }}
+                className="px-2.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Delete this shipping label"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete Label</span>
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
