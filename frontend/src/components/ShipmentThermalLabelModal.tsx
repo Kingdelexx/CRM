@@ -160,11 +160,11 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/80 p-3 sm:p-5 overflow-hidden">
-      {/* Hidden print container with strict 144mm x 100mm dimensions for window.print() */}
+      {/* Hidden print container with strict 100mm x 144mm vertical dimensions for window.print() */}
       <div id="thermal-print-container" className="hidden print:block">
         <style>{`
           @page {
-            size: ${THERMAL_WIDTH_MM}mm ${THERMAL_HEIGHT_MM}mm;
+            size: ${THERMAL_WIDTH_MM}mm ${THERMAL_HEIGHT_MM}mm portrait;
             margin: 0;
           }
           @media print {
@@ -177,12 +177,12 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
               page-break-after: always !important;
               page-break-inside: avoid !important;
               break-after: page !important;
-              width: 144mm !important;
-              height: 100mm !important;
-              min-width: 144mm !important;
-              min-height: 100mm !important;
-              max-width: 144mm !important;
-              max-height: 100mm !important;
+              width: ${THERMAL_WIDTH_MM}mm !important;
+              height: ${THERMAL_HEIGHT_MM}mm !important;
+              min-width: ${THERMAL_WIDTH_MM}mm !important;
+              min-height: ${THERMAL_HEIGHT_MM}mm !important;
+              max-width: ${THERMAL_WIDTH_MM}mm !important;
+              max-height: ${THERMAL_HEIGHT_MM}mm !important;
               box-sizing: border-box !important;
             }
           }
@@ -211,7 +211,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm sm:text-base font-bold text-white">
-                  Thermal Shipping Labels (144mm × 100mm)
+                  Thermal Shipping Labels (100mm × 144mm Vertical)
                 </h3>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   {totalPages} {totalPages === 1 ? 'Page' : 'Pages (Continuous)'}
@@ -330,11 +330,11 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
                   parcelIndex={currentItem.parcelIndex}
                   totalParcels={currentItem.totalParcels}
                   qrDataUrl={currentItem.qrDataUrl}
-                  scale={0.92}
+                  scale={0.85}
                 />
               </div>
               <div className="text-center text-[11px] text-zinc-400 font-mono">
-                Physical label dimensions: 144 mm (width) × 100 mm (height) • Badge: [{currentItem.parcelIndex}/{currentItem.totalParcels}]
+                Physical label dimensions: 100 mm (width) × 144 mm (height) — Vertical (Portrait) • Badge: [{currentItem.parcelIndex}/{currentItem.totalParcels}]
               </div>
             </div>
           ) : (

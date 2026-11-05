@@ -225,7 +225,7 @@ export default function ShippingLabelsWorkspace() {
                 Shipping Labels & Thermal Printing
               </h1>
               <p className="text-xs text-slate-500">
-                144mm × 100mm landscape thermal format with automatic multi-parcel pagination (1/N ... N/N) and tracking QR codes.
+                100mm × 144mm vertical thermal format (approx. 4″ × 5.7″) with automatic multi-parcel pagination (1/N ... N/N) and tracking QR codes.
               </p>
             </div>
           </div>
