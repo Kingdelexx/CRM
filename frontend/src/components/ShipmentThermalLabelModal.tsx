@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import type { Shipment } from '@/types/crm'
 import QRCode from 'qrcode'
 import {
@@ -127,12 +128,18 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
     const primaryTrk = activeShipments[0] ? getShipmentTrackingNumber(activeShipments[0]) : 'Consignment'
     document.title = `Thermal-Labels-${primaryTrk}-${totalPages}-pages`
 
-    window.print()
-
-    setTimeout(() => {
+    const cleanup = () => {
       document.body.classList.remove('printing-thermal-labels')
       document.title = originalTitle
-    }, 600)
+      window.removeEventListener('afterprint', cleanup)
+    }
+
+    window.addEventListener('afterprint', cleanup)
+
+    window.print()
+
+    // Fallback cleanup if afterprint doesn't fire
+    setTimeout(cleanup, 5000)
   }
 
   // React-PDF Blob Download
@@ -158,7 +165,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
     }
   }
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/80 p-3 sm:p-5 overflow-hidden print:static print:p-0 print:m-0 print:overflow-visible print:bg-white print:block">
       {/* Hidden print container with strict 144mm x 100mm dimensions for window.print() */}
       <div id="thermal-print-container" className="hidden print:block print:w-full print:m-0 print:p-0">
@@ -168,7 +175,8 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
             margin: 0;
           }
           @media print {
-            /* Hide CRM layout elements during printing */
+            /* Completely hide React root app and CRM layout elements during printing */
+            body.printing-thermal-labels #root,
             aside, header, nav, .print\\:hidden {
               display: none !important;
             }
@@ -426,4 +434,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
       </div>
     </div>
   )
+
+  if (typeof document === 'undefined') return null
+  return createPortal(modalContent, document.body)
 }

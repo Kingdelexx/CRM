@@ -212,8 +212,9 @@ export default function ShippingLabelsWorkspace() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner / Module Header */}
+    <>
+      <div className="space-y-6 print:hidden">
+        {/* Top Banner / Module Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
@@ -612,18 +613,19 @@ export default function ShippingLabelsWorkspace() {
           </div>
         )}
       </div>
-
-      {/* Shipping Thermal Labels Modal */}
-      <ShipmentThermalLabelModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false)
-          setModalShipments([])
-        }}
-        shipments={modalShipments}
-        autoPrint={modalAutoPrint}
-        onDelete={handleDeleteSingle}
-      />
     </div>
-  )
+
+    {/* Shipping Thermal Labels Modal */}
+    <ShipmentThermalLabelModal
+      isOpen={isModalOpen}
+      onClose={() => {
+        setIsModalOpen(false)
+        setModalShipments([])
+      }}
+      shipments={modalShipments}
+      autoPrint={modalAutoPrint}
+      onDelete={handleDeleteSingle}
+    />
+  </>
+)
 }
