@@ -3,12 +3,12 @@ import type { Shipment } from '@/types/crm'
 import { Document, Page, View, Text, Image as PdfImage, StyleSheet, pdf } from '@react-pdf/renderer'
 import QRCode from 'qrcode'
 
-// Physical Dimensions: 100 mm (width) x 144 mm (height) - Vertical (Portrait)
-// 100mm = 283.46 pt, 144mm = 408.19 pt (72 pt / inch)
-export const THERMAL_WIDTH_MM = 100
-export const THERMAL_HEIGHT_MM = 144
-export const THERMAL_WIDTH_PT = 283.46
-export const THERMAL_HEIGHT_PT = 408.19
+// Physical Dimensions: 144 mm (width) x 100 mm (height)
+// 144mm = 408.19 pt, 100mm = 283.46 pt (72 pt / inch)
+export const THERMAL_WIDTH_MM = 144
+export const THERMAL_HEIGHT_MM = 100
+export const THERMAL_WIDTH_PT = 408.19
+export const THERMAL_HEIGHT_PT = 283.46
 
 export function formatShipmentDate(rawDate?: string): string {
   if (!rawDate) {
@@ -65,7 +65,7 @@ export function splitAddressIntoLines(address?: string): string[] {
 }
 
 // ----------------------------------------------------------------------
-// React-PDF Stylesheet for 100mm x 144mm Vertical (Portrait) Thermal Format
+// React-PDF Stylesheet for 144mm x 100mm Thermal Format
 // ----------------------------------------------------------------------
 const pdfStyles = StyleSheet.create({
   page: {
@@ -87,24 +87,24 @@ const pdfStyles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   header: {
-    marginBottom: 6,
+    marginBottom: 4,
   },
   brandRow: {
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
     marginBottom: 4,
-    minHeight: 32,
+    minHeight: 38,
   },
   brandTextPartner: {
-    fontSize: 20,
+    fontSize: 24, // Increased by 50% from 16
     fontFamily: 'Helvetica-Bold',
     textTransform: 'uppercase',
     color: '#000000',
     letterSpacing: 0.5,
   },
   brandTextMintana: {
-    fontSize: 28,
+    fontSize: 33, // Increased by 50% from 22
     fontFamily: 'Helvetica-Bold',
     color: '#000000',
     letterSpacing: -0.5,
@@ -120,13 +120,13 @@ const pdfStyles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   subBarOriginDest: {
-    fontSize: 8.5,
+    fontSize: 9,
     fontFamily: 'Helvetica-Bold',
     letterSpacing: 1,
     color: '#000000',
   },
   subBarDate: {
-    fontSize: 8,
+    fontSize: 8.5,
     fontFamily: 'Helvetica-Bold',
     color: '#000000',
   },
@@ -134,22 +134,22 @@ const pdfStyles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 4,
   },
   receiverName: {
-    fontSize: 18,
+    fontSize: 22,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
     color: '#000000',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   addressLine: {
-    fontSize: 11.5,
+    fontSize: 13,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
     color: '#000000',
-    lineHeight: 1.35,
+    lineHeight: 1.3,
   },
   footer: {
     borderTopWidth: 1.5,
@@ -158,25 +158,25 @@ const pdfStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    height: 56,
+    height: 58,
   },
   parcelBadge: {
     backgroundColor: '#000000',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    minWidth: 65,
+    minWidth: 70,
   },
   parcelBadgeText: {
     color: '#ffffff',
-    fontSize: 20,
+    fontSize: 24,
     fontFamily: 'Helvetica-Bold',
     textAlign: 'center',
   },
   qrCode: {
-    width: 48,
-    height: 48,
+    width: 50,
+    height: 50,
   },
 })
 
@@ -285,13 +285,13 @@ export const SingleThermalLabelView: React.FC<SingleThermalLabelProps> = ({
     <div
       className={`thermal-label-page bg-white text-black font-sans box-border select-none ${className}`}
       style={{
-        width: `${THERMAL_WIDTH_MM * scale}mm`,
-        height: `${THERMAL_HEIGHT_MM * scale}mm`,
-        minWidth: `${THERMAL_WIDTH_MM * scale}mm`,
-        minHeight: `${THERMAL_HEIGHT_MM * scale}mm`,
-        maxWidth: `${THERMAL_WIDTH_MM * scale}mm`,
-        maxHeight: `${THERMAL_HEIGHT_MM * scale}mm`,
-        padding: `${6 * scale}mm`,
+        width: `${144 * scale}mm`,
+        height: `${100 * scale}mm`,
+        minWidth: `${144 * scale}mm`,
+        minHeight: `${100 * scale}mm`,
+        maxWidth: `${144 * scale}mm`,
+        maxHeight: `${100 * scale}mm`,
+        padding: `${8 * scale}mm`,
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -308,19 +308,19 @@ export const SingleThermalLabelView: React.FC<SingleThermalLabelProps> = ({
         <div className="w-full flex-shrink-0">
           <div
             className="flex items-center mb-1"
-            style={{ minHeight: `${32 * scale}px` }}
+            style={{ minHeight: `${38 * scale}px` }}
           >
             {isPartner ? (
               <span
                 className="font-black text-black uppercase tracking-wider truncate"
-                style={{ fontSize: `${22 * scale}px` }}
+                style={{ fontSize: `${27 * scale}px` }}
               >
                 {brandName}
               </span>
             ) : (
               <span
                 className="font-black text-black tracking-tight lowercase"
-                style={{ fontSize: `${28 * scale}px`, letterSpacing: '-0.5px' }}
+                style={{ fontSize: `${36 * scale}px`, letterSpacing: '-0.5px' }}
               >
                 mintana
               </span>
@@ -329,36 +329,36 @@ export const SingleThermalLabelView: React.FC<SingleThermalLabelProps> = ({
 
           {/* Sub-bar with top and bottom dividers */}
           <div
-            className="w-full flex items-center justify-between border-t border-b border-black py-1 px-0.5"
+            className="w-full flex items-center justify-between border-t border-b border-black py-1 px-1.5"
             style={{
               borderTopWidth: `${1.5 * scale}px`,
               borderBottomWidth: `${1.5 * scale}px`,
-              fontSize: `${10 * scale}px`,
+              fontSize: `${11 * scale}px`,
             }}
           >
-            <div className="font-extrabold tracking-widest text-black flex items-center gap-1.5">
+            <div className="font-extrabold tracking-widest text-black flex items-center gap-2">
               <span>NGR</span>
-              <span className="text-zinc-600 font-bold">&gt;&gt;</span>
+              <span className="text-black font-extrabold">&gt;&gt;</span>
               <span>UK</span>
             </div>
-            <div className="font-bold text-black" style={{ fontSize: `${9.5 * scale}px` }}>
-              Date: <span className="font-extrabold">{dateStr}</span>
+            <div className="font-bold text-black" style={{ fontSize: `${10.5 * scale}px` }}>
+              Date of Shipment: <span className="font-extrabold">{dateStr}</span>
             </div>
           </div>
         </div>
 
         {/* Middle Section (Receiver & Address) */}
-        <div className="flex-1 flex flex-col justify-center items-center text-center px-2 py-2 my-auto overflow-hidden">
+        <div className="flex-1 flex flex-col justify-center items-center text-center px-2 py-1 my-auto overflow-hidden">
           <h1
-            className="font-black text-black tracking-tight leading-tight mb-2.5 truncate max-w-full"
-            style={{ fontSize: `${20 * scale}px` }}
+            className="font-black text-black tracking-tight leading-tight mb-2 truncate max-w-full"
+            style={{ fontSize: `${24 * scale}px` }}
           >
             {receiverName}
           </h1>
 
           <div
-            className="font-bold text-black leading-snug space-y-1 max-w-[95%] overflow-hidden"
-            style={{ fontSize: `${12.5 * scale}px` }}
+            className="font-bold text-black leading-snug space-y-0.5 max-w-[95%] overflow-hidden"
+            style={{ fontSize: `${14 * scale}px` }}
           >
             {addressLines.map((line, idx) => (
               <p key={idx} className="truncate">{line}</p>
@@ -375,11 +375,11 @@ export const SingleThermalLabelView: React.FC<SingleThermalLabelProps> = ({
         >
           {/* Black solid badge with white i/N text */}
           <div
-            className="bg-black text-white font-black flex items-center justify-center px-3.5 py-1.5"
+            className="bg-black text-white font-black flex items-center justify-center px-4 py-1.5"
             style={{
-              minWidth: `${65 * scale}px`,
-              height: `${44 * scale}px`,
-              fontSize: `${24 * scale}px`,
+              minWidth: `${75 * scale}px`,
+              height: `${48 * scale}px`,
+              fontSize: `${28 * scale}px`,
             }}
           >
             <span>{`${parcelIndex}/${totalParcels}`}</span>
@@ -393,14 +393,14 @@ export const SingleThermalLabelView: React.FC<SingleThermalLabelProps> = ({
                 alt={`Tracking QR ${getShipmentTrackingNumber(shipment)}`}
                 className="object-contain"
                 style={{
-                  width: `${50 * scale}px`,
-                  height: `${50 * scale}px`,
+                  width: `${56 * scale}px`,
+                  height: `${56 * scale}px`,
                 }}
               />
             ) : (
               <div
                 className="bg-zinc-100 border border-zinc-300"
-                style={{ width: `${50 * scale}px`, height: `${50 * scale}px` }}
+                style={{ width: `${56 * scale}px`, height: `${56 * scale}px` }}
               />
             )}
           </div>

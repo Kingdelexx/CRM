@@ -159,31 +159,51 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/80 p-3 sm:p-5 overflow-hidden">
-      {/* Hidden print container with strict 100mm x 144mm vertical dimensions for window.print() */}
-      <div id="thermal-print-container" className="hidden print:block">
+    <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/80 p-3 sm:p-5 overflow-hidden print:static print:p-0 print:m-0 print:overflow-visible print:bg-white print:block">
+      {/* Hidden print container with strict 144mm x 100mm dimensions for window.print() */}
+      <div id="thermal-print-container" className="hidden print:block print:w-full print:m-0 print:p-0">
         <style>{`
           @page {
-            size: ${THERMAL_WIDTH_MM}mm ${THERMAL_HEIGHT_MM}mm portrait;
+            size: landscape;
             margin: 0;
           }
           @media print {
-            body {
+            /* Hide CRM layout elements during printing */
+            aside, header, nav, .print\\:hidden {
+              display: none !important;
+            }
+
+            html, body {
               background: #ffffff !important;
               margin: 0 !important;
               padding: 0 !important;
+              width: 100% !important;
+              height: 100% !important;
+              overflow: visible !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
+
+            #thermal-print-container {
+              display: block !important;
+              position: static !important;
+              width: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+
             .thermal-label-page {
               page-break-after: always !important;
               page-break-inside: avoid !important;
               break-after: page !important;
-              width: ${THERMAL_WIDTH_MM}mm !important;
-              height: ${THERMAL_HEIGHT_MM}mm !important;
-              min-width: ${THERMAL_WIDTH_MM}mm !important;
-              min-height: ${THERMAL_HEIGHT_MM}mm !important;
-              max-width: ${THERMAL_WIDTH_MM}mm !important;
-              max-height: ${THERMAL_HEIGHT_MM}mm !important;
+              width: 144mm !important;
+              height: 100mm !important;
+              min-width: 144mm !important;
+              min-height: 100mm !important;
+              max-width: 144mm !important;
+              max-height: 100mm !important;
               box-sizing: border-box !important;
+              margin: 0 auto !important;
             }
           }
         `}</style>
@@ -211,10 +231,13 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm sm:text-base font-bold text-white">
-                  Thermal Shipping Labels (100mm × 144mm Vertical)
+                  Thermal Shipping Labels (144mm × 100mm)
                 </h3>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   {totalPages} {totalPages === 1 ? 'Page' : 'Pages (Continuous)'}
+                </span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  Landscape
                 </span>
               </div>
               <p className="text-xs text-zinc-400">
@@ -330,11 +353,11 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
                   parcelIndex={currentItem.parcelIndex}
                   totalParcels={currentItem.totalParcels}
                   qrDataUrl={currentItem.qrDataUrl}
-                  scale={0.85}
+                  scale={0.92}
                 />
               </div>
               <div className="text-center text-[11px] text-zinc-400 font-mono">
-                Physical label dimensions: 100 mm (width) × 144 mm (height) — Vertical (Portrait) • Badge: [{currentItem.parcelIndex}/{currentItem.totalParcels}]
+                Physical label dimensions: 144 mm (width) × 100 mm (height) • Badge: [{currentItem.parcelIndex}/{currentItem.totalParcels}]
               </div>
             </div>
           ) : (
@@ -396,7 +419,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
               className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-lg shadow-amber-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Printer className="h-4 w-4" />
-              <span>Print {totalPages} {totalPages === 1 ? 'Label' : 'Labels'} (Thermal)</span>
+              <span>Print {totalPages} {totalPages === 1 ? 'Label' : 'Labels'} (Landscape)</span>
             </button>
           </div>
         </div>
