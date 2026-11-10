@@ -21,7 +21,10 @@ import {
   MapPin,
   AlertCircle,
   Handshake,
-  UserCheck
+  UserCheck,
+  Edit2,
+  Trash2,
+  Loader2
 } from 'lucide-react'
 import DetailDrawer from '@/components/DetailDrawer'
 
@@ -33,6 +36,8 @@ export default function PartnersWorkspace() {
   const [assigneeFilter, setAssigneeFilter] = useState('')
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editingPartner, setEditingPartner] = useState<Contact | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
@@ -135,6 +140,117 @@ export default function PartnersWorkspace() {
     }
   })
 
+  // 4. Update Partner mutation
+  const updatePartnerMutation = useMutation({
+    mutationFn: async (payload: typeof formData) => {
+      if (!editingPartner) return
+      const trimmedParts = payload.full_name.trim().split(' ')
+      const first_name = trimmedParts[0] || ''
+      const last_name = trimmedParts.slice(1).join(' ') || '.'
+
+      const formattedPayload = {
+        first_name,
+        last_name,
+        email: payload.email,
+        phone: payload.phone || null,
+        whatsapp_number: payload.whatsapp_number || null,
+        city: payload.city || null,
+        state: payload.state || null,
+        assigned_to_id: payload.assigned_to_id || null,
+        status: 'PARTNER'
+      }
+      return apiClient.put(`/contacts/${editingPartner.id}`, formattedPayload)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['partners-workspace'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+      setIsModalOpen(false)
+      setEditingPartner(null)
+      setFormError('')
+      setFormData({
+        full_name: '',
+        email: '',
+        phone: '',
+        whatsapp_number: '',
+        city: '',
+        state: '',
+        assigned_to_id: '',
+        status: 'PARTNER'
+      })
+    },
+    onError: (err: any) => {
+      const errMsg = err?.response?.data?.detail || err?.message || 'Failed to update partner'
+      setFormError(errMsg)
+    }
+  })
+
+  // 5. Delete Partner mutation
+  const deletePartnerMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiClient.delete(`/contacts/${id}`)
+    },
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ['partners-workspace'] })
+      queryClient.invalidateQueries({ queryKey: ['contacts'] })
+      if (selectedContactId === deletedId) {
+        setIsDrawerOpen(false)
+        setSelectedContactId(null)
+      }
+    },
+    onError: (err: any) => {
+      alert(`Failed to delete partner: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`)
+    },
+    onSettled: () => {
+      setDeletingId(null)
+    }
+  })
+
+  const handleOpenAddModal = () => {
+    setEditingPartner(null)
+    setFormData({
+      full_name: '',
+      email: '',
+      phone: '',
+      whatsapp_number: '',
+      city: '',
+      state: '',
+      assigned_to_id: '',
+      status: 'PARTNER'
+    })
+    setFormError('')
+    setIsModalOpen(true)
+  }
+
+  const handleOpenEditModal = (partner: Contact) => {
+    setEditingPartner(partner)
+    const fn = partner.first_name || ''
+    const ln = partner.last_name || ''
+    const fullName = [fn, ln === '.' ? '' : ln].filter(Boolean).join(' ')
+    setFormData({
+      full_name: fullName,
+      email: partner.email || '',
+      phone: partner.phone || '',
+      whatsapp_number: partner.whatsapp_number || '',
+      city: partner.city || '',
+      state: partner.state || '',
+      assigned_to_id: partner.assigned_to?.id || '',
+      status: 'PARTNER'
+    })
+    setFormError('')
+    setIsModalOpen(true)
+  }
+
+  const handleDeletePartner = (partner: Contact) => {
+    const fn = partner.first_name || ''
+    const ln = partner.last_name || ''
+    const fullName = [fn, ln === '.' ? '' : ln].filter(Boolean).join(' ') || partner.email || 'this partner'
+    if (!window.confirm(`Are you sure you want to delete partner "${fullName}"? This action cannot be undone.`)) {
+      return
+    }
+    setDeletingId(partner.id)
+    deletePartnerMutation.mutate(partner.id)
+  }
+
   // Table columns setup
   const columns = useMemo(() => [
     {
@@ -228,8 +344,44 @@ export default function PartnersWorkspace() {
           })}
         </span>
       )
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: (info: any) => {
+        const partner = info.row.original
+        const isDeletingThis = deletingId === partner.id
+
+        return (
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => handleOpenEditModal(partner)}
+              title="Edit Partner"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-500/10 hover:bg-indigo-600 border border-indigo-500/20 hover:border-indigo-500 text-indigo-400 hover:text-white rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm"
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+              <span>Edit</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeletePartner(partner)}
+              disabled={isDeletingThis}
+              title="Delete Partner"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-500/10 hover:bg-red-600 border border-red-500/20 hover:border-red-500 text-red-400 hover:text-white rounded-lg text-xs font-semibold transition-all cursor-pointer shadow-sm disabled:opacity-50"
+            >
+              {isDeletingThis ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+              <span>Delete</span>
+            </button>
+          </div>
+        )
+      }
     }
-  ], [])
+  ], [deletingId])
 
   // Table hook instance
   const table = useReactTable({
@@ -261,7 +413,11 @@ export default function PartnersWorkspace() {
       setFormError('Please enter a valid email address.')
       return
     }
-    createPartnerMutation.mutate(formData)
+    if (editingPartner) {
+      updatePartnerMutation.mutate(formData)
+    } else {
+      createPartnerMutation.mutate(formData)
+    }
   }
 
   const paginationCount = partnersData?.count || 0
@@ -280,10 +436,7 @@ export default function PartnersWorkspace() {
           <p className="text-zinc-400 text-sm mt-1">Register, assign, and track strategic business partners</p>
         </div>
         <button
-          onClick={() => {
-            setFormError('')
-            setIsModalOpen(true)
-          }}
+          onClick={handleOpenAddModal}
           className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer w-full sm:w-auto"
         >
           <Plus className="h-4.5 w-4.5" /> Add Partner
@@ -475,10 +628,15 @@ export default function PartnersWorkspace() {
             <div className="px-6 py-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/40">
               <div className="flex items-center gap-2">
                 <Handshake className="h-5 w-5 text-emerald-400" />
-                <h3 className="text-md font-bold text-white">Create New Partner</h3>
+                <h3 className="text-md font-bold text-white">
+                  {editingPartner ? 'Edit Partner' : 'Create New Partner'}
+                </h3>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => {
+                  setIsModalOpen(false)
+                  setEditingPartner(null)
+                }}
                 className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="h-5 w-5" />
@@ -614,20 +772,23 @@ export default function PartnersWorkspace() {
               <div className="pt-4 border-t border-zinc-900 flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => {
+                    setIsModalOpen(false)
+                    setEditingPartner(null)
+                  }}
                   className="px-4 py-2 rounded-lg border border-zinc-800 text-zinc-300 hover:bg-zinc-900 text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={createPartnerMutation.isPending}
+                  disabled={createPartnerMutation.isPending || updatePartnerMutation.isPending}
                   className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-600/20 cursor-pointer flex items-center gap-2 disabled:opacity-50"
                 >
-                  {createPartnerMutation.isPending && (
+                  {(createPartnerMutation.isPending || updatePartnerMutation.isPending) && (
                     <span className="h-3.5 w-3.5 rounded-full border border-white border-t-transparent animate-spin"></span>
                   )}
-                  Save Partner
+                  {editingPartner ? 'Save Changes' : 'Save Partner'}
                 </button>
               </div>
             </form>
