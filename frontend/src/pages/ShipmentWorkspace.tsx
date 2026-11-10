@@ -1413,6 +1413,10 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const { name, value } = e.target
     setFormData(prev => {
       const next = { ...prev, [name]: value }
+      if (name === 'date' || name === 'shipment_date') {
+        next.date = value
+        next.shipment_date = value
+      }
       if (name === 'dpd_tracking_number') {
         next.tracking_id = value
       }
@@ -4320,14 +4324,29 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   {/* Date, Shipping Method & Shipment Status */}
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs text-zinc-300 font-semibold">Date</label>
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
+                          <Calendar className="h-3.5 w-3.5 text-emerald-400" /> Date of Shipment
+                        </label>
+                        {editingShipment?.manifest?.access_code && (
+                          <span className="text-[10px] text-zinc-400 font-mono">
+                            Manifest: <span className="text-indigo-400">{editingShipment.manifest.access_code}</span>
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="date"
-                        name="date"
-                        value={formData.date}
-                        onChange={handleInputChange}
-                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer"
+                        name="shipment_date"
+                        value={formData.shipment_date || formData.date}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setFormData(prev => ({ ...prev, shipment_date: val, date: val }))
+                        }}
+                        className="w-full bg-zinc-900 border border-zinc-800 focus:border-emerald-600 focus:outline-none rounded-lg p-2.5 text-sm text-zinc-200 cursor-pointer font-medium"
                       />
+                      <p className="text-[10px] text-zinc-500">
+                        Updating the date automatically reassigns this shipment to that date's daily manifest.
+                      </p>
                     </div>
 
                     <div className="space-y-1.5">

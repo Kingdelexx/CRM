@@ -23,7 +23,9 @@ import {
   Sliders,
   ChevronDown,
   Trash2,
-  Loader2
+  Loader2,
+  X,
+  Edit2
 } from 'lucide-react'
 import {
   ShipmentThermalLabelModal
@@ -44,6 +46,43 @@ export default function ShippingLabelsWorkspace() {
   const [selectedShipmentIds, setSelectedShipmentIds] = useState<Set<string>>(new Set())
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isBatchDeleting, setIsBatchDeleting] = useState(false)
+
+  // Edit Shipment Date State & Mutation
+  const [editingDateShipment, setEditingDateShipment] = useState<Shipment | null>(null)
+  const [newShipmentDate, setNewShipmentDate] = useState('')
+  const [isUpdatingDate, setIsUpdatingDate] = useState(false)
+  const [dateUpdateError, setDateUpdateError] = useState('')
+
+  const handleOpenDateModal = (s: Shipment) => {
+    setEditingDateShipment(s)
+    const raw = s.shipment_date || s.date || new Date().toISOString().split('T')[0]
+    setNewShipmentDate(raw.slice(0, 10))
+    setDateUpdateError('')
+  }
+
+  const handleSaveShipmentDate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingDateShipment || !newShipmentDate) return
+
+    setIsUpdatingDate(true)
+    setDateUpdateError('')
+    try {
+      await apiClient.put(`/shipments/${editingDateShipment.id}`, {
+        receiver_name: editingDateShipment.receiver_name,
+        date: newShipmentDate,
+        shipment_date: newShipmentDate
+      })
+      await queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      await queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      refetch()
+      setEditingDateShipment(null)
+    } catch (err: any) {
+      console.error('Failed to update shipment date:', err)
+      setDateUpdateError(err?.response?.data?.detail || err?.message || 'Failed to update shipment date')
+    } finally {
+      setIsUpdatingDate(false)
+    }
+  }
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -574,6 +613,16 @@ export default function ShippingLabelsWorkspace() {
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
+                        onClick={() => handleOpenDateModal(s)}
+                        className="px-2.5 py-1.5 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-slate-700 hover:text-indigo-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        title="Update shipment date & daily manifest"
+                      >
+                        <Calendar className="h-3.5 w-3.5 text-indigo-600" />
+                        <span>Edit Date</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => handleOpenSingleLabel(s, false)}
                         className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-amber-500 hover:bg-amber-50/50 text-slate-700 hover:text-amber-800 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                         title="Preview & print shipping labels"
@@ -614,6 +663,88 @@ export default function ShippingLabelsWorkspace() {
         )}
       </div>
     </div>
+
+    {/* Edit Shipment Date & Manifest Modal */}
+    {editingDateShipment && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/60 p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-indigo-600" />
+                Update Date of Shipment
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {editingDateShipment.receiver_name || 'Client'} ({getShipmentTrackingNumber(editingDateShipment)})
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditingDateShipment(null)}
+              className="text-slate-400 hover:text-slate-600 transition-colors p-1 cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          {dateUpdateError && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600">
+              {dateUpdateError}
+            </div>
+          )}
+
+          <form onSubmit={handleSaveShipmentDate} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700">
+                New Date of Shipment
+              </label>
+              <input
+                type="date"
+                value={newShipmentDate}
+                onChange={(e) => setNewShipmentDate(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-indigo-600 focus:outline-none text-sm text-slate-900 font-medium cursor-pointer"
+              />
+            </div>
+
+            {editingDateShipment.manifest?.access_code && (
+              <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-100 text-xs text-indigo-900 space-y-1">
+                <span className="font-semibold block">Current Linked Manifest:</span>
+                <span className="font-mono text-xs font-bold text-indigo-700 block">
+                  {editingDateShipment.manifest.access_code}
+                </span>
+                <p className="text-[11px] text-indigo-600 leading-snug">
+                  Changing the date automatically links this shipment to the daily manifest of the selected date (generating a new manifest code if one does not exist yet).
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingDateShipment(null)}
+                disabled={isUpdatingDate}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingDate || !newShipmentDate}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isUpdatingDate ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Calendar className="h-3.5 w-3.5" />
+                )}
+                <span>Save New Date</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
 
     {/* Shipping Thermal Labels Modal */}
     <ShipmentThermalLabelModal

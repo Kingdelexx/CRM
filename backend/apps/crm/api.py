@@ -2638,9 +2638,18 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
     date_val = payload.pop('date', None)
     effective_date = shipment_date_val or date_val
     if effective_date and str(effective_date).strip():
-        c_date = str(effective_date).strip()
-        payload['date'] = c_date
-        payload['shipment_date'] = c_date
+        c_str = str(effective_date).strip()[:10]
+        try:
+            parsed_d = datetime.strptime(c_str, '%Y-%m-%d').date()
+            payload['date'] = parsed_d
+            payload['shipment_date'] = parsed_d
+            target_d = parsed_d
+        except Exception:
+            payload['date'] = c_str
+            payload['shipment_date'] = c_str
+            target_d = c_str
+    else:
+        target_d = shipment.shipment_date or shipment.date
 
     for field in ['sender_name', 'sender_phone', 'sender_email', 'sender_address',
                   'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
@@ -2653,7 +2662,6 @@ def update_shipment(request, id: UUID, data: ShipmentCreateSchema):
     if payload.get('dpd_tracking_number') and not payload.get('tracking_id'):
         payload['tracking_id'] = payload['dpd_tracking_number']
 
-    target_d = effective_date or shipment.shipment_date or shipment.date
     if not shipment.manifest or effective_date:
         shipment.manifest = get_or_create_daily_manifest(request.user.organization, target_d)
 
