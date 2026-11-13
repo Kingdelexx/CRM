@@ -46,8 +46,9 @@ export function getShipmentTotalParcels(shipment: Shipment): number {
 
 export function getShipmentBrandName(shipment: Shipment): { isPartner: boolean; brandName: string } {
   const pName = shipment.partner_name || (shipment.partner ? `${shipment.partner.first_name || ''} ${shipment.partner.last_name || ''}`.trim() : '')
-  if (pName && pName.trim() !== '') {
-    return { isPartner: true, brandName: pName.trim() }
+  const hasPartner = Boolean((pName && pName.trim() !== '') || shipment.partner || (shipment as any).partner_id)
+  if (hasPartner) {
+    return { isPartner: true, brandName: (pName && pName.trim() !== '') ? pName.trim() : (shipment.partner?.first_name || 'PARTNER') }
   }
   return { isPartner: false, brandName: 'mintana' }
 }
@@ -234,10 +235,12 @@ export const ShipmentThermalPdfDocument: React.FC<{ items: ThermalLabelItem[] }>
                 <View style={pdfStyles.parcelBadge}>
                   <Text style={pdfStyles.parcelBadgeText}>{`${parcelIndex}/${totalParcels}`}</Text>
                 </View>
-                {qrDataUrl ? (
-                  <PdfImage src={qrDataUrl} style={pdfStyles.qrCode} />
-                ) : (
-                  <View style={pdfStyles.qrCode} />
+                {!isPartner && (
+                  qrDataUrl ? (
+                    <PdfImage src={qrDataUrl} style={pdfStyles.qrCode} />
+                  ) : (
+                    <View style={pdfStyles.qrCode} />
+                  )
                 )}
               </View>
             </View>
@@ -394,25 +397,27 @@ export const SingleThermalLabelView: React.FC<SingleThermalLabelProps> = ({
             <span>{`${parcelIndex}/${totalParcels}`}</span>
           </div>
 
-          {/* High-contrast QR Code */}
-          <div className="flex items-center justify-end">
-            {qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt={`Tracking QR ${getShipmentTrackingNumber(shipment)}`}
-                className="object-contain"
-                style={{
-                  width: `${56 * scale}px`,
-                  height: `${56 * scale}px`,
-                }}
-              />
-            ) : (
-              <div
-                className="bg-zinc-100 border border-zinc-300"
-                style={{ width: `${56 * scale}px`, height: `${56 * scale}px` }}
-              />
-            )}
-          </div>
+          {/* High-contrast QR Code - only displayed when no partner is selected */}
+          {!isPartner && (
+            <div className="flex items-center justify-end">
+              {qrDataUrl ? (
+                <img
+                  src={qrDataUrl}
+                  alt={`Tracking QR ${getShipmentTrackingNumber(shipment)}`}
+                  className="object-contain"
+                  style={{
+                    width: `${56 * scale}px`,
+                    height: `${56 * scale}px`,
+                  }}
+                />
+              ) : (
+                <div
+                  className="bg-zinc-100 border border-zinc-300"
+                  style={{ width: `${56 * scale}px`, height: `${56 * scale}px` }}
+                />
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
