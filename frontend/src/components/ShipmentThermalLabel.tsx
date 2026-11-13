@@ -138,11 +138,12 @@ const pdfStyles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   receiverName: {
-    fontSize: 22,
+    fontSize: 44, // Increased by 100% from 22
     fontFamily: 'Helvetica-Bold',
+    textTransform: 'uppercase',
     textAlign: 'center',
     color: '#000000',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   addressLine: {
     fontSize: 13,
@@ -350,8 +351,16 @@ export const SingleThermalLabelView: React.FC<SingleThermalLabelProps> = ({
         {/* Middle Section (Receiver & Address) */}
         <div className="flex-1 flex flex-col justify-center items-center text-center px-2 py-1 my-auto overflow-hidden">
           <h1
-            className="font-black text-black tracking-tight leading-tight mb-2 truncate max-w-full"
-            style={{ fontSize: `${24 * scale}px` }}
+            className="font-black text-black uppercase tracking-tight leading-tight mb-1.5 max-w-full text-center"
+            style={{
+              fontSize: `${48 * scale}px`, // Increased by 100% from 24
+              lineHeight: 1.1,
+              wordBreak: 'break-word',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden'
+            }}
           >
             {receiverName}
           </h1>
