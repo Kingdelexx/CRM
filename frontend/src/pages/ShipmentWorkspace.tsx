@@ -159,7 +159,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     let dsNgn = 0
     if (shipment.has_doorstep_delivery) {
       if (shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null && String(shipment.promo_doorstep_fee) !== '') {
-        dsGbp = Math.round(Number(shipment.promo_doorstep_fee) * 100) / 100
+        const rawDs = Number(shipment.promo_doorstep_fee) || 0
+        dsGbp = Math.round(parcels * rawDs * 100) / 100
         dsNgn = Math.round(dsGbp * conversionRate * 100) / 100
       } else {
         dsGbp = stdDsGbp
@@ -168,14 +169,15 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
 
     const parcelRateNgn = Number(meData?.organization?.parcel_rate) || 0
-    const stdPkgNgn = (shipment.number_of_carton && parcelRateNgn > 0) ? Math.round(Number(shipment.number_of_carton) * parcelRateNgn * 100) / 100 : 0
+    const stdPkgNgn = (shipment.has_packaging && parcelRateNgn > 0) ? Math.round(parcels * parcelRateNgn * 100) / 100 : 0
     const stdPkgGbp = conversionRate > 0 ? Math.round((stdPkgNgn / conversionRate) * 100) / 100 : 0
 
     let pkgNgn = 0
     let pkgGbp = 0
     if (shipment.has_packaging) {
       if (shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null && String(shipment.promo_packaging_fee) !== '') {
-        pkgNgn = Math.round(Number(shipment.promo_packaging_fee) * 100) / 100
+        const rawPkg = Number(shipment.promo_packaging_fee) || 0
+        pkgNgn = Math.round(parcels * rawPkg * 100) / 100
         pkgGbp = conversionRate > 0 ? Math.round((pkgNgn / conversionRate) * 100) / 100 : 0
       } else {
         pkgNgn = stdPkgNgn
@@ -287,9 +289,25 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       const searchTarget = shipment.invoice_number || shipment.tracking_id || ''
       const invRes = await apiClient.get<any>(`/invoices/?search=${encodeURIComponent(searchTarget)}`)
       const items = invRes.data?.items || (Array.isArray(invRes.data) ? invRes.data : [])
-      let matched = items.find((i: any) => i.invoice_number === shipment.invoice_number) || items[0]
+      let matched = items.find((i: any) => i.invoice_number === shipment.invoice_number)
       if (!matched) {
         matched = shipmentToInvoice(shipment)
+      } else {
+        const synthesized = shipmentToInvoice(shipment)
+        matched.items = (matched.items || []).map((item: LogisticsItem, idx: number) => {
+          const synthItem = synthesized.items?.[idx] || synthesized.items?.[0]
+          return {
+            ...item,
+            rate_per_kg_gbp: synthItem?.rate_per_kg_gbp ?? item.rate_per_kg_gbp,
+            rate_per_kg_ngn: synthItem?.rate_per_kg_ngn ?? item.rate_per_kg_ngn,
+            unit_price_gbp: synthItem?.unit_price_gbp ?? item.unit_price_gbp,
+            unit_price_ngn: synthItem?.unit_price_ngn ?? item.unit_price_ngn,
+            price_gbp: synthItem?.price_gbp ?? item.price_gbp,
+            price_ngn: synthItem?.price_ngn ?? item.price_ngn,
+            total_gbp: synthItem?.total_gbp ?? item.total_gbp,
+            total_ngn: synthItem?.total_ngn ?? item.total_ngn,
+          }
+        })
       }
       setSelectedInvoiceForModal(matched)
       setAutoPrintInvoiceModal(autoPrint)
@@ -975,6 +993,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['shipments'] })
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
       queryClient.invalidateQueries({ queryKey: ['contacts'] })
       queryClient.invalidateQueries({ queryKey: ['contacts-select'] })
       setIsEditShipmentModalOpen(false)
@@ -1378,9 +1397,25 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         try {
           const invRes = await apiClient.get<any>(`/invoices/?search=${encodeURIComponent(invNumber)}`)
           const items = invRes.data?.items || (Array.isArray(invRes.data) ? invRes.data : [])
-          let matched = items.find((i: any) => i.invoice_number === invNumber) || items[0]
+          let matched = items.find((i: any) => i.invoice_number === invNumber)
           if (!matched && savedShipment) {
             matched = shipmentToInvoice(savedShipment)
+          } else if (matched && savedShipment) {
+            const synthesized = shipmentToInvoice(savedShipment)
+            matched.items = (matched.items || []).map((item: LogisticsItem, idx: number) => {
+              const synthItem = synthesized.items?.[idx] || synthesized.items?.[0]
+              return {
+                ...item,
+                rate_per_kg_gbp: synthItem?.rate_per_kg_gbp ?? item.rate_per_kg_gbp,
+                rate_per_kg_ngn: synthItem?.rate_per_kg_ngn ?? item.rate_per_kg_ngn,
+                unit_price_gbp: synthItem?.unit_price_gbp ?? item.unit_price_gbp,
+                unit_price_ngn: synthItem?.unit_price_ngn ?? item.unit_price_ngn,
+                price_gbp: synthItem?.price_gbp ?? item.price_gbp,
+                price_ngn: synthItem?.price_ngn ?? item.price_ngn,
+                total_gbp: synthItem?.total_gbp ?? item.total_gbp,
+                total_ngn: synthItem?.total_ngn ?? item.total_ngn,
+              }
+            })
           }
           if (matched) {
             if (!matched.manifest && savedShipment?.manifest) {

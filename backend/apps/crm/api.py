@@ -2792,7 +2792,8 @@ def sync_shipment_invoice(shipment):
 
     if shipment.has_doorstep_delivery:
         if shipment.promo_doorstep_fee is not None:
-            ds_gbp = round(float(shipment.promo_doorstep_fee), 2)
+            raw_ds = float(shipment.promo_doorstep_fee)
+            ds_gbp = round(ds_parcels * raw_ds, 2)
             ds_ngn = round(ds_gbp * conversion_rate, 2)
         else:
             ds_gbp = std_ds_gbp
@@ -2802,12 +2803,14 @@ def sync_shipment_invoice(shipment):
         ds_ngn = 0.0
 
     parcel_rate_ngn = float(getattr(org, 'parcel_rate', 0.0) or 0.0) if org else 0.0
-    std_pkg_ngn = round((shipment.number_of_carton or 0) * parcel_rate_ngn, 2) if shipment.number_of_carton else 0.0
+    pkg_parcels = shipment.number_of_carton if shipment.number_of_carton else 1
+    std_pkg_ngn = round(pkg_parcels * parcel_rate_ngn, 2) if (getattr(shipment, 'has_packaging', False) and parcel_rate_ngn > 0) else 0.0
     std_pkg_gbp = round(std_pkg_ngn / conversion_rate, 2) if (conversion_rate > 0 and std_pkg_ngn > 0) else 0.0
 
     if getattr(shipment, 'has_packaging', False):
         if shipment.promo_packaging_fee is not None:
-            pkg_ngn = round(float(shipment.promo_packaging_fee), 2)
+            raw_pkg = float(shipment.promo_packaging_fee)
+            pkg_ngn = round(pkg_parcels * raw_pkg, 2)
             pkg_gbp = round(pkg_ngn / conversion_rate, 2) if conversion_rate > 0 else 0.0
         else:
             pkg_ngn = std_pkg_ngn

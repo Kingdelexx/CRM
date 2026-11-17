@@ -78,27 +78,39 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
   const fallbackRate = 2000;
 
   const getItemLineTotalNgn = (i: LogisticsItem) => {
-    if (i.total_ngn !== undefined && i.total_ngn !== null) return Number(i.total_ngn) || 0;
-    if (i.rate_per_kg_ngn !== undefined && i.rate_per_kg_ngn !== null && i.weight_kg) {
+    if (i.rate_per_kg_ngn !== undefined && i.rate_per_kg_ngn !== null && i.weight_kg && i.weight_kg > 0) {
       return Math.round((Number(i.rate_per_kg_ngn) * i.weight_kg) * 100) / 100;
     }
+    if (i.unit_price_ngn !== undefined && i.unit_price_ngn !== null && i.weight_kg && i.weight_kg > 0) {
+      return Math.round((Number(i.unit_price_ngn) * i.weight_kg) * 100) / 100;
+    }
+    if (i.total_ngn !== undefined && i.total_ngn !== null) return Number(i.total_ngn) || 0;
     return Number(i.price_ngn) || 0;
   };
 
   const getItemLineTotalGbp = (i: LogisticsItem) => {
-    if (i.total_gbp !== undefined && i.total_gbp !== null) return Number(i.total_gbp) || 0;
-    if (i.rate_per_kg_gbp !== undefined && i.rate_per_kg_gbp !== null && i.weight_kg) {
+    if (i.rate_per_kg_gbp !== undefined && i.rate_per_kg_gbp !== null && i.weight_kg && i.weight_kg > 0) {
       return Math.round((Number(i.rate_per_kg_gbp) * i.weight_kg) * 100) / 100;
     }
+    if (i.unit_price_gbp !== undefined && i.unit_price_gbp !== null && i.weight_kg && i.weight_kg > 0) {
+      return Math.round((Number(i.unit_price_gbp) * i.weight_kg) * 100) / 100;
+    }
+    if (i.total_gbp !== undefined && i.total_gbp !== null) return Number(i.total_gbp) || 0;
     return Number(i.price_gbp) || 0;
   };
 
   const getItemUnitRateNgn = (i: LogisticsItem) => {
-    if (i.rate_per_kg_ngn !== undefined && i.rate_per_kg_ngn !== null) {
+    if (i.rate_per_kg_ngn !== undefined && i.rate_per_kg_ngn !== null && Number(i.rate_per_kg_ngn) > 0) {
       return Number(i.rate_per_kg_ngn);
     }
-    if (i.unit_price_ngn !== undefined && i.unit_price_ngn !== null) {
+    if (i.unit_price_ngn !== undefined && i.unit_price_ngn !== null && Number(i.unit_price_ngn) > 0) {
       return Number(i.unit_price_ngn);
+    }
+    if (i.price_ngn !== undefined && i.price_ngn !== null && Number(i.price_ngn) > 0) {
+      const pNgn = Number(i.price_ngn);
+      if (!i.weight_kg || i.weight_kg <= 1 || (i.total_ngn && pNgn < Number(i.total_ngn))) {
+        return pNgn;
+      }
     }
     if (i.total_ngn !== undefined && i.total_ngn !== null && i.weight_kg && i.weight_kg > 0) {
       return Math.round(((Number(i.total_ngn) || 0) / i.weight_kg) * 100) / 100;
@@ -110,11 +122,17 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
   };
 
   const getItemUnitRateGbp = (i: LogisticsItem) => {
-    if (i.rate_per_kg_gbp !== undefined && i.rate_per_kg_gbp !== null) {
+    if (i.rate_per_kg_gbp !== undefined && i.rate_per_kg_gbp !== null && Number(i.rate_per_kg_gbp) > 0) {
       return Number(i.rate_per_kg_gbp);
     }
-    if (i.unit_price_gbp !== undefined && i.unit_price_gbp !== null) {
+    if (i.unit_price_gbp !== undefined && i.unit_price_gbp !== null && Number(i.unit_price_gbp) > 0) {
       return Number(i.unit_price_gbp);
+    }
+    if (i.price_gbp !== undefined && i.price_gbp !== null && Number(i.price_gbp) > 0) {
+      const pGbp = Number(i.price_gbp);
+      if (!i.weight_kg || i.weight_kg <= 1 || (i.total_gbp && pGbp < Number(i.total_gbp))) {
+        return pGbp;
+      }
     }
     if (i.total_gbp !== undefined && i.total_gbp !== null && i.weight_kg && i.weight_kg > 0) {
       return Math.round(((Number(i.total_gbp) || 0) / i.weight_kg) * 100) / 100;
