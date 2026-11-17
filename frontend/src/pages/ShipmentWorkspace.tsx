@@ -5,6 +5,7 @@ import type { Shipment, Invoice, Contact, User, ShipmentEscalation, EscalationTy
 import { MintanaInvoiceReceiptModal } from '../components/MintanaInvoiceReceiptModal'
 import { ShipmentThermalLabelModal } from '../components/ShipmentThermalLabelModal'
 import ContactSearchCombobox from '../components/ContactSearchCombobox'
+import DeleteConfirmDialog from '../components/DeleteConfirmDialog'
 import {
   useLegacyTable as useReactTable,
   getCoreRowModel
@@ -1011,6 +1012,58 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   })
 
+  // Delete Confirmation Dialog State
+  const [deleteConfirmState, setDeleteConfirmState] = useState<{
+    isOpen: boolean
+    title: string
+    message: React.ReactNode
+    errorMessage?: string | null
+    onConfirm: () => void
+  }>({
+    isOpen: false,
+    title: 'Confirm Deletion',
+    message: '',
+    onConfirm: () => {}
+  })
+
+  const closeDeleteDialog = () => {
+    setDeleteConfirmState(prev => ({ ...prev, isOpen: false, errorMessage: null }))
+  }
+
+  const requestDeleteShipment = (shipmentId: string, identifier?: string) => {
+    const label = identifier || 'this shipment'
+    setDeleteConfirmState({
+      isOpen: true,
+      title: 'Delete Shipment',
+      message: (
+        <span>
+          Are you sure you want to delete shipment <strong className="text-white font-semibold">{label}</strong>? All associated records will be permanently removed.
+        </span>
+      ),
+      errorMessage: null,
+      onConfirm: () => {
+        deleteShipmentMutation.mutate(shipmentId)
+      }
+    })
+  }
+
+  const requestDeleteEscalation = (escalationId: string, identifier?: string) => {
+    const label = identifier ? ` "${identifier}"` : ''
+    setDeleteConfirmState({
+      isOpen: true,
+      title: 'Delete Escalation Record',
+      message: (
+        <span>
+          Are you sure you want to delete this escalation record{label ? <> for <strong className="text-white font-semibold">{identifier}</strong></> : ''}? All details will be permanently removed.
+        </span>
+      ),
+      errorMessage: null,
+      onConfirm: () => {
+        deleteEscalationMutation.mutate(escalationId)
+      }
+    })
+  }
+
   // Delete Shipment Mutation
   const deleteShipmentMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -1023,9 +1076,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       setSelectedShipment(null)
       setIsEditShipmentModalOpen(false)
       setEditingShipment(null)
+      closeDeleteDialog()
     },
     onError: (err: any) => {
-      alert(`Failed to delete shipment: ${err?.response?.data?.detail || err.message}`)
+      const msg = err?.response?.data?.detail || err.message || 'Failed to delete shipment'
+      setDeleteConfirmState(prev => ({ ...prev, errorMessage: msg }))
     }
   })
 
@@ -1173,9 +1228,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       setSelectedEscalation(null)
       setIsEditEscalationModalOpen(false)
       setEditingEscalation(null)
+      closeDeleteDialog()
     },
     onError: (err: any) => {
-      alert(`Failed to delete escalation: ${err?.response?.data?.detail || err.message}`)
+      const msg = err?.response?.data?.detail || err.message || 'Failed to delete escalation'
+      setDeleteConfirmState(prev => ({ ...prev, errorMessage: msg }))
     }
   })
 
@@ -1919,9 +1976,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             onClick={(e) => {
               e.stopPropagation()
               const trackingOrInv = info.row.original.invoice_number || info.row.original.tracking_id || 'this shipment'
-              if (confirm(`Are you sure you want to delete shipment "${trackingOrInv}"? This action cannot be undone.`)) {
-                deleteShipmentMutation.mutate(info.row.original.id)
-              }
+              requestDeleteShipment(info.row.original.id, trackingOrInv)
             }}
             title="Delete Shipment"
             className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 rounded transition-colors cursor-pointer"
@@ -2045,9 +2100,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           <button
             onClick={(e) => {
               e.stopPropagation()
-              if (confirm('Are you sure you want to delete this escalation record? This action cannot be undone.')) {
-                deleteEscalationMutation.mutate(info.row.original.id)
-              }
+              const identifier = info.row.original.customer_name || info.row.original.complaint_summary || 'this record'
+              requestDeleteEscalation(info.row.original.id, identifier)
             }}
             title="Delete Escalation"
             className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-red-400 rounded transition-colors cursor-pointer"
@@ -3554,9 +3608,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 <button
                   onClick={() => {
                     const trackingOrInv = selectedShipment.invoice_number || selectedShipment.tracking_id || 'this shipment'
-                    if (confirm(`Are you sure you want to delete shipment "${trackingOrInv}"? This action cannot be undone.`)) {
-                      deleteShipmentMutation.mutate(selectedShipment.id)
-                    }
+                    requestDeleteShipment(selectedShipment.id, trackingOrInv)
                   }}
                   className="px-2.5 py-1 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                 >
@@ -3744,9 +3796,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               <button
                 onClick={() => {
                   const trackingOrInv = selectedShipment.invoice_number || selectedShipment.tracking_id || 'this shipment'
-                  if (confirm(`Are you sure you want to delete shipment "${trackingOrInv}"? This action cannot be undone.`)) {
-                    deleteShipmentMutation.mutate(selectedShipment.id)
-                  }
+                  requestDeleteShipment(selectedShipment.id, trackingOrInv)
                 }}
                 className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
@@ -4050,9 +4100,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 </button>
                 <button
                   onClick={() => {
-                    if (confirm('Are you sure you want to delete this escalation record? This action cannot be undone.')) {
-                      deleteEscalationMutation.mutate(selectedEscalation.id)
-                    }
+                    const identifier = selectedEscalation.customer_name || selectedEscalation.complaint_summary || 'this record'
+                    requestDeleteEscalation(selectedEscalation.id, identifier)
                   }}
                   className="px-2.5 py-1 bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
                 >
@@ -4219,9 +4268,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               <div className="pt-4 border-t border-zinc-900 flex justify-between items-center">
                 <button
                   onClick={() => {
-                    if (confirm('Are you sure you want to delete this escalation record?')) {
-                      deleteEscalationMutation.mutate(selectedEscalation.id)
-                    }
+                    const identifier = selectedEscalation.customer_name || selectedEscalation.complaint_summary || 'this record'
+                    requestDeleteEscalation(selectedEscalation.id, identifier)
                   }}
                   className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
@@ -5160,9 +5208,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       type="button"
                       onClick={() => {
                         const trackingOrInv = editingShipment.invoice_number || editingShipment.tracking_id || 'this shipment'
-                        if (confirm(`Are you sure you want to delete shipment "${trackingOrInv}"? This action cannot be undone.`)) {
-                          deleteShipmentMutation.mutate(editingShipment.id)
-                        }
+                        requestDeleteShipment(editingShipment.id, trackingOrInv)
                       }}
                       className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                     >
@@ -5327,9 +5373,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('Are you sure you want to delete this escalation record? This action cannot be undone.')) {
-                      deleteEscalationMutation.mutate(editingEscalation.id)
-                    }
+                    const identifier = editingEscalation.customer_name || editingEscalation.complaint_summary || 'this record'
+                    requestDeleteEscalation(editingEscalation.id, identifier)
                   }}
                   className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
@@ -5519,6 +5564,17 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           }}
         />
       )}
+
+      {/* Delete Confirmation Dialog (<dialog>) */}
+      <DeleteConfirmDialog
+        isOpen={deleteConfirmState.isOpen}
+        title={deleteConfirmState.title}
+        message={deleteConfirmState.message}
+        errorMessage={deleteConfirmState.errorMessage}
+        isDeleting={deleteShipmentMutation.isPending || deleteEscalationMutation.isPending}
+        onConfirm={deleteConfirmState.onConfirm}
+        onCancel={closeDeleteDialog}
+      />
     </>
   )
 }

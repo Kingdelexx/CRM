@@ -30,6 +30,7 @@ import {
 import {
   ShipmentThermalLabelModal
 } from '@/components/ShipmentThermalLabelModal'
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog'
 import {
   getShipmentTrackingNumber,
   getShipmentTotalParcels,
@@ -197,57 +198,97 @@ export default function ShippingLabelsWorkspace() {
     setIsModalOpen(true)
   }
 
+  // Delete Confirmation Dialog State (<dialog>)
+  const [deleteDialogState, setDeleteDialogState] = useState<{
+    isOpen: boolean
+    title: string
+    message: React.ReactNode
+    errorMessage?: string | null
+    isDeleting?: boolean
+    onConfirm: () => Promise<void>
+  }>({
+    isOpen: false,
+    title: 'Delete Shipping Label',
+    message: '',
+    onConfirm: async () => {}
+  })
+
   // Delete a single shipping label / shipment
-  const handleDeleteSingle = async (shipment: Shipment) => {
+  const handleDeleteSingle = (shipment: Shipment) => {
     const trk = getShipmentTrackingNumber(shipment)
     const identifier = shipment.receiver_name ? `${shipment.receiver_name} (${trk})` : trk
-    if (!window.confirm(`Are you sure you want to delete the shipping label for "${identifier}"? This action cannot be undone.`)) {
-      return
-    }
 
-    setDeletingId(shipment.id)
-    try {
-      await apiClient.delete(`/shipments/${shipment.id}`)
-      setSelectedShipmentIds(prev => {
-        const next = new Set(prev)
-        next.delete(shipment.id)
-        return next
-      })
-      await queryClient.invalidateQueries({ queryKey: ['shipments'] })
-      await queryClient.invalidateQueries({ queryKey: ['invoices'] })
-      refetch()
-    } catch (err: any) {
-      console.error('Failed to delete shipping label:', err)
-      alert(`Failed to delete shipping label: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`)
-    } finally {
-      setDeletingId(null)
-    }
+    setDeleteDialogState({
+      isOpen: true,
+      title: 'Delete Shipping Label',
+      message: (
+        <span>
+          Are you sure you want to delete the shipping label for <strong className="text-white font-semibold">{identifier}</strong>? This action cannot be undone.
+        </span>
+      ),
+      errorMessage: null,
+      isDeleting: false,
+      onConfirm: async () => {
+        setDeleteDialogState(prev => ({ ...prev, isDeleting: true, errorMessage: null }))
+        setDeletingId(shipment.id)
+        try {
+          await apiClient.delete(`/shipments/${shipment.id}`)
+          setSelectedShipmentIds(prev => {
+            const next = new Set(prev)
+            next.delete(shipment.id)
+            return next
+          })
+          await queryClient.invalidateQueries({ queryKey: ['shipments'] })
+          await queryClient.invalidateQueries({ queryKey: ['invoices'] })
+          refetch()
+          setDeleteDialogState(prev => ({ ...prev, isOpen: false, isDeleting: false }))
+        } catch (err: any) {
+          console.error('Failed to delete shipping label:', err)
+          const msg = err?.response?.data?.detail || err?.message || 'Unknown error occurred while deleting'
+          setDeleteDialogState(prev => ({ ...prev, errorMessage: msg, isDeleting: false }))
+        } finally {
+          setDeletingId(null)
+        }
+      }
+    })
   }
 
   // Batch delete selected shipping labels / shipments
-  const handleDeleteBatchLabels = async () => {
+  const handleDeleteBatchLabels = () => {
     const count = selectedShipmentIds.size
     if (count === 0) return
 
-    if (!window.confirm(`Are you sure you want to delete ${count} selected shipping label(s)? This action cannot be undone.`)) {
-      return
-    }
-
-    setIsBatchDeleting(true)
-    try {
-      const ids = Array.from(selectedShipmentIds)
-      await Promise.all(ids.map(id => apiClient.delete(`/shipments/${id}`)))
-      setSelectedShipmentIds(new Set())
-      await queryClient.invalidateQueries({ queryKey: ['shipments'] })
-      await queryClient.invalidateQueries({ queryKey: ['invoices'] })
-      refetch()
-    } catch (err: any) {
-      console.error('Failed to delete selected shipping labels:', err)
-      alert(`Failed to delete selected shipping labels: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`)
-      refetch()
-    } finally {
-      setIsBatchDeleting(false)
-    }
+    setDeleteDialogState({
+      isOpen: true,
+      title: 'Delete Selected Shipping Labels',
+      message: (
+        <span>
+          Are you sure you want to delete <strong className="text-white font-semibold">{count}</strong> selected shipping label(s)? This action cannot be undone.
+        </span>
+      ),
+      errorMessage: null,
+      isDeleting: false,
+      onConfirm: async () => {
+        setDeleteDialogState(prev => ({ ...prev, isDeleting: true, errorMessage: null }))
+        setIsBatchDeleting(true)
+        try {
+          const ids = Array.from(selectedShipmentIds)
+          await Promise.all(ids.map(id => apiClient.delete(`/shipments/${id}`)))
+          setSelectedShipmentIds(new Set())
+          await queryClient.invalidateQueries({ queryKey: ['shipments'] })
+          await queryClient.invalidateQueries({ queryKey: ['invoices'] })
+          refetch()
+          setDeleteDialogState(prev => ({ ...prev, isOpen: false, isDeleting: false }))
+        } catch (err: any) {
+          console.error('Failed to delete selected shipping labels:', err)
+          const msg = err?.response?.data?.detail || err?.message || 'Unknown error occurred while deleting'
+          setDeleteDialogState(prev => ({ ...prev, errorMessage: msg, isDeleting: false }))
+          refetch()
+        } finally {
+          setIsBatchDeleting(false)
+        }
+      }
+    })
   }
 
   return (
@@ -758,6 +799,17 @@ export default function ShippingLabelsWorkspace() {
       shipments={modalShipments}
       autoPrint={modalAutoPrint}
       onDelete={handleDeleteSingle}
+    />
+
+    {/* Delete Confirmation Dialog (<dialog>) */}
+    <DeleteConfirmDialog
+      isOpen={deleteDialogState.isOpen}
+      title={deleteDialogState.title}
+      message={deleteDialogState.message}
+      errorMessage={deleteDialogState.errorMessage}
+      isDeleting={deleteDialogState.isDeleting}
+      onConfirm={deleteDialogState.onConfirm}
+      onCancel={() => setDeleteDialogState(prev => ({ ...prev, isOpen: false, errorMessage: null }))}
     />
   </>
 )

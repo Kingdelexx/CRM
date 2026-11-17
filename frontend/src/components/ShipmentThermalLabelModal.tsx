@@ -24,6 +24,7 @@ import {
   THERMAL_WIDTH_MM,
   THERMAL_HEIGHT_MM
 } from './ShipmentThermalLabel'
+import DeleteConfirmDialog from './DeleteConfirmDialog'
 
 interface ShipmentThermalLabelModalProps {
   isOpen: boolean
@@ -56,6 +57,8 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
   const [activePageIndex, setActivePageIndex] = useState(0)
   const [previewMode, setPreviewMode] = useState<'single' | 'all'>('single')
   const [isMobileScreen, setIsMobileScreen] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     const handleResize = () => {
@@ -269,15 +272,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
             {onDelete && activeShipments.length === 1 && (
               <button
                 type="button"
-                onClick={async () => {
-                  const targetShipment = activeShipments[0]
-                  const trk = getShipmentTrackingNumber(targetShipment)
-                  const identifier = targetShipment.receiver_name ? `${targetShipment.receiver_name} (${trk})` : trk
-                  if (window.confirm(`Are you sure you want to delete the shipping label for "${identifier}"? This action cannot be undone.`)) {
-                    await onDelete(targetShipment)
-                    onClose()
-                  }
-                }}
+                onClick={() => setIsDeleteDialogOpen(true)}
                 className="px-2.5 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                 title="Delete this shipping label"
               >
@@ -445,5 +440,37 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
   )
 
   if (typeof document === 'undefined') return null
-  return createPortal(modalContent, document.body)
+  return createPortal(
+    <>
+      {modalContent}
+      <DeleteConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        title="Delete Shipping Label"
+        message={
+          <span>
+            Are you sure you want to delete the shipping label for{' '}
+            <strong className="text-white font-semibold">
+              {activeShipments[0]?.receiver_name
+                ? `${activeShipments[0].receiver_name} (${getShipmentTrackingNumber(activeShipments[0])})`
+                : getShipmentTrackingNumber(activeShipments[0])}
+            </strong>? This action cannot be undone.
+          </span>
+        }
+        isDeleting={isDeleting}
+        onConfirm={async () => {
+          if (!activeShipments[0]) return
+          setIsDeleting(true)
+          try {
+            await onDelete?.(activeShipments[0])
+            setIsDeleteDialogOpen(false)
+            onClose()
+          } finally {
+            setIsDeleting(false)
+          }
+        }}
+        onCancel={() => setIsDeleteDialogOpen(false)}
+      />
+    </>,
+    document.body
+  )
 }
