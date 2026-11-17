@@ -151,7 +151,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
     const isPromo = Boolean(shipment.is_promo)
     const parcels = Number(shipment.number_of_carton) || 1
-    const doorstepRateGbp = Number(meData?.organization?.doorstep_rate) || 0
+    const doorstepRateGbp = Number(meData?.organization?.doorstep_rate) > 0 ? Number(meData?.organization?.doorstep_rate) : 15
     const stdDsGbp = shipment.has_doorstep_delivery ? Math.round(parcels * doorstepRateGbp * 100) / 100 : 0
     const stdDsNgn = Math.round(stdDsGbp * conversionRate * 100) / 100
 
@@ -168,7 +168,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       }
     }
 
-    const parcelRateNgn = Number(meData?.organization?.parcel_rate) || 0
+    const parcelRateNgn = Number(meData?.organization?.parcel_rate) > 0 ? Number(meData?.organization?.parcel_rate) : 3000
     const stdPkgNgn = (shipment.has_packaging && parcelRateNgn > 0) ? Math.round(parcels * parcelRateNgn * 100) / 100 : 0
     const stdPkgGbp = conversionRate > 0 ? Math.round((stdPkgNgn / conversionRate) * 100) / 100 : 0
 
@@ -379,8 +379,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   })
   const orgExchangeRate = Number(meData?.organization?.gbp_to_ngn_rate) || 2000
-  const orgParcelRate = Number(meData?.organization?.parcel_rate) || 0
-  const orgDoorstepRate = Number(meData?.organization?.doorstep_rate) || 0
+  const orgParcelRate = Number(meData?.organization?.parcel_rate) > 0 ? Number(meData?.organization?.parcel_rate) : 3000
+  const orgDoorstepRate = Number(meData?.organization?.doorstep_rate) > 0 ? Number(meData?.organization?.doorstep_rate) : 15
   const orgPerKgPrice = Number(meData?.organization?.per_kg_price) || 0
   const orgPartnerPerKgPrice = Number(meData?.organization?.partner_per_kg_price) || 0
   const orgSeaShippingRate = Number(meData?.organization?.sea_shipping_rate) || 0
@@ -465,13 +465,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
     let parcelFee = 0
     if (currentHasPackaging === 'YES') {
+      const parcelsForPackaging = numParcels > 0 ? numParcels : 1
       const cPkg = customPackagingFeeOverride !== undefined ? customPackagingFeeOverride : customPackagingFee
       if (activeCustom && cPkg !== '' && !isNaN(parseFloat(cPkg))) {
-        parcelFee = numParcels * parseFloat(cPkg)
+        parcelFee = parcelsForPackaging * parseFloat(cPkg)
       } else if (isPromo && promoPkgFeeStr !== '' && !isNaN(parseFloat(promoPkgFeeStr))) {
-        parcelFee = parseFloat(promoPkgFeeStr)
+        parcelFee = parcelsForPackaging * parseFloat(promoPkgFeeStr)
       } else {
-        parcelFee = numParcels * orgParcelRate
+        parcelFee = parcelsForPackaging * orgParcelRate
       }
     }
 
@@ -2994,13 +2995,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       : weightVal * currentPerKgRate * activeExRate
 
                     let packagingFeeVal = 0
+                    const parcelsForPackaging = (parseInt(formData.number_of_carton) || 1)
                     if (hasPackaging === 'YES') {
                       if (isCustomPricing && customPackagingFee !== '' && !isNaN(parseFloat(customPackagingFee))) {
-                        packagingFeeVal = (parseInt(formData.number_of_carton) || 0) * (parseFloat(customPackagingFee) || 0)
+                        packagingFeeVal = parcelsForPackaging * (parseFloat(customPackagingFee) || 0)
                       } else if (isPromo && formData.promo_packaging_fee !== undefined && formData.promo_packaging_fee !== null && String(formData.promo_packaging_fee) !== '') {
-                        packagingFeeVal = parseFloat(String(formData.promo_packaging_fee)) || 0
+                        packagingFeeVal = parcelsForPackaging * (parseFloat(String(formData.promo_packaging_fee)) || 0)
                       } else {
-                        packagingFeeVal = ((parseInt(formData.number_of_carton) || 0) * orgParcelRate)
+                        packagingFeeVal = parcelsForPackaging * orgParcelRate
                       }
                     }
 
@@ -3010,7 +3012,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       if (isCustomPricing && customDoorstepFee !== '' && !isNaN(parseFloat(customDoorstepFee))) {
                         doorstepFeeVal = parcelsForDoorstep * (parseFloat(customDoorstepFee) || 0) * activeExRate
                       } else if (isPromo && formData.promo_doorstep_fee !== undefined && formData.promo_doorstep_fee !== null && String(formData.promo_doorstep_fee) !== '') {
-                        doorstepFeeVal = (parseFloat(String(formData.promo_doorstep_fee)) || 0) * activeExRate
+                        doorstepFeeVal = parcelsForDoorstep * (parseFloat(String(formData.promo_doorstep_fee)) || 0) * activeExRate
                       } else {
                         doorstepFeeVal = parcelsForDoorstep * orgDoorstepRate * activeExRate
                       }
@@ -3035,7 +3037,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         <div className="text-xs text-zinc-300 space-y-1 pt-1">
                           {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo || isCustomPricing) && (
                             <div className="flex justify-between text-purple-400 font-medium">
-                              <span>Packaging Fee {isCustomPricing && customPackagingFee ? `(${(parseInt(formData.number_of_carton) || 0)} × ₦${(parseFloat(customPackagingFee) || 0).toLocaleString()} [Custom])` : isPromo && formData.promo_packaging_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 0)} × ₦${orgParcelRate.toLocaleString()})`}:</span>
+                              <span>Packaging Fee {isCustomPricing && customPackagingFee ? `(${parcelsForPackaging} × ₦${(parseFloat(customPackagingFee) || 0).toLocaleString()} [Custom])` : isPromo && formData.promo_packaging_fee ? `(${parcelsForPackaging} × ₦${(parseFloat(String(formData.promo_packaging_fee)) || 0).toLocaleString()} [Promo])` : `(${parcelsForPackaging} × ₦${orgParcelRate.toLocaleString()})`}:</span>
                               <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
@@ -4662,13 +4664,14 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       : weightVal * currentPerKgRate * activeExRate
 
                     let packagingFeeVal = 0
+                    const parcelsForPackaging = (parseInt(formData.number_of_carton) || 1)
                     if (hasPackaging === 'YES') {
                       if (isCustomPricing && customPackagingFee !== '' && !isNaN(parseFloat(customPackagingFee))) {
-                        packagingFeeVal = (parseInt(formData.number_of_carton) || 0) * (parseFloat(customPackagingFee) || 0)
+                        packagingFeeVal = parcelsForPackaging * (parseFloat(customPackagingFee) || 0)
                       } else if (isPromo && formData.promo_packaging_fee !== undefined && formData.promo_packaging_fee !== null && String(formData.promo_packaging_fee) !== '') {
-                        packagingFeeVal = parseFloat(String(formData.promo_packaging_fee)) || 0
+                        packagingFeeVal = parcelsForPackaging * (parseFloat(String(formData.promo_packaging_fee)) || 0)
                       } else {
-                        packagingFeeVal = ((parseInt(formData.number_of_carton) || 0) * orgParcelRate)
+                        packagingFeeVal = parcelsForPackaging * orgParcelRate
                       }
                     }
 
@@ -4678,7 +4681,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       if (isCustomPricing && customDoorstepFee !== '' && !isNaN(parseFloat(customDoorstepFee))) {
                         doorstepFeeVal = parcelsForDoorstep * (parseFloat(customDoorstepFee) || 0) * activeExRate
                       } else if (isPromo && formData.promo_doorstep_fee !== undefined && formData.promo_doorstep_fee !== null && String(formData.promo_doorstep_fee) !== '') {
-                        doorstepFeeVal = (parseFloat(String(formData.promo_doorstep_fee)) || 0) * activeExRate
+                        doorstepFeeVal = parcelsForDoorstep * (parseFloat(String(formData.promo_doorstep_fee)) || 0) * activeExRate
                       } else {
                         doorstepFeeVal = parcelsForDoorstep * orgDoorstepRate * activeExRate
                       }
@@ -4703,7 +4706,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                         <div className="text-xs text-zinc-300 space-y-1 pt-1">
                           {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo || isCustomPricing) && (
                             <div className="flex justify-between text-purple-400 font-medium">
-                              <span>Packaging Fee {isCustomPricing && customPackagingFee ? `(${(parseInt(formData.number_of_carton) || 0)} × ₦${(parseFloat(customPackagingFee) || 0).toLocaleString()} [Custom])` : isPromo && formData.promo_packaging_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 0)} × ₦${orgParcelRate.toLocaleString()})`}:</span>
+                              <span>Packaging Fee {isCustomPricing && customPackagingFee ? `(${parcelsForPackaging} × ₦${(parseFloat(customPackagingFee) || 0).toLocaleString()} [Custom])` : isPromo && formData.promo_packaging_fee ? `(${parcelsForPackaging} × ₦${(parseFloat(String(formData.promo_packaging_fee)) || 0).toLocaleString()} [Promo])` : `(${parcelsForPackaging} × ₦${orgParcelRate.toLocaleString()})`}:</span>
                               <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}

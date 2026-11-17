@@ -2785,8 +2785,10 @@ def sync_shipment_invoice(shipment):
     item_nature = shipment.item_received or shipment.items_shipped or 'CARGO / PARCEL'
     dos_date = str(shipment.shipment_date or shipment.date or timezone.localdate())
 
-    ds_parcels = shipment.number_of_carton if shipment.number_of_carton else 1
+    ds_parcels = max(1, shipment.number_of_carton or 1)
     doorstep_rate_gbp = float(getattr(org, 'doorstep_rate', 0.0) or 0.0) if org else 0.0
+    if doorstep_rate_gbp <= 0.0:
+        doorstep_rate_gbp = 15.0
     std_ds_gbp = round(ds_parcels * doorstep_rate_gbp, 2) if shipment.has_doorstep_delivery else 0.0
     std_ds_ngn = round(std_ds_gbp * conversion_rate, 2)
 
@@ -2803,7 +2805,9 @@ def sync_shipment_invoice(shipment):
         ds_ngn = 0.0
 
     parcel_rate_ngn = float(getattr(org, 'parcel_rate', 0.0) or 0.0) if org else 0.0
-    pkg_parcels = shipment.number_of_carton if shipment.number_of_carton else 1
+    if parcel_rate_ngn <= 0.0:
+        parcel_rate_ngn = 3000.0
+    pkg_parcels = max(1, shipment.number_of_carton or 1)
     std_pkg_ngn = round(pkg_parcels * parcel_rate_ngn, 2) if (getattr(shipment, 'has_packaging', False) and parcel_rate_ngn > 0) else 0.0
     std_pkg_gbp = round(std_pkg_ngn / conversion_rate, 2) if (conversion_rate > 0 and std_pkg_ngn > 0) else 0.0
 
