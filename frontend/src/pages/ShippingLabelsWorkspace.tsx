@@ -435,7 +435,7 @@ export default function ShippingLabelsWorkspace() {
           <select
             value={partnerFilter}
             onChange={(e) => setPartnerFilter(e.target.value as any)}
-            className="bg-slate-50 border border-slate-200 focus:border-amber-500 focus:outline-none rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 cursor-pointer"
+            className="w-full sm:w-auto bg-slate-50 border border-slate-200 focus:border-amber-500 focus:outline-none rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 cursor-pointer"
           >
             <option value="ALL">All Brands (Mintana & Partners)</option>
             <option value="DIRECT">Direct Mintana Only</option>
@@ -443,22 +443,24 @@ export default function ShippingLabelsWorkspace() {
           </select>
 
           {/* Date Filter */}
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="bg-slate-50 border border-slate-200 focus:border-amber-500 focus:outline-none rounded-xl px-3 py-2 text-xs font-medium text-slate-700 cursor-pointer"
-            title="Filter by shipment date"
-          />
-          {dateFilter && (
-            <button
-              type="button"
-              onClick={() => setDateFilter('')}
-              className="text-xs text-slate-500 hover:text-slate-700 font-semibold px-1"
-            >
-              Clear Date
-            </button>
-          )}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-full sm:w-auto bg-slate-50 border border-slate-200 focus:border-amber-500 focus:outline-none rounded-xl px-3 py-2 text-xs font-medium text-slate-700 cursor-pointer"
+              title="Filter by shipment date"
+            />
+            {dateFilter && (
+              <button
+                type="button"
+                onClick={() => setDateFilter('')}
+                className="text-xs text-slate-500 hover:text-slate-700 font-semibold px-1 whitespace-nowrap"
+              >
+                Clear Date
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -597,9 +599,9 @@ export default function ShippingLabelsWorkspace() {
                   </div>
 
                   {/* Right: Parcel Count Badge & Actions */}
-                  <div className="flex items-center justify-between md:justify-end gap-3.5 flex-shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between md:justify-end gap-2.5 sm:gap-3.5 flex-shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 w-full md:w-auto">
                     {/* Multi-parcel badge */}
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900 text-white font-mono font-bold text-xs shadow-sm">
                         <Layers className="h-3.5 w-3.5 text-amber-400" />
                         <span>{parcels} {parcels === 1 ? 'Parcel' : 'Parcels'}</span>
@@ -610,7 +612,7 @@ export default function ShippingLabelsWorkspace() {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       <button
                         type="button"
                         onClick={() => handleOpenDateModal(s)}

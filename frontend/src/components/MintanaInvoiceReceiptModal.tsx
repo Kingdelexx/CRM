@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Invoice, Receipt } from '../types/crm';
+import type { Invoice, Receipt, LogisticsItem } from '../types/crm';
 import { X, Printer, Share2, ExternalLink, CheckCircle, FileText } from 'lucide-react';
 
 interface MintanaInvoiceReceiptModalProps {
@@ -77,14 +77,62 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
 
   const fallbackRate = 2000;
 
-  const itemsTotalNgn = items.reduce((acc, i) => acc + (Number(i.total_ngn) || Number(i.price_ngn) || 0), 0);
-  let itemsTotalGbp = items.reduce((acc, i) => acc + (Number(i.total_gbp) || Number(i.price_gbp) || 0), 0);
+  const getItemLineTotalNgn = (i: LogisticsItem) => {
+    if (i.total_ngn !== undefined && i.total_ngn !== null) return Number(i.total_ngn) || 0;
+    if (i.rate_per_kg_ngn !== undefined && i.rate_per_kg_ngn !== null && i.weight_kg) {
+      return Math.round((Number(i.rate_per_kg_ngn) * i.weight_kg) * 100) / 100;
+    }
+    return Number(i.price_ngn) || 0;
+  };
+
+  const getItemLineTotalGbp = (i: LogisticsItem) => {
+    if (i.total_gbp !== undefined && i.total_gbp !== null) return Number(i.total_gbp) || 0;
+    if (i.rate_per_kg_gbp !== undefined && i.rate_per_kg_gbp !== null && i.weight_kg) {
+      return Math.round((Number(i.rate_per_kg_gbp) * i.weight_kg) * 100) / 100;
+    }
+    return Number(i.price_gbp) || 0;
+  };
+
+  const getItemUnitRateNgn = (i: LogisticsItem) => {
+    if (i.rate_per_kg_ngn !== undefined && i.rate_per_kg_ngn !== null) {
+      return Number(i.rate_per_kg_ngn);
+    }
+    if (i.unit_price_ngn !== undefined && i.unit_price_ngn !== null) {
+      return Number(i.unit_price_ngn);
+    }
+    if (i.total_ngn !== undefined && i.total_ngn !== null && i.weight_kg && i.weight_kg > 0) {
+      return Math.round(((Number(i.total_ngn) || 0) / i.weight_kg) * 100) / 100;
+    }
+    if (i.weight_kg && i.weight_kg > 0) {
+      return Math.round(((Number(i.price_ngn) || 0) / i.weight_kg) * 100) / 100;
+    }
+    return Number(i.price_ngn) || 0;
+  };
+
+  const getItemUnitRateGbp = (i: LogisticsItem) => {
+    if (i.rate_per_kg_gbp !== undefined && i.rate_per_kg_gbp !== null) {
+      return Number(i.rate_per_kg_gbp);
+    }
+    if (i.unit_price_gbp !== undefined && i.unit_price_gbp !== null) {
+      return Number(i.unit_price_gbp);
+    }
+    if (i.total_gbp !== undefined && i.total_gbp !== null && i.weight_kg && i.weight_kg > 0) {
+      return Math.round(((Number(i.total_gbp) || 0) / i.weight_kg) * 100) / 100;
+    }
+    if (i.weight_kg && i.weight_kg > 0) {
+      return Math.round(((Number(i.price_gbp) || 0) / i.weight_kg) * 100) / 100;
+    }
+    return Number(i.price_gbp) || 0;
+  };
+
+  const itemsTotalNgn = items.reduce((acc, i) => acc + getItemLineTotalNgn(i), 0);
+  let itemsTotalGbp = items.reduce((acc, i) => acc + getItemLineTotalGbp(i), 0);
   if ((itemsTotalGbp === itemsTotalNgn || itemsTotalGbp <= 0) && itemsTotalNgn > 0) {
     itemsTotalGbp = itemsTotalNgn / fallbackRate;
   }
 
-  const itemsOriginalTotalNgn = items.reduce((acc, i) => acc + (Number(i.original_price_ngn) || Number(i.total_ngn) || Number(i.price_ngn) || 0), 0);
-  let itemsOriginalTotalGbp = items.reduce((acc, i) => acc + (Number(i.original_price_gbp) || Number(i.total_gbp) || Number(i.price_gbp) || 0), 0);
+  const itemsOriginalTotalNgn = items.reduce((acc, i) => acc + (Number(i.original_price_ngn) || getItemLineTotalNgn(i)), 0);
+  let itemsOriginalTotalGbp = items.reduce((acc, i) => acc + (Number(i.original_price_gbp) || getItemLineTotalGbp(i)), 0);
   if ((itemsOriginalTotalGbp === itemsOriginalTotalNgn || itemsOriginalTotalGbp <= 0) && itemsOriginalTotalNgn > 0) {
     itemsOriginalTotalGbp = itemsOriginalTotalNgn / fallbackRate;
   }
@@ -601,64 +649,81 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {items.length > 0 ? (
-                  items.map((item, idx) => (
-                    <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      <td className="py-2 px-3 border-r border-slate-200 print:py-1 print:px-2">{item.dos || docDate}</td>
-                      <td className="py-2 px-3 border-r border-slate-200 font-bold uppercase text-slate-900 print:py-1 print:px-2">
-                        {item.nature_of_item}
-                      </td>
-                      <td className="py-2 px-3 border-r border-slate-200 text-center font-medium print:py-1 print:px-2">
-                        {item.weight_kg ? `${item.weight_kg} kg` : '-'}
-                      </td>
-                      {displayCurrency === 'NGN' ? (
-                        <>
-                          <td className="py-2 px-3 border-r border-slate-200 text-right print:py-1 print:px-2">
-                            {item.original_price_ngn && item.original_price_ngn > (item.price_ngn || 0) ? (
-                              <span className="line-through text-slate-400 font-normal mr-1.5">
-                                ₦{item.weight_kg ? (item.original_price_ngn / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(item.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  items.map((item, idx) => {
+                    const unitRateNgn = getItemUnitRateNgn(item);
+                    const lineTotalNgn = getItemLineTotalNgn(item);
+                    const unitRateGbp = getItemUnitRateGbp(item);
+                    const lineTotalGbp = getItemLineTotalGbp(item);
+
+                    const hasDiscountNgn = Boolean(item.original_price_ngn && item.original_price_ngn > lineTotalNgn);
+                    const origUnitRateNgn = item.weight_kg && item.weight_kg > 0
+                      ? Math.round(((Number(item.original_price_ngn) || 0) / item.weight_kg) * 100) / 100
+                      : (Number(item.original_price_ngn) || 0);
+
+                    const hasDiscountGbp = Boolean(item.original_price_gbp && item.original_price_gbp > lineTotalGbp);
+                    const origUnitRateGbp = item.weight_kg && item.weight_kg > 0
+                      ? Math.round(((Number(item.original_price_gbp) || 0) / item.weight_kg) * 100) / 100
+                      : (Number(item.original_price_gbp) || 0);
+
+                    return (
+                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                        <td className="py-2 px-3 border-r border-slate-200 print:py-1 print:px-2">{item.dos || docDate}</td>
+                        <td className="py-2 px-3 border-r border-slate-200 font-bold uppercase text-slate-900 print:py-1 print:px-2">
+                          {item.nature_of_item}
+                        </td>
+                        <td className="py-2 px-3 border-r border-slate-200 text-center font-medium print:py-1 print:px-2">
+                          {item.weight_kg ? `${item.weight_kg} kg` : '-'}
+                        </td>
+                        {displayCurrency === 'NGN' ? (
+                          <>
+                            <td className="py-2 px-3 border-r border-slate-200 text-right print:py-1 print:px-2">
+                              {hasDiscountNgn ? (
+                                <span className="line-through text-slate-400 font-normal mr-1.5">
+                                  ₦{origUnitRateNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              ) : null}
+                              <span>
+                                ₦{unitRateNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
-                            ) : null}
-                            <span>
-                              ₦{item.weight_kg ? ((Number(item.price_ngn) || 0) / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-right font-semibold print:py-1 print:px-2">
-                            {item.original_price_ngn && item.original_price_ngn > (item.price_ngn || 0) ? (
-                              <span className="line-through text-slate-400 font-normal mr-1.5">
-                                ₦{Number(item.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2 px-3 text-right font-semibold print:py-1 print:px-2">
+                              {hasDiscountNgn ? (
+                                <span className="line-through text-slate-400 font-normal mr-1.5">
+                                  ₦{Number(item.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              ) : null}
+                              <span className={hasDiscountNgn ? "text-emerald-700 font-bold" : ""}>
+                                ₦{lineTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
-                            ) : null}
-                            <span className={item.original_price_ngn && item.original_price_ngn > (item.price_ngn || 0) ? "text-emerald-700 font-bold" : ""}>
-                              ₦{(Number(item.total_ngn || item.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="py-2 px-3 border-r border-slate-200 text-right print:py-1 print:px-2">
-                            {item.original_price_gbp && item.original_price_gbp > (item.price_gbp || 0) ? (
-                              <span className="line-through text-slate-400 font-normal mr-1.5">
-                                £{item.weight_kg ? (item.original_price_gbp / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Number(item.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-2 px-3 border-r border-slate-200 text-right print:py-1 print:px-2">
+                              {hasDiscountGbp ? (
+                                <span className="line-through text-slate-400 font-normal mr-1.5">
+                                  £{origUnitRateGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              ) : null}
+                              <span>
+                                £{unitRateGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
-                            ) : null}
-                            <span>
-                              £{item.weight_kg ? ((Number(item.price_gbp) || 0) / item.weight_kg).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : (Number(item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-right font-semibold print:py-1 print:px-2">
-                            {item.original_price_gbp && item.original_price_gbp > (item.price_gbp || 0) ? (
-                              <span className="line-through text-slate-400 font-normal mr-1.5">
-                                £{Number(item.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2 px-3 text-right font-semibold print:py-1 print:px-2">
+                              {hasDiscountGbp ? (
+                                <span className="line-through text-slate-400 font-normal mr-1.5">
+                                  £{Number(item.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              ) : null}
+                              <span className={hasDiscountGbp ? "text-emerald-700 font-bold" : ""}>
+                                £{lineTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
-                            ) : null}
-                            <span className={item.original_price_gbp && item.original_price_gbp > (item.price_gbp || 0) ? "text-emerald-700 font-bold" : ""}>
-                              £{(Number(item.total_gbp || item.price_gbp) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr className="bg-white">
                     <td className="py-2 px-3 border-r border-slate-200 print:py-1 print:px-2">{docDate}</td>

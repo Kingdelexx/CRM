@@ -9,9 +9,11 @@ from apps.crm.models import Company, Stage, Contact, Deal, LeadLifecycleRule
 from apps.planning.models import Activity, Task
 from config.api import api
 
+ninja_client = TestClient(api)
+
 class CRMAPITests(TestCase):
     def setUp(self):
-        self.client = TestClient(api)
+        self.client = ninja_client
         
         # 1. Setup Tenant Org A
         self.org_a = Organization.objects.create(name="Tenant A", domain="tenant-a.com")

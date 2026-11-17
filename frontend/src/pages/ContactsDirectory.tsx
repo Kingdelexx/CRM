@@ -876,7 +876,7 @@ export default function ContactsDirectory() {
               )}
 
               {/* Names row */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-400 font-semibold">First Name *</label>
                   <input
@@ -904,7 +904,7 @@ export default function ContactsDirectory() {
               </div>
 
               {/* Email & Phone */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-400 font-semibold">Email</label>
                   <input
@@ -930,7 +930,7 @@ export default function ContactsDirectory() {
               </div>
 
               {/* Job Title & Status */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-400 font-semibold">Job Title</label>
                   <input
@@ -958,7 +958,7 @@ export default function ContactsDirectory() {
               </div>
 
               {/* Company & Assignee */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-400 font-semibold">Associated Company</label>
                   <select

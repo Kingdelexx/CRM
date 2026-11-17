@@ -2716,24 +2716,56 @@ def sync_shipment_invoice(shipment):
     if conversion_rate <= 0:
         conversion_rate = 2000.0
 
+    org = shipment.organization
     amount_num = float(shipment.amount or 0)
     extra_charges_val = float(getattr(shipment, 'extra_charges', 0.0) or 0.0)
+
     if extra_charges_val > 0:
         if is_gbp:
-            extra_gbp = extra_charges_val
-            extra_ngn = extra_charges_val * conversion_rate
+            extra_gbp = round(extra_charges_val, 2)
+            extra_ngn = round(extra_charges_val * conversion_rate, 2)
         else:
-            extra_ngn = extra_charges_val
-            extra_gbp = extra_charges_val / conversion_rate if conversion_rate > 0 else 0.0
+            extra_ngn = round(extra_charges_val, 2)
+            extra_gbp = round(extra_charges_val / conversion_rate, 2) if conversion_rate > 0 else 0.0
     else:
         extra_ngn = 0.0
         extra_gbp = 0.0
 
-    base_ngn = amount_num * conversion_rate if is_gbp else amount_num
-    base_gbp = amount_num if is_gbp else (amount_num / conversion_rate)
+    # Determine per_kg rate cleanly
+    weight_val = float(shipment.weight_kg or 0)
+    per_kg_price_val = getattr(shipment, 'per_kg_price', None)
+    per_kg_curr = getattr(shipment, 'per_kg_currency', 'GBP') or 'GBP'
 
-    total_ngn = base_ngn + extra_ngn
-    total_gbp = base_gbp + extra_gbp
+    if per_kg_price_val is not None and float(per_kg_price_val) > 0:
+        raw_per_kg = float(per_kg_price_val)
+        if per_kg_curr == 'NGN':
+            per_kg_ngn = round(raw_per_kg, 2)
+            per_kg_gbp = round(raw_per_kg / conversion_rate, 2)
+        else:
+            per_kg_gbp = round(raw_per_kg, 2)
+            per_kg_ngn = round(raw_per_kg * conversion_rate, 2)
+    else:
+        if shipment.is_promo and getattr(org, 'promo_rate', 0.0) and float(org.promo_rate) > 0:
+            base_rate = float(org.promo_rate)
+        elif shipment.shipping_type == 'SEA' and getattr(org, 'sea_shipping_rate', 0.0) and float(org.sea_shipping_rate) > 0:
+            base_rate = float(org.sea_shipping_rate)
+        elif (shipment.partner_id or shipment.partner_name) and getattr(org, 'partner_per_kg_price', 0.0) and float(org.partner_per_kg_price) > 0:
+            base_rate = float(org.partner_per_kg_price)
+        else:
+            base_rate = float(getattr(org, 'per_kg_price', 0.0) or 3.90)
+
+        per_kg_gbp = round(base_rate, 2)
+        per_kg_ngn = round(base_rate * conversion_rate, 2)
+
+    # Standard per-kg rate for strikethrough comparison
+    std_base_per_kg = float(getattr(org, 'per_kg_price', 0.0) or 3.90) if org else 3.90
+    std_per_kg_gbp = round(std_base_per_kg, 2)
+    std_per_kg_ngn = round(std_base_per_kg * conversion_rate, 2)
+
+    items_gbp = round(weight_val * per_kg_gbp, 2)
+    items_ngn = round(weight_val * per_kg_ngn, 2)
+    std_items_gbp = round(weight_val * std_per_kg_gbp, 2)
+    std_items_ngn = round(weight_val * std_per_kg_ngn, 2)
 
     r_name = shipment.receiver_name or (f"{shipment.receiver.first_name or ''} {shipment.receiver.last_name or ''}".strip() if shipment.receiver else None)
     r_phone = shipment.receiver_phone or (shipment.receiver.phone if shipment.receiver else None)
@@ -2753,9 +2785,7 @@ def sync_shipment_invoice(shipment):
     item_nature = shipment.item_received or shipment.items_shipped or 'CARGO / PARCEL'
     dos_date = str(shipment.shipment_date or shipment.date or timezone.localdate())
 
-    org = shipment.organization
     ds_parcels = shipment.number_of_carton if shipment.number_of_carton else 1
-
     doorstep_rate_gbp = float(getattr(org, 'doorstep_rate', 0.0) or 0.0) if org else 0.0
     std_ds_gbp = round(ds_parcels * doorstep_rate_gbp, 2) if shipment.has_doorstep_delivery else 0.0
     std_ds_ngn = round(std_ds_gbp * conversion_rate, 2)
@@ -2793,8 +2823,8 @@ def sync_shipment_invoice(shipment):
         pkg_service = {
             'sn': sn_counter,
             'service_name': 'Packaging',
-            'price_ngn': round(pkg_ngn, 2),
-            'price_gbp': round(pkg_gbp, 2)
+            'price_ngn': pkg_ngn,
+            'price_gbp': pkg_gbp
         }
         if std_pkg_ngn > pkg_ngn:
             pkg_service['original_price_ngn'] = std_pkg_ngn
@@ -2806,8 +2836,8 @@ def sync_shipment_invoice(shipment):
         ds_service = {
             'sn': sn_counter,
             'service_name': 'Doorstep Delivery',
-            'price_ngn': round(ds_ngn, 2),
-            'price_gbp': round(ds_gbp, 2)
+            'price_ngn': ds_ngn,
+            'price_gbp': ds_gbp
         }
         if std_ds_ngn > ds_ngn:
             ds_service['original_price_ngn'] = std_ds_ngn
@@ -2819,33 +2849,44 @@ def sync_shipment_invoice(shipment):
         extra_service = {
             'sn': sn_counter,
             'service_name': 'Extra Charges',
-            'price_ngn': round(extra_ngn, 2),
-            'price_gbp': round(extra_gbp, 2)
+            'price_ngn': extra_ngn,
+            'price_gbp': extra_gbp
         }
         services.append(extra_service)
         sn_counter += 1
 
-    items_ngn = max(0.0, round(total_ngn - (pkg_ngn + ds_ngn + extra_ngn), 2))
-    items_gbp = max(0.0, round(total_gbp - (pkg_gbp + ds_gbp + extra_gbp), 2))
-
-    std_per_kg = float(getattr(org, 'per_kg_price', 0.0) or 0.0) if org else 0.0
-    std_items_ngn = round(float(shipment.weight_kg or 0) * std_per_kg * conversion_rate, 2)
-    std_items_gbp = round(std_items_ngn / conversion_rate, 2) if conversion_rate > 0 else 0.0
-
     item_dict = {
         'dos': dos_date,
         'nature_of_item': item_nature.upper(),
-        'weight_kg': float(shipment.weight_kg or 0),
-        'price_ngn': items_ngn,
-        'price_gbp': items_gbp,
-        'total_ngn': items_ngn,
-        'total_gbp': items_gbp
+        'weight_kg': weight_val,
+        'rate_per_kg_gbp': per_kg_gbp,
+        'rate_per_kg_ngn': per_kg_ngn,
+        'unit_price_gbp': per_kg_gbp,
+        'unit_price_ngn': per_kg_ngn,
+        'price_gbp': per_kg_gbp,
+        'price_ngn': per_kg_ngn,
+        'total_gbp': items_gbp,
+        'total_ngn': items_ngn
     }
-    if shipment.is_promo and std_items_ngn > items_ngn:
+    if (shipment.is_promo or std_items_ngn > items_ngn) and std_items_ngn > items_ngn:
         item_dict['original_price_ngn'] = std_items_ngn
         item_dict['original_price_gbp'] = std_items_gbp
 
     items = [item_dict]
+
+    # Calculate actual totals from item + services
+    subtotal_ngn = round(items_ngn + pkg_ngn + ds_ngn + extra_ngn, 2)
+    subtotal_gbp = round(items_gbp + pkg_gbp + ds_gbp + extra_gbp, 2)
+
+    discount_pct = float(getattr(shipment, 'discount_percentage', 0.0) or 0.0)
+    if discount_pct > 0:
+        discount_ngn = round(subtotal_ngn * (discount_pct / 100.0), 2)
+        discount_gbp = round(subtotal_gbp * (discount_pct / 100.0), 2)
+        total_ngn = max(0.0, round(subtotal_ngn - discount_ngn, 2))
+        total_gbp = max(0.0, round(subtotal_gbp - discount_gbp, 2))
+    else:
+        total_ngn = subtotal_ngn
+        total_gbp = subtotal_gbp
 
     std_total_ngn = round(std_items_ngn + std_pkg_ngn + std_ds_ngn, 2)
     std_total_gbp = round(std_items_gbp + std_pkg_gbp + std_ds_gbp, 2)

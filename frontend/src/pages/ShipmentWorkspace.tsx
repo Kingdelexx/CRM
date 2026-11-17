@@ -98,54 +98,88 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const rate = orgExchangeRate > 0 ? orgExchangeRate : 2000
     const rawRate = Number(shipment.conversion_rate)
     const conversionRate = (!isNaN(rawRate) && rawRate > 1) ? rawRate : rate
-    const amountNum = Number(shipment.amount) || 0
-    
-    const baseNgn = isGbp ? amountNum * conversionRate : amountNum
-    const baseGbp = isGbp ? amountNum : (conversionRate > 0 ? amountNum / conversionRate : 0)
 
     const extraChargesVal = Number(shipment.extra_charges) || 0
     let extraNgn = 0
     let extraGbp = 0
     if (extraChargesVal > 0) {
       if (isGbp) {
-        extraGbp = extraChargesVal
-        extraNgn = extraChargesVal * conversionRate
+        extraGbp = Math.round(extraChargesVal * 100) / 100
+        extraNgn = Math.round(extraChargesVal * conversionRate * 100) / 100
       } else {
-        extraNgn = extraChargesVal
-        extraGbp = conversionRate > 0 ? extraChargesVal / conversionRate : 0
+        extraNgn = Math.round(extraChargesVal * 100) / 100
+        extraGbp = conversionRate > 0 ? Math.round((extraChargesVal / conversionRate) * 100) / 100 : 0
       }
     }
 
-    const totalNgn = baseNgn + extraNgn
-    const totalGbp = baseGbp + extraGbp
+    const weightVal = Number(shipment.weight_kg) || 0
+    let perKgGbp = 3.90
+    let perKgNgn = Math.round(3.90 * conversionRate * 100) / 100
+
+    if (shipment.per_kg_price !== undefined && shipment.per_kg_price !== null && Number(shipment.per_kg_price) > 0) {
+      const rawPerKg = Number(shipment.per_kg_price)
+      if (shipment.per_kg_currency === 'NGN') {
+        perKgNgn = Math.round(rawPerKg * 100) / 100
+        perKgGbp = conversionRate > 0 ? Math.round((rawPerKg / conversionRate) * 100) / 100 : 0
+      } else {
+        perKgGbp = Math.round(rawPerKg * 100) / 100
+        perKgNgn = Math.round(rawPerKg * conversionRate * 100) / 100
+      }
+    } else {
+      let baseRate = 3.90
+      if (shipment.is_promo && Number(meData?.organization?.promo_rate) > 0) {
+        baseRate = Number(meData?.organization?.promo_rate)
+      } else if (shipment.shipping_type === 'SEA' && Number(meData?.organization?.sea_shipping_rate) > 0) {
+        baseRate = Number(meData?.organization?.sea_shipping_rate)
+      } else if ((shipment.partner?.id || shipment.partner_name) && Number(meData?.organization?.partner_per_kg_price) > 0) {
+        baseRate = Number(meData?.organization?.partner_per_kg_price)
+      } else if (Number(meData?.organization?.per_kg_price) > 0) {
+        baseRate = Number(meData?.organization?.per_kg_price)
+      }
+      perKgGbp = Math.round(baseRate * 100) / 100
+      perKgNgn = Math.round(baseRate * conversionRate * 100) / 100
+    }
+
+    const stdBasePerKg = Number(meData?.organization?.per_kg_price) || 3.90
+    const stdPerKgGbp = Math.round(stdBasePerKg * 100) / 100
+    const stdPerKgNgn = Math.round(stdBasePerKg * conversionRate * 100) / 100
+
+    const itemsGbp = Math.round(weightVal * perKgGbp * 100) / 100
+    const itemsNgn = Math.round(weightVal * perKgNgn * 100) / 100
+    const stdItemsGbp = Math.round(weightVal * stdPerKgGbp * 100) / 100
+    const stdItemsNgn = Math.round(weightVal * stdPerKgNgn * 100) / 100
 
     const isPromo = Boolean(shipment.is_promo)
     const parcels = Number(shipment.number_of_carton) || 1
     const doorstepRateGbp = Number(meData?.organization?.doorstep_rate) || 0
-    const stdDsGbp = shipment.has_doorstep_delivery ? parcels * doorstepRateGbp : 0
-    const stdDsNgn = stdDsGbp * conversionRate
+    const stdDsGbp = shipment.has_doorstep_delivery ? Math.round(parcels * doorstepRateGbp * 100) / 100 : 0
+    const stdDsNgn = Math.round(stdDsGbp * conversionRate * 100) / 100
 
-    let dsGbp = stdDsGbp
-    let dsNgn = stdDsNgn
+    let dsGbp = 0
+    let dsNgn = 0
     if (shipment.has_doorstep_delivery) {
-      if (isPromo && shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null && String(shipment.promo_doorstep_fee) !== '') {
-        dsGbp = Number(shipment.promo_doorstep_fee)
-        dsNgn = dsGbp * conversionRate
+      if (shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null && String(shipment.promo_doorstep_fee) !== '') {
+        dsGbp = Math.round(Number(shipment.promo_doorstep_fee) * 100) / 100
+        dsNgn = Math.round(dsGbp * conversionRate * 100) / 100
+      } else {
+        dsGbp = stdDsGbp
+        dsNgn = stdDsNgn
       }
     }
 
     const parcelRateNgn = Number(meData?.organization?.parcel_rate) || 0
-    const stdPkgNgn = (shipment.number_of_carton && parcelRateNgn > 0) ? Number(shipment.number_of_carton) * parcelRateNgn : 0
-    const stdPkgGbp = conversionRate > 0 ? stdPkgNgn / conversionRate : 0
+    const stdPkgNgn = (shipment.number_of_carton && parcelRateNgn > 0) ? Math.round(Number(shipment.number_of_carton) * parcelRateNgn * 100) / 100 : 0
+    const stdPkgGbp = conversionRate > 0 ? Math.round((stdPkgNgn / conversionRate) * 100) / 100 : 0
 
     let pkgNgn = 0
     let pkgGbp = 0
     if (shipment.has_packaging) {
-      pkgNgn = stdPkgNgn
-      pkgGbp = stdPkgGbp
-      if (isPromo && shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null && String(shipment.promo_packaging_fee) !== '') {
-        pkgNgn = Number(shipment.promo_packaging_fee)
-        pkgGbp = conversionRate > 0 ? pkgNgn / conversionRate : 0
+      if (shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null && String(shipment.promo_packaging_fee) !== '') {
+        pkgNgn = Math.round(Number(shipment.promo_packaging_fee) * 100) / 100
+        pkgGbp = conversionRate > 0 ? Math.round((pkgNgn / conversionRate) * 100) / 100 : 0
+      } else {
+        pkgNgn = stdPkgNgn
+        pkgGbp = stdPkgGbp
       }
     }
 
@@ -179,31 +213,41 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       })
     }
 
-    const itemsNgn = Math.max(0, totalNgn - dsNgn - pkgNgn - extraNgn)
-    const itemsGbp = Math.max(0, totalGbp - dsGbp - pkgGbp - extraGbp)
-
-    const stdPerKg = Number(meData?.organization?.per_kg_price) || 0
-    const stdItemsNgn = (Number(shipment.weight_kg) || 0) * stdPerKg * conversionRate
-    const stdItemsGbp = conversionRate > 0 ? stdItemsNgn / conversionRate : 0
-
     const itemNature = shipment.item_received || shipment.items_shipped || 'CARGO / PARCEL'
 
     const itemObj: LogisticsItem = {
       dos: shipment.shipment_date || shipment.date || new Date().toISOString().split('T')[0],
       nature_of_item: itemNature.toUpperCase(),
-      weight_kg: Number(shipment.weight_kg) || 0,
-      price_ngn: itemsNgn,
-      price_gbp: itemsGbp,
-      total_ngn: itemsNgn,
-      total_gbp: itemsGbp
+      weight_kg: weightVal,
+      rate_per_kg_gbp: perKgGbp,
+      rate_per_kg_ngn: perKgNgn,
+      unit_price_gbp: perKgGbp,
+      unit_price_ngn: perKgNgn,
+      price_gbp: perKgGbp,
+      price_ngn: perKgNgn,
+      total_gbp: itemsGbp,
+      total_ngn: itemsNgn
     }
-    if (isPromo && stdItemsNgn > itemsNgn) {
+    if ((isPromo || stdItemsNgn > itemsNgn) && stdItemsNgn > itemsNgn) {
       itemObj.original_price_ngn = stdItemsNgn
       itemObj.original_price_gbp = stdItemsGbp
     }
 
-    const stdTotalNgn = stdItemsNgn + stdPkgNgn + stdDsNgn
-    const stdTotalGbp = stdItemsGbp + stdPkgGbp + stdDsGbp
+    const subtotalNgn = Math.round((itemsNgn + pkgNgn + dsNgn + extraNgn) * 100) / 100
+    const subtotalGbp = Math.round((itemsGbp + pkgGbp + dsGbp + extraGbp) * 100) / 100
+
+    const discountPct = Number(shipment.discount_percentage) || 0
+    let totalNgn = subtotalNgn
+    let totalGbp = subtotalGbp
+    if (discountPct > 0) {
+      const discountNgn = Math.round(subtotalNgn * (discountPct / 100) * 100) / 100
+      const discountGbp = Math.round(subtotalGbp * (discountPct / 100) * 100) / 100
+      totalNgn = Math.max(0, Math.round((subtotalNgn - discountNgn) * 100) / 100)
+      totalGbp = Math.max(0, Math.round((subtotalGbp - discountGbp) * 100) / 100)
+    }
+
+    const stdTotalNgn = Math.round((stdItemsNgn + stdPkgNgn + stdDsNgn) * 100) / 100
+    const stdTotalGbp = Math.round((stdItemsGbp + stdPkgGbp + stdDsGbp) * 100) / 100
 
     return {
       id: shipment.id || 'temp-id',
@@ -299,6 +343,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     is_promo: false,
     promo_packaging_fee: '',
     promo_doorstep_fee: '',
+    per_kg_price: '',
+    per_kg_currency: 'GBP',
     extra_charges: '',
     video_link: ''
   })
@@ -426,8 +472,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
     let effectivePerKgPrice = orgPerKgPrice
     let isRateInNgn = false
-    const activePerKgCurrency = customPerKgCurrencyOverride !== undefined ? customPerKgCurrencyOverride : customPerKgCurrency
-    const cPerKg = customPerKgOverride !== undefined ? customPerKgOverride : customPerKgRate
+    const activePerKgCurrency = customPerKgCurrencyOverride !== undefined ? customPerKgCurrencyOverride : (customPerKgCurrency || (formData.per_kg_currency as 'GBP' | 'NGN') || 'GBP')
+    const cPerKg = customPerKgOverride !== undefined ? customPerKgOverride : (customPerKgRate || (formData.per_kg_price ? String(formData.per_kg_price) : ''))
     if (activeCustom && cPerKg !== '' && !isNaN(parseFloat(cPerKg))) {
       effectivePerKgPrice = parseFloat(cPerKg)
       if (activePerKgCurrency === 'NGN') {
@@ -465,19 +511,25 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       else if (shipType === 'SEA' && orgSeaShippingRate > 0) baseKg = orgSeaShippingRate
       else if (isPartner && orgPartnerPerKgPrice > 0) baseKg = orgPartnerPerKgPrice
 
-      const initEx = customExchangeRate || String(orgExchangeRate || '2000')
+      const initEx = customExchangeRate || (formData.conversion_rate && Number(formData.conversion_rate) > 1 ? formData.conversion_rate : String(orgExchangeRate || '2000'))
       const exNum = parseFloat(initEx) || 2000
-      const initPerKg = customPerKgRate || (customPerKgCurrency === 'NGN' ? String(Math.round(baseKg * exNum)) : String(baseKg || '3.90'))
-      const initPkg = customPackagingFee || String(orgParcelRate || '3000')
-      const initDs = customDoorstepFee || String(orgDoorstepRate || '15')
+
+      const activeCurr = customPerKgCurrency || (formData.per_kg_currency as 'GBP' | 'NGN') || 'GBP'
+      const existingRate = customPerKgRate || (formData.per_kg_price ? String(formData.per_kg_price) : '')
+      const initPerKg = existingRate || (activeCurr === 'NGN' ? String(Math.round(baseKg * exNum)) : String(baseKg || '3.90'))
+      const initPkg = customPackagingFee || (formData.promo_packaging_fee ? String(formData.promo_packaging_fee) : String(orgParcelRate || '3000'))
+      const initDs = customDoorstepFee || (formData.promo_doorstep_fee ? String(formData.promo_doorstep_fee) : String(orgDoorstepRate || '15'))
 
       setCustomPerKgRate(initPerKg)
       setCustomPackagingFee(initPkg)
       setCustomDoorstepFee(initDs)
       setCustomExchangeRate(initEx)
+      setCustomPerKgCurrency(activeCurr)
 
       setFormData(prev => ({
         ...prev,
+        per_kg_price: initPerKg,
+        per_kg_currency: activeCurr,
         conversion_rate: initEx,
         promo_packaging_fee: initPkg,
         promo_doorstep_fee: initDs
@@ -501,16 +553,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         initPkg,
         initDs,
         initEx,
-        customPerKgCurrency
+        activeCurr
       )
     } else {
-      setCustomPerKgRate('')
-      setCustomPackagingFee('')
-      setCustomDoorstepFee('')
-      setCustomExchangeRate('')
-      setCustomPerKgCurrency('GBP')
       setFormData(prev => ({
         ...prev,
+        per_kg_price: '',
         conversion_rate: String(orgExchangeRate),
         promo_packaging_fee: '',
         promo_doorstep_fee: ''
@@ -553,6 +601,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       }
       setCustomPerKgRate(updatedVal)
     }
+    setFormData(prev => ({
+      ...prev,
+      per_kg_currency: newCurr,
+      per_kg_price: updatedVal
+    }))
 
     recalculateTotalAmount(
       hasPackaging,
@@ -578,6 +631,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
   const handleCustomPerKgChange = (val: string) => {
     setCustomPerKgRate(val)
+    setFormData(prev => ({ ...prev, per_kg_price: val }))
     recalculateTotalAmount(
       hasPackaging,
       formData.number_of_carton,
@@ -896,6 +950,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         is_promo: Boolean(payload.is_promo),
         promo_packaging_fee: ((payload.is_promo || isCustomPricing) && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
         promo_doorstep_fee: ((payload.is_promo || isCustomPricing) && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
+        per_kg_price: (isCustomPricing && customPerKgRate !== '' && !isNaN(parseFloat(customPerKgRate)))
+          ? parseFloat(customPerKgRate)
+          : (payload.per_kg_price !== '' && payload.per_kg_price !== undefined && payload.per_kg_price !== null && !isNaN(parseFloat(String(payload.per_kg_price))))
+            ? parseFloat(String(payload.per_kg_price))
+            : null,
+        per_kg_currency: isCustomPricing ? customPerKgCurrency : ((payload.per_kg_currency as 'GBP' | 'NGN') || 'GBP'),
         extra_charges: parseFloat(payload.extra_charges) || 0.0,
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
@@ -1007,6 +1067,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       is_promo: Boolean(shipment.is_promo),
       promo_packaging_fee: shipment.promo_packaging_fee !== undefined && shipment.promo_packaging_fee !== null ? String(shipment.promo_packaging_fee) : '',
       promo_doorstep_fee: shipment.promo_doorstep_fee !== undefined && shipment.promo_doorstep_fee !== null ? String(shipment.promo_doorstep_fee) : '',
+      per_kg_price: shipment.per_kg_price !== undefined && shipment.per_kg_price !== null ? String(shipment.per_kg_price) : '',
+      per_kg_currency: (shipment.per_kg_currency as any) || 'GBP',
       extra_charges: shipment.extra_charges ? String(shipment.extra_charges) : '',
       video_link: shipment.video_link || ''
     })
@@ -1014,10 +1076,15 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     const cNum = shipment.number_of_carton ? Number(shipment.number_of_carton) : 0
     setHasPackaging(shipment.has_packaging ? 'YES' : 'NO')
     setHasDoorstepDelivery(shipment.has_doorstep_delivery ? 'YES' : 'NO')
-    const hasCustomRates = Boolean(shipment.promo_packaging_fee || shipment.promo_doorstep_fee || (shipment.conversion_rate && Number(shipment.conversion_rate) !== 1 && Number(shipment.conversion_rate) !== orgExchangeRate))
+    const hasCustomRates = Boolean(
+      (shipment.per_kg_price !== null && shipment.per_kg_price !== undefined) ||
+      shipment.promo_packaging_fee ||
+      shipment.promo_doorstep_fee ||
+      (shipment.conversion_rate && Number(shipment.conversion_rate) !== 1 && Number(shipment.conversion_rate) !== orgExchangeRate)
+    )
     setIsCustomPricing(hasCustomRates)
-    setCustomPerKgRate('')
-    setCustomPerKgCurrency('GBP')
+    setCustomPerKgRate(shipment.per_kg_price !== undefined && shipment.per_kg_price !== null ? String(shipment.per_kg_price) : '')
+    setCustomPerKgCurrency((shipment.per_kg_currency as any) || 'GBP')
     setCustomPackagingFee(shipment.promo_packaging_fee ? String(shipment.promo_packaging_fee) : '')
     setCustomDoorstepFee(shipment.promo_doorstep_fee ? String(shipment.promo_doorstep_fee) : '')
     setCustomExchangeRate(shipment.conversion_rate ? String(shipment.conversion_rate) : '')
@@ -1254,6 +1321,12 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
         is_promo: Boolean(payload.is_promo),
         promo_packaging_fee: ((payload.is_promo || isCustomPricing) && payload.promo_packaging_fee !== '' && payload.promo_packaging_fee !== undefined && payload.promo_packaging_fee !== null) ? parseFloat(String(payload.promo_packaging_fee)) : null,
         promo_doorstep_fee: ((payload.is_promo || isCustomPricing) && payload.promo_doorstep_fee !== '' && payload.promo_doorstep_fee !== undefined && payload.promo_doorstep_fee !== null) ? parseFloat(String(payload.promo_doorstep_fee)) : null,
+        per_kg_price: (isCustomPricing && customPerKgRate !== '' && !isNaN(parseFloat(customPerKgRate)))
+          ? parseFloat(customPerKgRate)
+          : (payload.per_kg_price !== '' && payload.per_kg_price !== undefined && payload.per_kg_price !== null && !isNaN(parseFloat(String(payload.per_kg_price))))
+            ? parseFloat(String(payload.per_kg_price))
+            : null,
+        per_kg_currency: isCustomPricing ? customPerKgCurrency : ((payload.per_kg_currency as 'GBP' | 'NGN') || 'GBP'),
         extra_charges: parseFloat(payload.extra_charges) || 0.0,
         packager: payload.packager || null,
         partner_id: payload.partner_id || null,
@@ -1393,6 +1466,8 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       is_promo: false,
       promo_packaging_fee: '',
       promo_doorstep_fee: '',
+      per_kg_price: '',
+      per_kg_currency: 'GBP',
       extra_charges: '',
       video_link: ''
     })
@@ -1971,11 +2046,11 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           <p className="text-zinc-400 text-sm mt-1">Create, track, escalate and resolve parcel shipments and customer complaints</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="flex w-full sm:w-auto items-center justify-center bg-zinc-950 p-1 rounded-xl border border-zinc-800">
             <button
               onClick={() => setWorkspaceTab('shipments')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              className={`flex-1 sm:flex-initial justify-center px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 workspaceTab === 'shipments'
                   ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -1985,7 +2060,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
             </button>
             <button
               onClick={() => setWorkspaceTab('escalations')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              className={`flex-1 sm:flex-initial justify-center px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 workspaceTab === 'escalations'
                   ? 'bg-red-600 text-white shadow-lg shadow-red-600/20'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -2001,10 +2076,10 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
           </div>
 
           {workspaceTab === 'shipments' ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={() => window.open('/manifest', '_blank')}
-                className="flex items-center justify-center gap-2 px-3.5 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3.5 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
                 title="Open Daily Shipment Manifest Portal"
               >
                 <FileText className="h-4 w-4 text-indigo-400" /> Daily Manifest Portal
@@ -2015,7 +2090,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   setFormError('')
                   setIsModalOpen(true)
                 }}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 cursor-pointer whitespace-nowrap"
               >
                 <Plus className="h-4 w-4" /> Create Shipment
               </button>
@@ -2546,7 +2621,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="text-xs text-zinc-400 font-semibold flex items-center gap-1">
                           <Phone className="h-3.5 w-3.5 text-zinc-500" /> Sender Phone
@@ -2617,7 +2692,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="text-xs text-zinc-400 font-semibold flex items-center gap-1">
                           <Phone className="h-3.5 w-3.5 text-zinc-500" /> Receiver Phone
@@ -2662,7 +2737,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   </div>
 
                   {/* Date, Shipping Type & Shipment Status */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
                         <Calendar className="h-3.5 w-3.5 text-emerald-400" /> Shipment Date
@@ -3024,7 +3099,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               {activeTab === 'package' && (
                 <div className="space-y-4">
                   {/* Items Received & Items Shipped */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Item Received</label>
                       <textarea
@@ -3050,7 +3125,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   </div>
 
                   {/* Items Received at Destination & DPD Tracking & Payment Ref */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Items Recieved (At Destination)</label>
                       <textarea
@@ -3977,7 +4052,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               </div>
 
               {/* Linked Shipment & Customer */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-zinc-900/40 p-3 rounded-lg border border-zinc-800/80 space-y-1 text-xs">
                   <span className="text-zinc-500 font-semibold block">Escalating For</span>
                   {selectedEscalation.shipment ? (
@@ -4008,7 +4083,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 space-y-3">
                 <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Manage Escalation</h4>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[11px] text-zinc-400 font-semibold">Change Status</label>
                     <select
@@ -4322,7 +4397,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   </div>
 
                   {/* Date, Shipping Method & Shipment Status */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <div className="flex justify-between items-center">
                         <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
@@ -4692,7 +4767,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
               {activeTab === 'package' && (
                 <div className="space-y-4">
                   {/* Items Received & Items Shipped */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Item Received</label>
                       <textarea
@@ -4718,7 +4793,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                   </div>
 
                   {/* Items Received at Destination & Tracking ID */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div className="space-y-1.5">
                       <label className="text-xs text-zinc-300 font-semibold">Items Recieved (At Destination)</label>
                       <textarea

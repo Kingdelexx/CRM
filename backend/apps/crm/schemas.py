@@ -412,6 +412,7 @@ class ShipmentSchema(ModelSchema):
             'id', 'sender_name', 'sender_phone', 'sender_email', 'sender_address',
             'receiver_name', 'receiver_phone', 'receiver_email', 'receiver_address',
             'date', 'shipment_date', 'shipment_status', 'payment_status', 'shipping_type', 'currency', 'conversion_rate', 'amount',
+            'per_kg_price', 'per_kg_currency',
             'discount_percentage', 'invoice_number', 'number_of_carton', 'has_packaging', 'has_doorstep_delivery', 'extra_charges', 'dpd', 'video_link', 'is_promo', 'promo_packaging_fee', 'promo_doorstep_fee', 'packager', 'partner_name', 'item_received', 'items_shipped',
             'items_recieved', 'weight_kg', 'tracking_id', 'dpd_tracking_number', 'payment_reference_number', 'value', 'note', 'manifest', 'created_at', 'updated_at'
         ]
@@ -444,6 +445,8 @@ class ShipmentCreateSchema(Schema):
     currency: Optional[str] = 'NGN'
     conversion_rate: Optional[float] = 1.0000
     amount: Optional[float] = 0.00
+    per_kg_price: Optional[float] = None
+    per_kg_currency: Optional[str] = 'GBP'
     discount_percentage: Optional[float] = 0.00
     invoice_number: Optional[str] = None
     number_of_carton: Optional[int] = 1

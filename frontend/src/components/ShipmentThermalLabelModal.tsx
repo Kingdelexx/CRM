@@ -55,6 +55,15 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
   const [activePageIndex, setActivePageIndex] = useState(0)
   const [previewMode, setPreviewMode] = useState<'single' | 'all'>('single')
+  const [isMobileScreen, setIsMobileScreen] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640)
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 640)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Prepare label items by looping multi-parcel consignments
   useEffect(() => {
@@ -237,7 +246,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
               <Printer className="h-5 w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h3 className="text-sm sm:text-base font-bold text-white">
                   Thermal Shipping Labels (144mm × 100mm)
                 </h3>
@@ -361,7 +370,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
                   parcelIndex={currentItem.parcelIndex}
                   totalParcels={currentItem.totalParcels}
                   qrDataUrl={currentItem.qrDataUrl}
-                  scale={0.92}
+                  scale={isMobileScreen ? 0.6 : 0.92}
                 />
               </div>
               <div className="text-center text-[11px] text-zinc-400 font-mono">
@@ -379,7 +388,7 @@ export const ShipmentThermalLabelModal: React.FC<ShipmentThermalLabelModalProps>
                       parcelIndex={item.parcelIndex}
                       totalParcels={item.totalParcels}
                       qrDataUrl={item.qrDataUrl}
-                      scale={0.7}
+                      scale={isMobileScreen ? 0.55 : 0.7}
                     />
                   </div>
                   <span className="text-[10px] text-zinc-400 font-mono font-bold">

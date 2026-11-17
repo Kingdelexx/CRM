@@ -301,6 +301,10 @@ export interface LogisticsItem {
   weight_kg?: number;
   price_ngn?: number;
   price_gbp?: number;
+  rate_per_kg_ngn?: number;
+  rate_per_kg_gbp?: number;
+  unit_price_ngn?: number;
+  unit_price_gbp?: number;
   total_ngn?: number;
   total_gbp?: number;
   original_price_ngn?: number;
@@ -483,6 +487,8 @@ export interface Shipment extends BaseEntity {
   is_promo?: boolean;
   promo_packaging_fee?: number;
   promo_doorstep_fee?: number;
+  per_kg_price?: number;
+  per_kg_currency?: 'GBP' | 'NGN';
   packager?: string;
   partner?: Contact;
   partner_name?: string;

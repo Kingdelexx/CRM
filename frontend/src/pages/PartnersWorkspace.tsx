@@ -709,7 +709,7 @@ export default function PartnersWorkspace() {
               </div>
 
               {/* 4. Phone & WhatsApp Number */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
                     <Phone className="h-3.5 w-3.5 text-zinc-400" /> Phone Number
@@ -739,7 +739,7 @@ export default function PartnersWorkspace() {
               </div>
 
               {/* 5. Address (City & State) */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs text-zinc-300 font-semibold flex items-center gap-1">
                     <MapPin className="h-3.5 w-3.5 text-emerald-400" /> City

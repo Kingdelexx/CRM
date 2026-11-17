@@ -813,6 +813,8 @@ class Shipment(TimeStampedModel):
     currency = models.CharField(max_length=10, choices=CURRENCY_CHOICES, default='NGN')
     conversion_rate = models.DecimalField(max_digits=10, decimal_places=4, default=1.0000)
     amount = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    per_kg_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    per_kg_currency = models.CharField(max_length=10, default='GBP', null=True, blank=True)
     discount_percentage = models.DecimalField(max_digits=5, decimal_places=2, default=0.00)
     invoice_number = models.CharField(max_length=100, null=True, blank=True)
     
