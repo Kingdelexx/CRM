@@ -3023,9 +3023,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     const discountVal = (subtotalVal * (parseFloat(formData.discount_percentage) || 0)) / 100
 
                     return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0 || isCustomPricing) && (
-                      <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
+                      <div className="bg-black border border-zinc-800 p-3.5 rounded-xl space-y-2 text-white shadow-sm">
                         {isCustomPricing && (
-                          <div className="flex items-center justify-between pb-1 border-b border-emerald-500/20 text-[11px]">
+                          <div className="flex items-center justify-between pb-1 border-b border-zinc-800 text-[11px]">
                             <span className="flex items-center gap-1.5 font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
                               <Sliders className="h-3 w-3" /> Custom Pricing Mode Active
                             </span>
@@ -3034,37 +3034,43 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                             </span>
                           </div>
                         )}
-                        <div className="text-xs text-zinc-300 space-y-1 pt-1">
+                        <div className="text-xs text-white space-y-1.5 pt-1">
                           {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo || isCustomPricing) && (
-                            <div className="flex justify-between text-purple-400 font-medium">
+                            <div className="flex justify-between text-white font-medium">
                               <span>Packaging Fee {isCustomPricing && customPackagingFee ? `(${parcelsForPackaging} × ₦${(parseFloat(customPackagingFee) || 0).toLocaleString()} [Custom])` : isPromo && formData.promo_packaging_fee ? `(${parcelsForPackaging} × ₦${(parseFloat(String(formData.promo_packaging_fee)) || 0).toLocaleString()} [Promo])` : `(${parcelsForPackaging} × ₦${orgParcelRate.toLocaleString()})`}:</span>
-                              <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-white">₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                           {hasDoorstepDelivery === 'YES' && (doorstepFeeVal > 0 || isPromo || isCustomPricing) && (
-                            <div className="flex justify-between text-sky-400 font-medium">
+                            <div className="flex justify-between text-white font-medium">
                               <span>Doorstep Delivery Fee {isCustomPricing && customDoorstepFee ? `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${(parseFloat(customDoorstepFee) || 0).toLocaleString()} @ ₦${activeExRate.toLocaleString()}/£ [Custom])` : isPromo && formData.promo_doorstep_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${orgDoorstepRate.toLocaleString()} @ ₦${orgExchangeRate.toLocaleString()}/£)`}:</span>
-                              <span>₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-white">₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                           {weightVal > 0 && currentPerKgRate > 0 && (
-                            <div className="flex justify-between text-emerald-400 font-medium">
+                            <div className="flex justify-between text-white font-medium">
                               <span>
                                 {isCustomPricing ? 'Weight Fee (Custom)' : isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × {isCustomPerKgInNgn ? `₦${currentPerKgRate.toLocaleString()}` : `£${currentPerKgRate.toLocaleString()}`} {rateLabel}{!isCustomPerKgInNgn ? ` @ ₦${activeExRate.toLocaleString()}/£` : ''}):
                               </span>
-                              <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-white">₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {extraChargesNgn > 0 && (
+                            <div className="flex justify-between text-white font-medium">
+                              <span>Extra Charges:</span>
+                              <span className="font-semibold text-white">₦{extraChargesNgn.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                           {(parseFloat(formData.discount_percentage) || 0) > 0 && (
-                            <div className="flex justify-between text-rose-400 font-medium border-t border-zinc-800/80 pt-1">
+                            <div className="flex justify-between text-white font-medium border-t border-zinc-800 pt-1.5">
                               <span>Discount ({formData.discount_percentage}%):</span>
-                              <span>-₦{discountVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-white">-₦{discountVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
-                          <div className="flex justify-between text-amber-300 font-bold pt-1 border-t border-zinc-800 text-xs uppercase tracking-wider">
-                            <span>Total Calculation:</span>
-                            <span>₦{amountNgn} NGN</span>
-                          </div>
+                        </div>
+                        <div className="border-t border-zinc-800 pt-2 flex justify-between text-sm font-bold text-white">
+                          <span>Calculated Total:</span>
+                          <span className="font-bold text-white">₦{Math.max(0, subtotalVal - discountVal).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
                       </div>
                     )
@@ -4692,9 +4698,9 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                     const discountVal = (subtotalVal * (parseFloat(formData.discount_percentage) || 0)) / 100
 
                     return (hasPackaging === 'YES' || hasDoorstepDelivery === 'YES' || weightVal > 0 || (parseFloat(formData.discount_percentage) || 0) > 0 || isCustomPricing) && (
-                      <div className="bg-gradient-to-r from-emerald-950/40 to-sky-950/40 border border-emerald-500/30 p-3.5 rounded-xl space-y-2">
+                      <div className="bg-black border border-zinc-800 p-3.5 rounded-xl space-y-2 text-white shadow-sm">
                         {isCustomPricing && (
-                          <div className="flex items-center justify-between pb-1 border-b border-emerald-500/20 text-[11px]">
+                          <div className="flex items-center justify-between pb-1 border-b border-zinc-800 text-[11px]">
                             <span className="flex items-center gap-1.5 font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
                               <Sliders className="h-3 w-3" /> Custom Pricing Mode Active
                             </span>
@@ -4703,37 +4709,43 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                             </span>
                           </div>
                         )}
-                        <div className="text-xs text-zinc-300 space-y-1 pt-1">
+                        <div className="text-xs text-white space-y-1.5 pt-1">
                           {hasPackaging === 'YES' && (packagingFeeVal > 0 || isPromo || isCustomPricing) && (
-                            <div className="flex justify-between text-purple-400 font-medium">
+                            <div className="flex justify-between text-white font-medium">
                               <span>Packaging Fee {isCustomPricing && customPackagingFee ? `(${parcelsForPackaging} × ₦${(parseFloat(customPackagingFee) || 0).toLocaleString()} [Custom])` : isPromo && formData.promo_packaging_fee ? `(${parcelsForPackaging} × ₦${(parseFloat(String(formData.promo_packaging_fee)) || 0).toLocaleString()} [Promo])` : `(${parcelsForPackaging} × ₦${orgParcelRate.toLocaleString()})`}:</span>
-                              <span>₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-white">₦{packagingFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                           {hasDoorstepDelivery === 'YES' && (doorstepFeeVal > 0 || isPromo || isCustomPricing) && (
-                            <div className="flex justify-between text-sky-400 font-medium">
+                            <div className="flex justify-between text-white font-medium">
                               <span>Doorstep Delivery Fee {isCustomPricing && customDoorstepFee ? `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${(parseFloat(customDoorstepFee) || 0).toLocaleString()} @ ₦${activeExRate.toLocaleString()}/£ [Custom])` : isPromo && formData.promo_doorstep_fee ? '(Promo Override)' : `(${(parseInt(formData.number_of_carton) || 1)} parcel(s) × £${orgDoorstepRate.toLocaleString()} @ ₦${orgExchangeRate.toLocaleString()}/£)`}:</span>
-                              <span>₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-white">₦{doorstepFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                           {weightVal > 0 && currentPerKgRate > 0 && (
-                            <div className="flex justify-between text-emerald-400 font-medium">
+                            <div className="flex justify-between text-white font-medium">
                               <span>
                                 {isCustomPricing ? 'Weight Fee (Custom)' : isPromo ? 'Promo Shipping Fee' : isSea ? 'Sea Shipping Fee' : 'Weight Fee'} ({formData.weight_kg} kg × {isCustomPerKgInNgn ? `₦${currentPerKgRate.toLocaleString()}` : `£${currentPerKgRate.toLocaleString()}`} {rateLabel}{!isCustomPerKgInNgn ? ` @ ₦${activeExRate.toLocaleString()}/£` : ''}):
                               </span>
-                              <span>₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-white">₦{weightFeeVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          )}
+                          {extraChargesNgn > 0 && (
+                            <div className="flex justify-between text-white font-medium">
+                              <span>Extra Charges:</span>
+                              <span className="font-semibold text-white">₦{extraChargesNgn.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                           {(parseFloat(formData.discount_percentage) || 0) > 0 && (
-                            <div className="flex justify-between text-rose-400 font-medium border-t border-zinc-800/80 pt-1">
+                            <div className="flex justify-between text-white font-medium border-t border-zinc-800 pt-1.5">
                               <span>Discount ({formData.discount_percentage}%):</span>
-                              <span>- ₦{discountVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                              <span className="font-semibold text-white">-₦{discountVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                           )}
                         </div>
-                        <div className="border-t border-emerald-500/20 pt-2 flex justify-between text-sm font-bold text-emerald-300">
+                        <div className="border-t border-zinc-800 pt-2 flex justify-between text-sm font-bold text-white">
                           <span>Calculated Total:</span>
-                          <span>₦{Math.max(0, subtotalVal - discountVal).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <span className="font-bold text-white">₦{Math.max(0, subtotalVal - discountVal).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
                       </div>
                     )
