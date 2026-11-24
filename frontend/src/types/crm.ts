@@ -345,6 +345,7 @@ export interface Invoice extends BaseEntity {
   total_gbp: number;
   original_total_ngn?: number;
   original_total_gbp?: number;
+  is_promo?: boolean;
   amount_paid: number;
   currency: string;
   sla_terms_url?: string;

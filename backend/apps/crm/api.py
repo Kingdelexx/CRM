@@ -2833,7 +2833,7 @@ def sync_shipment_invoice(shipment):
             'price_ngn': pkg_ngn,
             'price_gbp': pkg_gbp
         }
-        if std_pkg_ngn > pkg_ngn:
+        if shipment.is_promo and std_pkg_ngn > pkg_ngn:
             pkg_service['original_price_ngn'] = std_pkg_ngn
             pkg_service['original_price_gbp'] = std_pkg_gbp
         services.append(pkg_service)
@@ -2846,7 +2846,7 @@ def sync_shipment_invoice(shipment):
             'price_ngn': ds_ngn,
             'price_gbp': ds_gbp
         }
-        if std_ds_ngn > ds_ngn:
+        if shipment.is_promo and std_ds_ngn > ds_ngn:
             ds_service['original_price_ngn'] = std_ds_ngn
             ds_service['original_price_gbp'] = std_ds_gbp
         services.append(ds_service)
@@ -2875,7 +2875,7 @@ def sync_shipment_invoice(shipment):
         'total_gbp': items_gbp,
         'total_ngn': items_ngn
     }
-    if (shipment.is_promo or std_items_ngn > items_ngn) and std_items_ngn > items_ngn:
+    if shipment.is_promo and std_items_ngn > items_ngn:
         item_dict['original_price_ngn'] = std_items_ngn
         item_dict['original_price_gbp'] = std_items_gbp
 
@@ -2941,6 +2941,7 @@ def sync_shipment_invoice(shipment):
             total_gbp=round(total_gbp, 2),
             original_total_ngn=orig_total_ngn,
             original_total_gbp=orig_total_gbp,
+            is_promo=bool(getattr(shipment, 'is_promo', False)),
             amount_paid=round(total_ngn, 2) if inv_status == Invoice.PAID else 0,
             currency=shipment.currency or 'NGN',
             issue_date=issue_date,
@@ -2967,6 +2968,7 @@ def sync_shipment_invoice(shipment):
         inv.total_gbp = round(total_gbp, 2)
         inv.original_total_ngn = orig_total_ngn
         inv.original_total_gbp = orig_total_gbp
+        inv.is_promo = bool(getattr(shipment, 'is_promo', False))
         inv.amount_paid = round(total_ngn, 2) if inv_status == Invoice.PAID else 0
         inv.currency = shipment.currency or 'NGN'
         inv.issue_date = issue_date

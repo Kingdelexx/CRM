@@ -333,7 +333,7 @@ class InvoiceSchema(ModelSchema):
             'sender_name', 'sender_tel', 'sender_email', 'sender_address',
             'total_value_items', 'expected_parcel_no', 'parcel_handler',
             'items', 'services', 'total_ngn', 'total_gbp', 'original_total_ngn', 'original_total_gbp', 'amount_paid',
-            'currency', 'sla_terms_url', 'video_link', 'notes', 'created_at', 'updated_at'
+            'is_promo', 'currency', 'sla_terms_url', 'video_link', 'notes', 'created_at', 'updated_at'
         ]
 
 

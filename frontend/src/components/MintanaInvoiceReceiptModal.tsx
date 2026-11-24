@@ -149,9 +149,17 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
     itemsTotalGbp = itemsTotalNgn / fallbackRate;
   }
 
-  const itemsOriginalTotalNgn = items.reduce((acc, i) => acc + (Number(i.original_price_ngn) || getItemLineTotalNgn(i)), 0);
-  let itemsOriginalTotalGbp = items.reduce((acc, i) => acc + (Number(i.original_price_gbp) || getItemLineTotalGbp(i)), 0);
-  if ((itemsOriginalTotalGbp === itemsOriginalTotalNgn || itemsOriginalTotalGbp <= 0) && itemsOriginalTotalNgn > 0) {
+  const isPromo = activeInvoice?.is_promo !== undefined
+    ? Boolean(activeInvoice.is_promo)
+    : Boolean(activeInvoice?.original_total_ngn && Number(activeInvoice.original_total_ngn) > 0);
+
+  const itemsOriginalTotalNgn = isPromo
+    ? items.reduce((acc, i) => acc + (Number(i.original_price_ngn) || getItemLineTotalNgn(i)), 0)
+    : itemsTotalNgn;
+  let itemsOriginalTotalGbp = isPromo
+    ? items.reduce((acc, i) => acc + (Number(i.original_price_gbp) || getItemLineTotalGbp(i)), 0)
+    : itemsTotalGbp;
+  if (isPromo && (itemsOriginalTotalGbp === itemsOriginalTotalNgn || itemsOriginalTotalGbp <= 0) && itemsOriginalTotalNgn > 0) {
     itemsOriginalTotalGbp = itemsOriginalTotalNgn / fallbackRate;
   }
 
@@ -161,17 +169,21 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
     servicesTotalGbp = servicesTotalNgn / fallbackRate;
   }
 
-  const servicesOriginalTotalNgn = services.reduce((acc, s) => acc + (Number(s.original_price_ngn) || Number(s.price_ngn) || 0), 0);
-  let servicesOriginalTotalGbp = services.reduce((acc, s) => acc + (Number(s.original_price_gbp) || Number(s.price_gbp) || 0), 0);
-  if ((servicesOriginalTotalGbp === servicesOriginalTotalNgn || servicesOriginalTotalGbp <= 0) && servicesOriginalTotalNgn > 0) {
+  const servicesOriginalTotalNgn = isPromo
+    ? services.reduce((acc, s) => acc + (Number(s.original_price_ngn) || Number(s.price_ngn) || 0), 0)
+    : servicesTotalNgn;
+  let servicesOriginalTotalGbp = isPromo
+    ? services.reduce((acc, s) => acc + (Number(s.original_price_gbp) || Number(s.price_gbp) || 0), 0)
+    : servicesTotalGbp;
+  if (isPromo && (servicesOriginalTotalGbp === servicesOriginalTotalNgn || servicesOriginalTotalGbp <= 0) && servicesOriginalTotalNgn > 0) {
     servicesOriginalTotalGbp = servicesOriginalTotalNgn / fallbackRate;
   }
 
   const calculatedTotalNgn = itemsTotalNgn + servicesTotalNgn;
   const calculatedTotalGbp = itemsTotalGbp + servicesTotalGbp;
 
-  const calculatedOriginalTotalNgn = itemsOriginalTotalNgn + servicesOriginalTotalNgn;
-  const calculatedOriginalTotalGbp = itemsOriginalTotalGbp + servicesOriginalTotalGbp;
+  const calculatedOriginalTotalNgn = isPromo ? (itemsOriginalTotalNgn + servicesOriginalTotalNgn) : 0;
+  const calculatedOriginalTotalGbp = isPromo ? (itemsOriginalTotalGbp + servicesOriginalTotalGbp) : 0;
 
   const baseTotalNgn = receipt ? Number(receipt.amount_paid_ngn) : Number(activeInvoice?.total_ngn || 0);
   let baseTotalGbp = receipt ? Number(receipt.amount_paid_gbp) : Number(activeInvoice?.total_gbp || 0);
@@ -185,9 +197,9 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
     totalGbp = totalNgn / fallbackRate;
   }
 
-  const originalTotalNgn = Number(activeInvoice?.original_total_ngn) || calculatedOriginalTotalNgn;
-  let originalTotalGbp = Number(activeInvoice?.original_total_gbp) || calculatedOriginalTotalGbp;
-  if ((originalTotalGbp === originalTotalNgn || originalTotalGbp <= 0) && originalTotalNgn > 0) {
+  const originalTotalNgn = isPromo ? (Number(activeInvoice?.original_total_ngn) || calculatedOriginalTotalNgn) : 0;
+  let originalTotalGbp = isPromo ? (Number(activeInvoice?.original_total_gbp) || calculatedOriginalTotalGbp) : 0;
+  if (isPromo && (originalTotalGbp === originalTotalNgn || originalTotalGbp <= 0) && originalTotalNgn > 0) {
     originalTotalGbp = originalTotalNgn / fallbackRate;
   }
 
@@ -673,12 +685,12 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                     const unitRateGbp = getItemUnitRateGbp(item);
                     const lineTotalGbp = getItemLineTotalGbp(item);
 
-                    const hasDiscountNgn = Boolean(item.original_price_ngn && item.original_price_ngn > lineTotalNgn);
+                    const hasDiscountNgn = Boolean(isPromo && item.original_price_ngn && item.original_price_ngn > lineTotalNgn);
                     const origUnitRateNgn = item.weight_kg && item.weight_kg > 0
                       ? Math.round(((Number(item.original_price_ngn) || 0) / item.weight_kg) * 100) / 100
                       : (Number(item.original_price_ngn) || 0);
 
-                    const hasDiscountGbp = Boolean(item.original_price_gbp && item.original_price_gbp > lineTotalGbp);
+                    const hasDiscountGbp = Boolean(isPromo && item.original_price_gbp && item.original_price_gbp > lineTotalGbp);
                     const origUnitRateGbp = item.weight_kg && item.weight_kg > 0
                       ? Math.round(((Number(item.original_price_gbp) || 0) / item.weight_kg) * 100) / 100
                       : (Number(item.original_price_gbp) || 0);
@@ -769,7 +781,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                   </td>
                   <td colSpan={2} className="py-2 px-3 text-right print:py-1 print:px-2">
                     {displayCurrency === 'NGN' ? (
-                      itemsOriginalTotalNgn > itemsTotalNgn ? (
+                      isPromo && itemsOriginalTotalNgn > itemsTotalNgn ? (
                         <span>
                           <span className="line-through text-slate-400 font-normal mr-2">
                             ₦{itemsOriginalTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -782,7 +794,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                         `₦${itemsTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       )
                     ) : (
-                      itemsOriginalTotalGbp > itemsTotalGbp ? (
+                      isPromo && itemsOriginalTotalGbp > itemsTotalGbp ? (
                         <span>
                           <span className="line-through text-slate-400 font-normal mr-2">
                             £{itemsOriginalTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -825,7 +837,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                       </td>
                       <td className="py-2 px-3 text-right font-medium print:py-1 print:px-2">
                         {displayCurrency === 'NGN' ? (
-                          srv.original_price_ngn && srv.original_price_ngn > (srv.price_ngn || 0) ? (
+                          isPromo && srv.original_price_ngn && srv.original_price_ngn > (srv.price_ngn || 0) ? (
                             <div className="flex items-center justify-end space-x-1.5">
                               <span className="line-through text-slate-400 font-normal">
                                 ₦{Number(srv.original_price_ngn).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -838,7 +850,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                             `₦${(Number(srv.price_ngn) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           )
                         ) : (
-                          srv.original_price_gbp && srv.original_price_gbp > (srv.price_gbp || 0) ? (
+                          isPromo && srv.original_price_gbp && srv.original_price_gbp > (srv.price_gbp || 0) ? (
                             <div className="flex items-center justify-end space-x-1.5">
                               <span className="line-through text-slate-400 font-normal">
                                 £{Number(srv.original_price_gbp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -861,7 +873,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                     </td>
                     <td className="py-2 px-3 text-right print:py-1 print:px-2">
                       {displayCurrency === 'NGN' ? (
-                        servicesOriginalTotalNgn > servicesTotalNgn ? (
+                        isPromo && servicesOriginalTotalNgn > servicesTotalNgn ? (
                           <span>
                             <span className="line-through text-slate-400 font-normal mr-2">
                               ₦{servicesOriginalTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -874,7 +886,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                           `₦${servicesTotalNgn.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         )
                       ) : (
-                        servicesOriginalTotalGbp > servicesTotalGbp ? (
+                        isPromo && servicesOriginalTotalGbp > servicesTotalGbp ? (
                           <span>
                             <span className="line-through text-slate-400 font-normal mr-2">
                               £{servicesOriginalTotalGbp.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -898,7 +910,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
           <div className="flex justify-end mb-8 print:mb-2">
             <div className="w-full sm:w-80 print:w-72">
               {displayCurrency === 'NGN' ? (
-                originalTotalNgn > totalNgn ? (
+                isPromo && originalTotalNgn > totalNgn ? (
                   <div className="flex flex-col bg-sky-600 text-white font-extrabold px-4 py-3 rounded-xl shadow-md space-y-1 print:px-3 print:py-1.5 print:rounded-lg">
                     <div className="flex justify-between items-center text-xs opacity-90 border-b border-sky-400/50 pb-1 print:pb-0.5 print:text-[10px]">
                       <span>Standard Rate Total (NGN)</span>
@@ -923,7 +935,7 @@ export const MintanaInvoiceReceiptModal: React.FC<MintanaInvoiceReceiptModalProp
                   </div>
                 )
               ) : (
-                originalTotalGbp > totalGbp ? (
+                isPromo && originalTotalGbp > totalGbp ? (
                   <div className="flex flex-col bg-blue-900 text-white font-extrabold px-4 py-3 rounded-xl shadow-md space-y-1 print:px-3 print:py-1.5 print:rounded-lg">
                     <div className="flex justify-between items-center text-xs opacity-90 border-b border-blue-700/50 pb-1 print:pb-0.5 print:text-[10px]">
                       <span>Standard Rate Total (GBP)</span>

@@ -191,7 +191,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
     if (shipment.has_packaging) {
       const pkgService: LogisticsService = { sn: serviceSn++, service_name: 'Packaging', price_ngn: pkgNgn, price_gbp: pkgGbp }
-      if (stdPkgNgn > pkgNgn) {
+      if (isPromo && stdPkgNgn > pkgNgn) {
         pkgService.original_price_ngn = stdPkgNgn
         pkgService.original_price_gbp = stdPkgGbp
       }
@@ -200,7 +200,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
     if (shipment.has_doorstep_delivery) {
       const dsService: LogisticsService = { sn: serviceSn++, service_name: 'Doorstep Delivery', price_ngn: dsNgn, price_gbp: dsGbp }
-      if (stdDsNgn > dsNgn) {
+      if (isPromo && stdDsNgn > dsNgn) {
         dsService.original_price_ngn = stdDsNgn
         dsService.original_price_gbp = stdDsGbp
       }
@@ -231,7 +231,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       total_gbp: itemsGbp,
       total_ngn: itemsNgn
     }
-    if ((isPromo || stdItemsNgn > itemsNgn) && stdItemsNgn > itemsNgn) {
+    if (isPromo && stdItemsNgn > itemsNgn) {
       itemObj.original_price_ngn = stdItemsNgn
       itemObj.original_price_gbp = stdItemsGbp
     }
@@ -273,6 +273,7 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
       total_gbp: totalGbp,
       original_total_ngn: (isPromo && stdTotalNgn > totalNgn) ? stdTotalNgn : undefined,
       original_total_gbp: (isPromo && stdTotalGbp > totalGbp) ? stdTotalGbp : undefined,
+      is_promo: isPromo,
       amount_paid: shipment.payment_status === 'PAID' ? totalNgn : 0,
       currency: shipment.currency || 'NGN',
       sla_terms_url: 'https://www.mintana.co.uk/terms-and-conditions',

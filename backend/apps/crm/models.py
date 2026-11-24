@@ -670,6 +670,7 @@ class Invoice(TimeStampedModel):
     original_total_ngn = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
     original_total_gbp = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0.00)
+    is_promo = models.BooleanField(default=False)
     currency = models.CharField(max_length=10, default='NGN')
     
     # Terms & SLA Link & Video Link
