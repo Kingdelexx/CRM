@@ -69,14 +69,30 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
   // Search & Filters for Shipments
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('')
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim())
+    }, 250)
+    return () => clearTimeout(handler)
+  }, [searchTerm])
   
   // Search & Filters for Escalations
   const [escalationSearchTerm, setEscalationSearchTerm] = useState('')
+  const [debouncedEscalationSearchTerm, setDebouncedEscalationSearchTerm] = useState('')
   const [escalationTypeFilter, setEscalationTypeFilter] = useState('')
   const [escalationPriorityFilter, setEscalationPriorityFilter] = useState('')
   const [escalationStatusFilter, setEscalationStatusFilter] = useState('')
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedEscalationSearchTerm(escalationSearchTerm.trim())
+    }, 250)
+    return () => clearTimeout(handler)
+  }, [escalationSearchTerm])
   
   // Modal & Drawer State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -839,32 +855,34 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
 
   // 1. Fetch Shipments list
   const { data: shipmentsData, isLoading, isError } = useQuery({
-    queryKey: ['shipments', searchTerm, statusFilter, paymentFilter],
+    queryKey: ['shipments', debouncedSearchTerm, statusFilter, paymentFilter],
     queryFn: async () => {
       const response = await apiClient.get<Shipment[]>('/shipments/', {
         params: {
-          search: searchTerm || undefined,
+          search: debouncedSearchTerm || undefined,
           shipment_status: statusFilter || undefined,
           payment_status: paymentFilter || undefined
         }
       })
       return response.data
-    }
+    },
+    placeholderData: (previousData) => previousData
   })
 
   // 1b. Fetch Shipment Escalations list
   const { data: escalationsData, isLoading: isEscalationsLoading, isError: isEscalationsError } = useQuery({
-    queryKey: ['shipment-escalations', escalationSearchTerm, escalationTypeFilter, escalationPriorityFilter, escalationStatusFilter],
+    queryKey: ['shipment-escalations', debouncedEscalationSearchTerm, escalationTypeFilter, escalationPriorityFilter, escalationStatusFilter],
     queryFn: async () => {
       const params = {
-        search: escalationSearchTerm || undefined,
+        search: debouncedEscalationSearchTerm || undefined,
         escalation_type: escalationTypeFilter || undefined,
         priority: escalationPriorityFilter || undefined,
         status: escalationStatusFilter || undefined
       }
       const response = await apiClient.get<ShipmentEscalation[]>('/shipment-escalations/', { params })
       return response.data
-    }
+    },
+    placeholderData: (previousData) => previousData
   })
 
   // Escalation Metrics Summary
@@ -1989,7 +2007,62 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   ], [])
 
-  const tableData = useMemo(() => (Array.isArray(shipmentsData) ? shipmentsData : []), [shipmentsData])
+  const tableData = useMemo(() => {
+    const raw = Array.isArray(shipmentsData) ? shipmentsData : []
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return raw
+
+    return raw.filter((s) => {
+      const inv = (s.invoice_number || '').toLowerCase()
+      const trk = (s.tracking_id || '').toLowerCase()
+      const snd = (s.sender_name || `${s.sender?.first_name || ''} ${s.sender?.last_name || ''}`).toLowerCase()
+      const rec = (s.receiver_name || `${s.receiver?.first_name || ''} ${s.receiver?.last_name || ''}`).toLowerCase()
+      const sndPhone = (s.sender_phone || s.sender?.phone || '').toLowerCase()
+      const recPhone = (s.receiver_phone || s.receiver?.phone || '').toLowerCase()
+      const sndEmail = (s.sender_email || s.sender?.email || '').toLowerCase()
+      const recEmail = (s.receiver_email || s.receiver?.email || '').toLowerCase()
+      const partner = (s.partner_name || `${s.partner?.first_name || ''} ${s.partner?.last_name || ''}`).toLowerCase()
+      const packager = (s.packager || '').toLowerCase()
+      const status = (s.shipment_status || '').toLowerCase()
+      const payment = (s.payment_status || '').toLowerCase()
+      const type = (s.shipping_type || '').toLowerCase()
+      const dateStr = (s.shipment_date || s.date || '').toLowerCase()
+      const createdStr = s.created_at ? new Date(s.created_at).toLocaleDateString().toLowerCase() : ''
+      const shippedStr = s.shipment_date ? new Date(s.shipment_date).toLocaleDateString().toLowerCase() : ''
+      const cartonStr = String(s.number_of_carton || '')
+
+      if (
+        inv.includes(term) ||
+        trk.includes(term) ||
+        snd.includes(term) ||
+        rec.includes(term) ||
+        sndPhone.includes(term) ||
+        recPhone.includes(term) ||
+        sndEmail.includes(term) ||
+        recEmail.includes(term) ||
+        partner.includes(term) ||
+        packager.includes(term) ||
+        status.includes(term) ||
+        payment.includes(term) ||
+        type.includes(term) ||
+        dateStr.includes(term) ||
+        createdStr.includes(term) ||
+        shippedStr.includes(term) ||
+        cartonStr === term
+      ) {
+        return true
+      }
+
+      const tokens = term.split(/\s+/).filter(Boolean)
+      if (tokens.length > 1) {
+        return tokens.every(t =>
+          inv.includes(t) || trk.includes(t) || snd.includes(t) || rec.includes(t) ||
+          partner.includes(t) || packager.includes(t) || status.includes(t)
+        )
+      }
+      return false
+    })
+  }, [shipmentsData, searchTerm])
 
   const table = useReactTable({
     data: tableData,
@@ -2114,7 +2187,43 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
     }
   ], [])
 
-  const escalationTableData = useMemo(() => (Array.isArray(escalationsData) ? escalationsData : []), [escalationsData])
+  const escalationTableData = useMemo(() => {
+    const raw = Array.isArray(escalationsData) ? escalationsData : []
+    const term = escalationSearchTerm.trim().toLowerCase()
+    if (!term) return raw
+
+    return raw.filter((esc) => {
+      const cust = (esc.customer_name || '').toLowerCase()
+      const summary = (esc.complaint_summary || '').toLowerCase()
+      const internal = (esc.internal || '').toLowerCase()
+      const res = (esc.resolution || '').toLowerCase()
+      const trk = (esc.shipment?.tracking_id || esc.shipment?.invoice_number || '').toLowerCase()
+      const type = (esc.escalation_type || '').toLowerCase()
+      const priority = (esc.priority || '').toLowerCase()
+      const status = (esc.status || '').toLowerCase()
+
+      if (
+        cust.includes(term) ||
+        summary.includes(term) ||
+        internal.includes(term) ||
+        res.includes(term) ||
+        trk.includes(term) ||
+        type.includes(term) ||
+        priority.includes(term) ||
+        status.includes(term)
+      ) {
+        return true
+      }
+
+      const tokens = term.split(/\s+/).filter(Boolean)
+      if (tokens.length > 1) {
+        return tokens.every(t =>
+          cust.includes(t) || summary.includes(t) || trk.includes(t) || type.includes(t) || status.includes(t)
+        )
+      }
+      return false
+    })
+  }, [escalationsData, escalationSearchTerm])
 
   const escalationTable = useReactTable({
     data: escalationTableData,
@@ -2255,8 +2364,18 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 placeholder="Search complaint, customer, tracking ID..."
                 value={escalationSearchTerm}
                 onChange={(e) => setEscalationSearchTerm(e.target.value)}
-                className="w-full bg-zinc-950 pl-10 pr-4 py-2 rounded-lg border border-zinc-900 focus:border-red-600 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
+                className="w-full bg-zinc-950 pl-10 pr-9 py-2 rounded-lg border border-zinc-900 focus:border-red-600 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
               />
+              {escalationSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setEscalationSearchTerm('')}
+                  className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
@@ -2517,8 +2636,18 @@ export default function ShipmentWorkspace({ initialTab }: ShipmentWorkspaceProps
                 placeholder="Search by name, date, invoice #, tracking ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-zinc-950 pl-10 pr-4 py-2 rounded-lg border border-zinc-900 focus:border-emerald-600 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
+                className="w-full bg-zinc-950 pl-10 pr-9 py-2 rounded-lg border border-zinc-900 focus:border-emerald-600 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
             {/* Filter Dropdowns */}

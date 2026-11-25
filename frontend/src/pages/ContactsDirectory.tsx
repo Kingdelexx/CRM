@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/api/client'
 import type { Contact, Company, User } from '@/types/crm'
@@ -172,8 +172,16 @@ export default function ContactsDirectory() {
   
   // States (Search, Filter, Pagination)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [assigneeFilter, setAssigneeFilter] = useState('')
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm.trim())
+    }, 250)
+    return () => clearTimeout(handler)
+  }, [searchTerm])
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
@@ -323,11 +331,11 @@ export default function ContactsDirectory() {
   const offset = pagination.pageIndex * pagination.pageSize
   
   const { data: contactsData, isLoading, isError } = useQuery({
-    queryKey: ['contacts', searchTerm, statusFilter, assigneeFilter, limit, offset],
+    queryKey: ['contacts', debouncedSearchTerm, statusFilter, assigneeFilter, limit, offset],
     queryFn: async () => {
       const response = await apiClient.get<{ items: Contact[]; count: number }>('/contacts/', {
         params: {
-          search: searchTerm || undefined,
+          search: debouncedSearchTerm || undefined,
           status: statusFilter || undefined,
           assigned_to_id: assigneeFilter || undefined,
           limit,
@@ -335,7 +343,8 @@ export default function ContactsDirectory() {
         }
       })
       return response.data
-    }
+    },
+    placeholderData: (previousData) => previousData
   })
 
   // 2. Fetch companies for select dropdown
@@ -707,8 +716,21 @@ export default function ContactsDirectory() {
               setSearchTerm(e.target.value)
               setPagination(p => ({ ...p, pageIndex: 0 }))
             }}
-            className="w-full bg-zinc-950 pl-10 pr-4 py-2 rounded-lg border border-zinc-900 focus:border-indigo-650 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
+            className="w-full bg-zinc-950 pl-10 pr-9 py-2 rounded-lg border border-zinc-900 focus:border-indigo-650 focus:outline-none text-sm text-zinc-200 placeholder-zinc-500"
           />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('')
+                setPagination(p => ({ ...p, pageIndex: 0 }))
+              }}
+              className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+              title="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         {/* Action filter dropdowns */}

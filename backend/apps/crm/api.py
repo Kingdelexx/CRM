@@ -5,8 +5,10 @@ import quopri
 import urllib.parse
 from django.utils import timezone
 from datetime import date, datetime, timedelta, timezone as dt_timezone
+import re
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import Q, Sum, Value, CharField
+from django.db.models.functions import Concat, Cast
 from ninja import Router, File, UploadedFile
 from ninja.errors import HttpError
 from ninja.pagination import paginate, LimitOffsetPagination
@@ -84,6 +86,41 @@ search_router = Router(auth=JWTAuth())
 def check_tenant(request_user, obj):
     if obj.organization_id != request_user.organization_id:
         raise HttpError(403, "Access Denied: Object belongs to a different organization.")
+
+def _extract_search_date_terms(term: str) -> List[str]:
+    dates = []
+    cleaned = str(term).strip()
+    m = re.search(r'(\d{1,4})[/\-.](\d{1,2})[/\-.](\d{2,4})', cleaned)
+    if m:
+        p1, p2, p3 = m.group(1), m.group(2), m.group(3)
+        if len(p1) == 4:
+            try:
+                dates.append(f"{p1}-{int(p2):02d}-{int(p3):02d}")
+            except Exception:
+                pass
+        elif len(p3) == 4:
+            try:
+                dates.append(f"{p3}-{int(p2):02d}-{int(p1):02d}")
+                dates.append(f"{p3}-{int(p1):02d}-{int(p2):02d}")
+            except Exception:
+                pass
+    months = {
+        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+        'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+    }
+    term_lower = cleaned.lower()
+    for m_name, m_num in months.items():
+        if m_name in term_lower:
+            day_match = re.search(r'\b(\d{1,2})\b', cleaned)
+            if day_match:
+                try:
+                    d = int(day_match.group(1))
+                    if 1 <= d <= 31:
+                        dates.append(f"-{m_num}-{d:02d}")
+                except Exception:
+                    pass
+            dates.append(f"-{m_num}-")
+    return list(set(dates))
 
 # ----------------- COMPANIES API -----------------
 
@@ -220,13 +257,44 @@ def list_contacts(
     qs = Contact.objects.filter(organization=request.user.organization).select_related('company', 'assigned_to')
     
     if search:
-        qs = qs.filter(
-            Q(first_name__icontains=search) | 
-            Q(last_name__icontains=search) | 
-            Q(email__icontains=search) |
-            Q(phone__icontains=search) |
-            Q(address__icontains=search)
+        search_term = str(search).strip()
+        qs = qs.annotate(
+            full_name=Concat('first_name', Value(' '), 'last_name', output_field=CharField()),
+            rev_full_name=Concat('last_name', Value(' '), 'first_name', output_field=CharField()),
         )
+        base_filter = (
+            Q(first_name__icontains=search_term) | 
+            Q(last_name__icontains=search_term) | 
+            Q(full_name__icontains=search_term) |
+            Q(rev_full_name__icontains=search_term) |
+            Q(email__icontains=search_term) |
+            Q(phone__icontains=search_term) |
+            Q(whatsapp_number__icontains=search_term) |
+            Q(address__icontains=search_term) |
+            Q(job_title__icontains=search_term) |
+            Q(company__name__icontains=search_term) |
+            Q(notes__icontains=search_term)
+        )
+        tokens = search_term.split()
+        if len(tokens) > 1:
+            token_q = Q()
+            for t in tokens:
+                token_q &= (
+                    Q(first_name__icontains=t) |
+                    Q(last_name__icontains=t) |
+                    Q(email__icontains=t) |
+                    Q(phone__icontains=t) |
+                    Q(whatsapp_number__icontains=t) |
+                    Q(address__icontains=t) |
+                    Q(company__name__icontains=t)
+                )
+            base_filter |= token_q
+            
+        digits = re.sub(r'\D', '', search_term)
+        if len(digits) >= 4:
+            base_filter |= Q(phone__icontains=digits) | Q(whatsapp_number__icontains=digits)
+
+        qs = qs.filter(base_filter)
     if company_id:
         qs = qs.filter(company_id=company_id)
     if status:
@@ -1948,12 +2016,14 @@ def delete_document(request, id: UUID):
 
 # ----------------- GLOBAL SEARCH API -----------------
 @search_router.get("", response=dict)
+@search_router.get("/", response=dict)
 def global_search(request, q: str):
     org = request.user.organization
     if not q or len(q.strip()) < 1:
         return {
             "contacts": [], "tasks": [], "projects": [], "deals": [],
-            "emails": [], "whatsapp": [], "documents": [], "activities": []
+            "emails": [], "whatsapp": [], "documents": [], "activities": [],
+            "shipments": [], "invoices": [], "receipts": []
         }
     
     q_str = q.strip()
@@ -1961,11 +2031,18 @@ def global_search(request, q: str):
     # 1. Contacts
     contacts = Contact.objects.filter(
         organization=org
+    ).annotate(
+        full_name=Concat('first_name', Value(' '), 'last_name', output_field=CharField()),
+        rev_full_name=Concat('last_name', Value(' '), 'first_name', output_field=CharField()),
     ).filter(
         Q(first_name__icontains=q_str) |
         Q(last_name__icontains=q_str) |
+        Q(full_name__icontains=q_str) |
+        Q(rev_full_name__icontains=q_str) |
         Q(email__icontains=q_str) |
-        Q(phone__icontains=q_str)
+        Q(phone__icontains=q_str) |
+        Q(whatsapp_number__icontains=q_str) |
+        Q(company__name__icontains=q_str)
     )[:10]
     
     # 2. Tasks
@@ -2024,9 +2101,40 @@ def global_search(request, q: str):
         Q(content__icontains=q_str)
     )[:10]
 
+    # 9. Shipments
+    shipments = Shipment.objects.filter(
+        organization=org
+    ).filter(
+        Q(tracking_id__icontains=q_str) |
+        Q(invoice_number__icontains=q_str) |
+        Q(receiver_name__icontains=q_str) |
+        Q(sender_name__icontains=q_str) |
+        Q(receiver_phone__icontains=q_str) |
+        Q(partner_name__icontains=q_str)
+    )[:10]
+
+    # 10. Invoices
+    invoices = Invoice.objects.filter(
+        organization=org
+    ).filter(
+        Q(invoice_number__icontains=q_str) |
+        Q(receiver_name__icontains=q_str) |
+        Q(receiver_tel__icontains=q_str)
+    )[:10]
+
+    # 11. Receipts
+    receipts = Receipt.objects.filter(
+        organization=org
+    ).filter(
+        Q(receipt_number__icontains=q_str) |
+        Q(reference_number__icontains=q_str) |
+        Q(invoice__invoice_number__icontains=q_str) |
+        Q(invoice__receiver_name__icontains=q_str)
+    )[:10]
+
     return {
         "contacts": [
-            {"id": str(c.id), "title": f"{c.first_name} {c.last_name}", "subtitle": f"{c.email} | {c.job_title or 'No Title'}"}
+            {"id": str(c.id), "title": f"{c.first_name} {c.last_name}", "subtitle": f"{c.email or ''} | {c.phone or ''}"}
             for c in contacts
         ],
         "tasks": [
@@ -2062,7 +2170,31 @@ def global_search(request, q: str):
         "activities": [
             {"id": str(a.id), "title": f"{a.type} Activity", "subtitle": a.content[:100]}
             for a in activities
-        ]
+        ],
+        "shipments": [
+            {
+                "id": str(s.id),
+                "title": f"Shipment #{s.invoice_number or s.tracking_id or 'ID'}",
+                "subtitle": f"{s.receiver_name or 'No Receiver'} | {s.shipment_status} | {s.shipping_type or 'AIR'}"
+            }
+            for s in shipments
+        ],
+        "invoices": [
+            {
+                "id": str(i.id),
+                "title": f"Invoice #{i.invoice_number}",
+                "subtitle": f"{i.receiver_name or 'Customer'} | ₦{float(i.total_ngn or 0):,.2f} | Status: {i.status}"
+            }
+            for i in invoices
+        ],
+        "receipts": [
+            {
+                "id": str(r.id),
+                "title": f"Receipt #{r.receipt_number or r.reference_number or 'RCPT'}",
+                "subtitle": f"₦{float(r.amount_paid_ngn or 0):,.2f} | {r.payment_method} | {r.payment_date or ''}"
+            }
+            for r in receipts
+        ],
     }
 
 
@@ -2075,18 +2207,60 @@ def list_invoices(request, search: Optional[str] = None, status: Optional[str] =
     qs = Invoice.objects.filter(organization=request.user.organization).select_related('contact', 'company', 'deal')
     if search:
         search_term = str(search).strip()
-        qs = qs.filter(
+        qs = qs.annotate(
+            contact_full_name=Concat('contact__first_name', Value(' '), 'contact__last_name', output_field=CharField()),
+            issue_date_str=Cast('issue_date', CharField()),
+            due_date_str=Cast('due_date', CharField()),
+            created_at_str=Cast('created_at', CharField()),
+            total_ngn_str=Cast('total_ngn', CharField()),
+            total_gbp_str=Cast('total_gbp', CharField()),
+        )
+        base_filter = (
             Q(invoice_number__icontains=search_term) |
             Q(receiver_name__icontains=search_term) |
             Q(receiver_email__icontains=search_term) |
             Q(receiver_tel__icontains=search_term) |
+            Q(receiver_address__icontains=search_term) |
+            Q(sender_name__icontains=search_term) |
             Q(expected_parcel_no__icontains=search_term) |
+            Q(parcel_handler__icontains=search_term) |
             Q(contact__first_name__icontains=search_term) |
             Q(contact__last_name__icontains=search_term) |
-            Q(issue_date__icontains=search_term) |
-            Q(due_date__icontains=search_term) |
-            Q(created_at__icontains=search_term)
+            Q(contact_full_name__icontains=search_term) |
+            Q(contact__phone__icontains=search_term) |
+            Q(contact__email__icontains=search_term) |
+            Q(notes__icontains=search_term) |
+            Q(total_ngn_str__icontains=search_term) |
+            Q(total_gbp_str__icontains=search_term) |
+            Q(issue_date_str__icontains=search_term) |
+            Q(due_date_str__icontains=search_term) |
+            Q(created_at_str__icontains=search_term)
         )
+        tokens = search_term.split()
+        if len(tokens) > 1:
+            token_q = Q()
+            for t in tokens:
+                token_q &= (
+                    Q(invoice_number__icontains=t) |
+                    Q(receiver_name__icontains=t) |
+                    Q(contact__first_name__icontains=t) |
+                    Q(contact__last_name__icontains=t) |
+                    Q(parcel_handler__icontains=t)
+                )
+            base_filter |= token_q
+            
+        digits = re.sub(r'\D', '', search_term)
+        if len(digits) >= 4:
+            base_filter |= Q(receiver_tel__icontains=digits) | Q(contact__phone__icontains=digits)
+
+        for dt_val in _extract_search_date_terms(search_term):
+            base_filter |= (
+                Q(issue_date_str__icontains=dt_val) |
+                Q(due_date_str__icontains=dt_val) |
+                Q(created_at_str__icontains=dt_val)
+            )
+
+        qs = qs.filter(base_filter)
     if status:
         qs = qs.filter(status=status)
     if contact_id:
@@ -2236,16 +2410,66 @@ def list_receipts(request, search: Optional[str] = None):
     qs = Receipt.objects.filter(organization=request.user.organization).select_related('invoice', 'contact')
     if search:
         search_term = str(search).strip()
-        qs = qs.filter(
+        qs = qs.annotate(
+            contact_full_name=Concat('contact__first_name', Value(' '), 'contact__last_name', output_field=CharField()),
+            contact_rev_full_name=Concat('contact__last_name', Value(' '), 'contact__first_name', output_field=CharField()),
+            payment_date_str=Cast('payment_date', CharField()),
+            created_at_str=Cast('created_at', CharField()),
+            amount_ngn_str=Cast('amount_paid_ngn', CharField()),
+            amount_gbp_str=Cast('amount_paid_gbp', CharField()),
+        )
+        base_filter = (
             Q(receipt_number__icontains=search_term) |
             Q(reference_number__icontains=search_term) |
             Q(invoice__invoice_number__icontains=search_term) |
             Q(invoice__receiver_name__icontains=search_term) |
+            Q(invoice__receiver_tel__icontains=search_term) |
+            Q(invoice__receiver_email__icontains=search_term) |
+            Q(invoice__sender_name__icontains=search_term) |
             Q(contact__first_name__icontains=search_term) |
             Q(contact__last_name__icontains=search_term) |
-            Q(payment_date__icontains=search_term) |
-            Q(created_at__icontains=search_term)
+            Q(contact_full_name__icontains=search_term) |
+            Q(contact_rev_full_name__icontains=search_term) |
+            Q(contact__email__icontains=search_term) |
+            Q(contact__phone__icontains=search_term) |
+            Q(contact__whatsapp_number__icontains=search_term) |
+            Q(payment_method__icontains=search_term) |
+            Q(notes__icontains=search_term) |
+            Q(amount_ngn_str__icontains=search_term) |
+            Q(amount_gbp_str__icontains=search_term) |
+            Q(payment_date_str__icontains=search_term) |
+            Q(created_at_str__icontains=search_term)
         )
+        tokens = search_term.split()
+        if len(tokens) > 1:
+            token_q = Q()
+            for t in tokens:
+                token_q &= (
+                    Q(receipt_number__icontains=t) |
+                    Q(reference_number__icontains=t) |
+                    Q(invoice__invoice_number__icontains=t) |
+                    Q(invoice__receiver_name__icontains=t) |
+                    Q(contact__first_name__icontains=t) |
+                    Q(contact__last_name__icontains=t) |
+                    Q(payment_method__icontains=t)
+                )
+            base_filter |= token_q
+            
+        digits = re.sub(r'\D', '', search_term)
+        if len(digits) >= 4:
+            base_filter |= (
+                Q(invoice__receiver_tel__icontains=digits) |
+                Q(contact__phone__icontains=digits) |
+                Q(contact__whatsapp_number__icontains=digits)
+            )
+
+        for dt_val in _extract_search_date_terms(search_term):
+            base_filter |= (
+                Q(payment_date_str__icontains=dt_val) |
+                Q(created_at_str__icontains=dt_val)
+            )
+
+        qs = qs.filter(base_filter)
     return qs.order_by('-payment_date')
 
 @receipts_router.get("/{id}", response=ReceiptSchema)
@@ -2304,26 +2528,82 @@ def list_shipments(
     )
     if search:
         search_term = str(search).strip()
-        qs = qs.filter(
+        qs = qs.annotate(
+            receiver_full_name=Concat('receiver__first_name', Value(' '), 'receiver__last_name', output_field=CharField()),
+            sender_full_name=Concat('sender__first_name', Value(' '), 'sender__last_name', output_field=CharField()),
+            partner_full_name=Concat('partner__first_name', Value(' '), 'partner__last_name', output_field=CharField()),
+            date_str=Cast('date', CharField()),
+            shipment_date_str=Cast('shipment_date', CharField()),
+            created_at_str=Cast('created_at', CharField()),
+            carton_str=Cast('number_of_carton', CharField()),
+        )
+        base_filter = (
             Q(tracking_id__icontains=search_term) |
             Q(invoice_number__icontains=search_term) |
             Q(sender_name__icontains=search_term) |
             Q(sender_email__icontains=search_term) |
             Q(sender_phone__icontains=search_term) |
+            Q(sender_address__icontains=search_term) |
             Q(receiver_name__icontains=search_term) |
             Q(receiver_email__icontains=search_term) |
             Q(receiver_phone__icontains=search_term) |
+            Q(receiver_address__icontains=search_term) |
             Q(partner_name__icontains=search_term) |
             Q(sender__first_name__icontains=search_term) |
             Q(sender__last_name__icontains=search_term) |
+            Q(sender_full_name__icontains=search_term) |
             Q(receiver__first_name__icontains=search_term) |
             Q(receiver__last_name__icontains=search_term) |
+            Q(receiver_full_name__icontains=search_term) |
             Q(partner__first_name__icontains=search_term) |
             Q(partner__last_name__icontains=search_term) |
-            Q(date__icontains=search_term) |
-            Q(shipment_date__icontains=search_term) |
-            Q(created_at__icontains=search_term)
+            Q(partner_full_name__icontains=search_term) |
+            Q(packager__icontains=search_term) |
+            Q(shipping_type__icontains=search_term) |
+            Q(shipment_status__icontains=search_term) |
+            Q(payment_status__icontains=search_term) |
+            Q(date_str__icontains=search_term) |
+            Q(shipment_date_str__icontains=search_term) |
+            Q(created_at_str__icontains=search_term) |
+            Q(carton_str__icontains=search_term)
         )
+        
+        tokens = search_term.split()
+        if len(tokens) > 1:
+            token_q = Q()
+            for t in tokens:
+                token_q &= (
+                    Q(tracking_id__icontains=t) |
+                    Q(invoice_number__icontains=t) |
+                    Q(sender_name__icontains=t) |
+                    Q(receiver_name__icontains=t) |
+                    Q(sender__first_name__icontains=t) |
+                    Q(sender__last_name__icontains=t) |
+                    Q(receiver__first_name__icontains=t) |
+                    Q(receiver__last_name__icontains=t) |
+                    Q(partner_name__icontains=t) |
+                    Q(packager__icontains=t) |
+                    Q(shipment_status__icontains=t)
+                )
+            base_filter |= token_q
+            
+        digits = re.sub(r'\D', '', search_term)
+        if len(digits) >= 4:
+            base_filter |= (
+                Q(sender_phone__icontains=digits) |
+                Q(receiver_phone__icontains=digits) |
+                Q(sender__phone__icontains=digits) |
+                Q(receiver__phone__icontains=digits)
+            )
+
+        for dt_val in _extract_search_date_terms(search_term):
+            base_filter |= (
+                Q(date_str__icontains=dt_val) |
+                Q(shipment_date_str__icontains=dt_val) |
+                Q(created_at_str__icontains=dt_val)
+            )
+
+        qs = qs.filter(base_filter)
     if shipment_status:
         qs = qs.filter(shipment_status=shipment_status)
     if payment_status:

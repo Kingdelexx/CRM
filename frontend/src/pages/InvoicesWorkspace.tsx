@@ -28,7 +28,15 @@ export const InvoicesWorkspace: React.FC = () => {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   // Preview Modal State
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -104,12 +112,13 @@ export const InvoicesWorkspace: React.FC = () => {
   };
 
   // Fetch data
-  const fetchData = async () => {
+  const fetchData = async (searchStr?: string) => {
     setLoading(true);
     try {
+      const searchParam = searchStr ? `?search=${encodeURIComponent(searchStr)}` : '';
       const [invRes, rcptRes, contRes, meRes] = await Promise.allSettled([
-        api.get('/invoices/'),
-        api.get('/receipts/'),
+        api.get(`/invoices/${searchParam}`),
+        api.get(`/receipts/${searchParam}`),
         api.get('/contacts/?limit=500'),
         api.get('/accounts/me'),
       ]);
@@ -144,8 +153,8 @@ export const InvoicesWorkspace: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchData(debouncedSearchQuery);
+  }, [debouncedSearchQuery]);
 
   // Handle contact selection for auto-fill
   const handleContactSelect = (contactId: string) => {
@@ -494,20 +503,43 @@ export const InvoicesWorkspace: React.FC = () => {
     const formattedIssueDate = inv.issue_date ? new Date(inv.issue_date).toLocaleDateString().toLowerCase() : '';
     const formattedCreatedAt = inv.created_at ? new Date(inv.created_at).toLocaleDateString().toLowerCase() : '';
     const contactFullName = inv.contact ? `${inv.contact.first_name || ''} ${inv.contact.last_name || ''}`.toLowerCase() : '';
+    const invNo = (inv.invoice_number || '').toLowerCase();
+    const recName = (inv.receiver_name || '').toLowerCase();
+    const recTel = (inv.receiver_tel || '').toLowerCase();
+    const recEmail = (inv.receiver_email || '').toLowerCase();
+    const recAddr = (inv.receiver_address || '').toLowerCase();
+    const sndName = (inv.sender_name || '').toLowerCase();
+    const parcelNo = (inv.expected_parcel_no || '').toLowerCase();
+    const handler = (inv.parcel_handler || '').toLowerCase();
+    const notes = (inv.notes || '').toLowerCase();
+    const totalNgn = String(inv.total_ngn || '');
+    const totalGbp = String(inv.total_gbp || '');
 
     const matchesSearch = 
-      inv.invoice_number.toLowerCase().includes(query) ||
-      (inv.receiver_name || '').toLowerCase().includes(query) ||
-      (inv.receiver_tel || '').toLowerCase().includes(query) ||
-      (inv.receiver_email || '').toLowerCase().includes(query) ||
-      (inv.expected_parcel_no || '').toLowerCase().includes(query) ||
+      invNo.includes(query) ||
+      recName.includes(query) ||
+      recTel.includes(query) ||
+      recEmail.includes(query) ||
+      recAddr.includes(query) ||
+      sndName.includes(query) ||
+      parcelNo.includes(query) ||
+      handler.includes(query) ||
+      notes.includes(query) ||
+      totalNgn.includes(query) ||
+      totalGbp.includes(query) ||
       contactFullName.includes(query) ||
       (inv.issue_date || '').toLowerCase().includes(query) ||
       formattedIssueDate.includes(query) ||
       formattedCreatedAt.includes(query);
+
+    const tokens = query.split(/\s+/).filter(Boolean);
+    const matchesTokens = tokens.length > 1 && tokens.every(t =>
+      invNo.includes(t) || recName.includes(t) || sndName.includes(t) ||
+      contactFullName.includes(t) || handler.includes(t)
+    );
     
     const matchesStatus = statusFilter === 'ALL' || inv.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return (matchesSearch || matchesTokens) && matchesStatus;
   });
 
   const filteredReceipts = receipts.filter(rcpt => {
@@ -517,17 +549,46 @@ export const InvoicesWorkspace: React.FC = () => {
     const formattedPaymentDate = rcpt.payment_date ? new Date(rcpt.payment_date).toLocaleDateString().toLowerCase() : '';
     const formattedCreatedAt = rcpt.created_at ? new Date(rcpt.created_at).toLocaleDateString().toLowerCase() : '';
     const contactFullName = rcpt.contact ? `${rcpt.contact.first_name || ''} ${rcpt.contact.last_name || ''}`.toLowerCase() : '';
+    const rcptNo = (rcpt.receipt_number || '').toLowerCase();
+    const refNo = (rcpt.reference_number || '').toLowerCase();
+    const invNo = (rcpt.invoice?.invoice_number || '').toLowerCase();
+    const recName = (rcpt.invoice?.receiver_name || '').toLowerCase();
+    const recTel = (rcpt.invoice?.receiver_tel || '').toLowerCase();
+    const recEmail = (rcpt.invoice?.receiver_email || '').toLowerCase();
+    const sndName = (rcpt.invoice?.sender_name || '').toLowerCase();
+    const contPhone = (rcpt.contact?.phone || rcpt.contact?.whatsapp_number || '').toLowerCase();
+    const contEmail = (rcpt.contact?.email || '').toLowerCase();
+    const payMethod = (rcpt.payment_method || '').toLowerCase();
+    const notes = (rcpt.notes || '').toLowerCase();
+    const amountNgn = String(rcpt.amount_paid_ngn || '');
+    const amountGbp = String(rcpt.amount_paid_gbp || '');
 
-    return (
-      rcpt.receipt_number.toLowerCase().includes(query) ||
-      (rcpt.reference_number || '').toLowerCase().includes(query) ||
-      (rcpt.invoice?.receiver_name || '').toLowerCase().includes(query) ||
-      (rcpt.invoice?.invoice_number || '').toLowerCase().includes(query) ||
+    const matchesSearch =
+      rcptNo.includes(query) ||
+      refNo.includes(query) ||
+      invNo.includes(query) ||
+      recName.includes(query) ||
+      recTel.includes(query) ||
+      recEmail.includes(query) ||
+      sndName.includes(query) ||
       contactFullName.includes(query) ||
+      contPhone.includes(query) ||
+      contEmail.includes(query) ||
+      payMethod.includes(query) ||
+      notes.includes(query) ||
+      amountNgn.includes(query) ||
+      amountGbp.includes(query) ||
       (rcpt.payment_date || '').toLowerCase().includes(query) ||
       formattedPaymentDate.includes(query) ||
-      formattedCreatedAt.includes(query)
+      formattedCreatedAt.includes(query);
+
+    const tokens = query.split(/\s+/).filter(Boolean);
+    const matchesTokens = tokens.length > 1 && tokens.every(t =>
+      rcptNo.includes(t) || refNo.includes(t) || invNo.includes(t) ||
+      recName.includes(t) || contactFullName.includes(t) || payMethod.includes(t)
     );
+
+    return matchesSearch || matchesTokens;
   });
 
   // Calculate Metrics - parse with Number to prevent string concatenation from backend Decimals
@@ -666,8 +727,18 @@ export const InvoicesWorkspace: React.FC = () => {
                 placeholder="Search by name, date, invoice #, parcel #..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                className="w-full pl-9 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             {activeTab === 'invoices' && (

@@ -610,6 +610,75 @@ export default function Dashboard({ defaultView }: { defaultView?: DashboardView
                         </div>
                       )}
 
+                      {/* Shipments */}
+                      {searchResults.shipments?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-emerald-600 tracking-wider block">Shipments</span>
+                          {searchResults.shipments.map((s: any) => (
+                            <div
+                              key={s.id}
+                              onClick={() => {
+                                setCurrentView('shipments')
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-slate-100 rounded-lg cursor-pointer border border-transparent hover:border-slate-200 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-slate-800 block">{s.title}</span>
+                                <span className="text-[10px] text-slate-500 block truncate">{s.subtitle}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Invoices */}
+                      {searchResults.invoices?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-sky-600 tracking-wider block">Invoices</span>
+                          {searchResults.invoices.map((inv: any) => (
+                            <div
+                              key={inv.id}
+                              onClick={() => {
+                                setCurrentView('invoices')
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-slate-100 rounded-lg cursor-pointer border border-transparent hover:border-slate-200 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-slate-800 block">{inv.title}</span>
+                                <span className="text-[10px] text-slate-500 block truncate">{inv.subtitle}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Receipts */}
+                      {searchResults.receipts?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-extrabold uppercase text-teal-600 tracking-wider block">Official Receipts</span>
+                          {searchResults.receipts.map((rcpt: any) => (
+                            <div
+                              key={rcpt.id}
+                              onClick={() => {
+                                setCurrentView('invoices')
+                                setSearchText('')
+                                setSearchResults(null)
+                              }}
+                              className="p-2 hover:bg-slate-100 rounded-lg cursor-pointer border border-transparent hover:border-slate-200 transition-all flex items-center justify-between font-semibold"
+                            >
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-slate-800 block">{rcpt.title}</span>
+                                <span className="text-[10px] text-slate-500 block truncate">{rcpt.subtitle}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Synced Emails */}
                       {searchResults.emails?.length > 0 && (
                         <div className="space-y-1.5">
